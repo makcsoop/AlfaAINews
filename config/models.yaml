@@ -1,44 +1,48 @@
 # Разрешённые модели и шаги конвейера. Менять состав моделей нельзя (правило кейса);
 # менять можно только привязку шагов, и запасная модель обязана быть другого семейства.
 #
-# Цены — ₽ за 1 млн токенов: оценка по публичным агрегаторам 20.10.2026, 83,5 ₽/$;
-# TODO сверить на ключе организаторов. rpm_limit: null — TODO узнать лимит запросов в минуту.
+# Цены — ₽ за 1 млн токенов, откалиброваны по стоимости от провайдера на ключе организаторов
+# 21.10.2026 (`python -m newsai.llm.probe` + 1 диагностический вызов; gemma и qwen3-vl — по одной точке,
+# остальные — по 2–3 вызовам с разным числом выходных токенов). Провайдер (LiteLLM) сам отдаёт стоимость
+# в ₽ — клиент учитывает её, а эти цены нужны для оценки до вызова и в fixture-режиме.
+# Модели GLM, Qwen3.6, DeepSeek и Kimi рассуждают: на это уходит 60+ выходных токенов до ответа.
+# rpm_limit: null — организаторы лимит запросов в минуту не указали.
 models:
   gemma-4-26b:
     provider_name: google/gemma-4-26b-a4b-it
     family: gemma
-    price_in_rub_per_m: 7.0
-    price_out_rub_per_m: 30.0
+    price_in_rub_per_m: 8.0
+    price_out_rub_per_m: 34.0
     rpm_limit: null
   glm-5.3-flash:
     provider_name: z-ai/glm-5.3-flash
     family: glm
-    price_in_rub_per_m: 15.0
-    price_out_rub_per_m: 60.0
+    price_in_rub_per_m: 18.0
+    price_out_rub_per_m: 59.0
     rpm_limit: null
   qwen3.6-35b:
     provider_name: qwen/qwen3.6-35b-a3b
     family: qwen
-    price_in_rub_per_m: 20.0
-    price_out_rub_per_m: 100.0
+    price_in_rub_per_m: 27.0
+    price_out_rub_per_m: 135.0
     rpm_limit: null
   deepseek-v4.1-flash:
     provider_name: deepseek/deepseek-v4.1-flash
     family: deepseek
-    price_in_rub_per_m: 25.0
-    price_out_rub_per_m: 80.0
+    price_in_rub_per_m: 18.0
+    price_out_rub_per_m: 71.0
     rpm_limit: null
   qwen3-vl-30b:
     provider_name: qwen/qwen3-vl-30b-a3b-instruct
     family: qwen
-    price_in_rub_per_m: 15.0
-    price_out_rub_per_m: 60.0
+    price_in_rub_per_m: 16.0
+    price_out_rub_per_m: 65.0
     rpm_limit: null
   kimi-k2.6:
     provider_name: moonshotai/kimi-k2.6
     family: kimi
-    price_in_rub_per_m: 50.0
-    price_out_rub_per_m: 200.0
+    price_in_rub_per_m: 127.0
+    price_out_rub_per_m: 400.0
     rpm_limit: null
 
 # шаг -> основная модель, запасная (null — запасной нет), группа бюджета

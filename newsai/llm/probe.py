@@ -21,7 +21,7 @@ from newsai.llm.client import LLMClient, LLMUnavailable
 from newsai.llm.settings import LLMSettings
 
 STEP = "probe"
-MAX_TOKENS = 20
+MAX_TOKENS = 400  # модели с рассуждениями тратят 60+ токенов до ответа
 MIN_REMAINING_RUB = 1.0
 MESSAGES = [
     {"role": "system", "content": "Отвечай только JSON."},

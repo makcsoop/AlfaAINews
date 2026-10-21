@@ -102,13 +102,25 @@ class BudgetManager:
         self._store: BudgetStore = store or InMemoryBudgetStore()
         self._clock = clock or (lambda: datetime.now(UTC))
         self.priority_threshold = priority_threshold
+        # расход ключа всей командой по данным провайдера (заголовок LiteLLM), по суткам бюджета
+        self._key_spend: dict[str, float] = {}
 
     # --- чтение ---
     def _day(self) -> str:
         return budget_day(self._clock())
 
     def spent_rub(self) -> float:
+        """Потрачено за сутки: больше из своего учёта и расхода ключа всей командой у провайдера."""
+        day = self._day()
+        return max(self._store.snapshot(day).get("rub", 0.0), self._key_spend.get(day, 0.0))
+
+    def own_spent_rub(self) -> float:
         return self._store.snapshot(self._day()).get("rub", 0.0)
+
+    def observe_key_spend(self, rub: float) -> None:
+        """Расход ключа от провайдера: общий для команды, режимы 70%/90% считаются по нему."""
+        day = self._day()
+        self._key_spend[day] = max(self._key_spend.get(day, 0.0), rub)
 
     def remaining_rub(self) -> float:
         return max(0.0, self.daily_limit_rub - self.spent_rub())
@@ -170,12 +182,14 @@ class BudgetManager:
                     out.setdefault(parts[1], {})[parts[2]] = val
             return out
 
-        spent = snap.get("rub", 0.0)
+        spent = self.spent_rub()
         return {
             "day": day,
             "mode": self.mode(),
             "daily_limit_rub": self.daily_limit_rub,
             "spent_rub": round(spent, 6),
+            "own_spent_rub": round(snap.get("rub", 0.0), 6),
+            "key_spend_rub": round(self._key_spend[day], 6) if day in self._key_spend else None,
             "remaining_rub": round(max(0.0, self.daily_limit_rub - spent), 6),
             "tokens_in": int(snap.get("tin", 0)),
             "tokens_out": int(snap.get("tout", 0)),

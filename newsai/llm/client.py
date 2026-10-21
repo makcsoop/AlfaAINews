@@ -73,6 +73,7 @@ class CompletionResponse(BaseModel):
     base: Literal["primary", "fallback"] | None = None
     provider_cost_rub: float | None = None  # стоимость от провайдера в ₽ (уже пересчитана)
     provider_cost_raw: float | None = None  # сырое число, если единицы неизвестны
+    key_spend_rub: float | None = None  # расход ключа всей командой за сутки, ₽
 
 
 class Transport(Protocol):
@@ -100,7 +101,8 @@ class FixtureTransport:
 _COST_RUB_KEYS = ("cost_rub", "total_cost_rub")
 _COST_USD_KEYS = ("cost_usd", "total_cost_usd")
 _COST_PLAIN_KEYS = ("cost", "total_cost", "response_cost")
-_COST_HEADER = "x-litellm-response-cost"  # у LiteLLM-прокси в долларах
+_COST_HEADER = "x-litellm-response-cost"  # единицы — как у прокси настроено (LLM_COST_UNIT)
+_KEY_SPEND_HEADER = "x-litellm-key-spend"  # расход ключа всей командой за период бюджета
 
 
 def _num(v: object) -> float | None:
@@ -115,6 +117,24 @@ def _num(v: object) -> float | None:
             return None
         return f if f >= 0 else None
     return None
+
+
+def _to_rub(v: float, unit: str, usd_rub: float) -> tuple[float | None, float | None]:
+    if unit == "rub":
+        return v, None
+    if unit == "usd":
+        return v * usd_rub, None
+    return None, v
+
+
+def parse_key_spend(
+    headers: Mapping[str, str] | None, *, usd_rub: float = 83.5, unit: str = "rub"
+) -> float | None:
+    """Расход ключа всей командой (заголовок LiteLLM) в ₽; нет заголовка или единицы неизвестны -> None."""
+    if not headers:
+        return None
+    v = _num(headers.get(_KEY_SPEND_HEADER))
+    return None if v is None else _to_rub(v, unit, usd_rub)[0]
 
 
 def parse_provider_cost(
@@ -147,7 +167,7 @@ def parse_provider_cost(
         if headers:
             v = _num(headers.get(_COST_HEADER))
             if v is not None:
-                return v * usd_rub, None
+                return _to_rub(v, unit, usd_rub)
     except Exception:
         return None, None
     return None, None
@@ -231,6 +251,7 @@ class HttpTransport:
         return CompletionResponse(
             text=text, tokens_in=tin, tokens_out=tout, base=which,
             provider_cost_rub=cost_rub, provider_cost_raw=cost_raw,
+            key_spend_rub=parse_key_spend(r.headers, usd_rub=self._usd_rub, unit=self._cost_unit),
         )
 
 
@@ -432,6 +453,8 @@ class LLMClient:
             if pcost is not None:
                 tot_pcost = (tot_pcost or 0.0) + pcost
             self.budget.record(step, dev, resp.tokens_in, resp.tokens_out, cost)
+            if not fixture and resp.key_spend_rub is not None:
+                self.budget.observe_key_spend(resp.key_spend_rub)
             tot_in += resp.tokens_in
             tot_out += resp.tokens_out
             tot_cost += cost

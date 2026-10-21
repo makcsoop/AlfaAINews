@@ -8,7 +8,7 @@ from newsai.llm.budget import BudgetManager, InMemoryBudgetStore
 from newsai.llm.cache import ResponseCache
 from newsai.llm.client import CompletionRequest, CompletionResponse, TransportError
 from newsai.llm.journal import Journal
-from newsai.llm.probe import run
+from newsai.llm.probe import MAX_TOKENS, run
 from newsai.llm.settings import LLMSettings
 
 SECRET = "test-secret-value-not-a-real-key"
@@ -59,7 +59,7 @@ def test_probe_six_calls_no_fallback_and_report(tmp_path, capsys):
     assert run(client=c, out_dir=out) == 0
     assert len(stub.requests) == 6
     assert {r.model.id for r in stub.requests} == set(c.config.models)
-    assert all(r.step == "probe" and r.max_tokens == 20 for r in stub.requests)
+    assert all(r.step == "probe" and r.max_tokens == MAX_TOKENS for r in stub.requests)
     reports = list(out.glob("probe-*.json"))
     assert len(reports) == 1
     text = reports[0].read_text(encoding="utf-8")

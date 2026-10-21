@@ -153,3 +153,19 @@ def test_redis_store_with_fake_client():
     store.incr("2026-10-21", "rub", 2.0)
     assert store.snapshot("2026-10-21") == {"rub": 3.5}
     assert store.snapshot("2026-10-22") == {}
+
+
+def test_key_spend_from_provider_drives_modes():
+    """Расход ключа всей командой (заголовок LiteLLM) важнее своего учёта процесса."""
+    from newsai.llm.budget import BudgetManager, InMemoryBudgetStore
+    from newsai.llm.settings import LLMSettings
+
+    b = BudgetManager(settings=LLMSettings(llm_daily_budget_rub=100.0), store=InMemoryBudgetStore())
+    b.record("card", "r3", 10, 10, 1.0)
+    assert b.spent_rub() == 1.0 and b.mode() == "normal"
+    b.observe_key_spend(75.0)  # коллеги уже потратили
+    assert b.spent_rub() == 75.0 and b.mode() == "save70"
+    b.observe_key_spend(50.0)  # значения не убывают в пределах суток
+    assert b.spent_rub() == 75.0
+    s = b.summary()
+    assert s["own_spent_rub"] == 1.0 and s["key_spend_rub"] == 75.0 and s["remaining_rub"] == 25.0

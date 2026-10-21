@@ -85,8 +85,9 @@ def test_fixture_missing_raises(tmp_path):
 def test_live_valid_cost_from_config(tmp_path):
     c = make_client(tmp_path, StubTransport([GOOD]))
     r = call(c, prompt_version="card@1")
-    # qwen3.6: 1000 вх * 20 + 500 вых * 100 на 1 млн
-    assert r.cost_rub == pytest.approx((1000 * 20 + 500 * 100) / 1e6)
+    # qwen3.6: 1000 вх и 500 вых по ценам из config/models.yaml за 1 млн
+    spec = c.config.models["qwen3.6-35b"]
+    assert r.cost_rub == pytest.approx((1000 * spec.price_in_rub_per_m + 500 * spec.price_out_rub_per_m) / 1e6)
     assert c.budget.spent_rub() == pytest.approx(r.cost_rub)
     assert c.journal.by_trace("t1")[0]["prompt_version"] == "card@1"
 
@@ -370,8 +371,8 @@ def test_parse_provider_cost_units():
     # единицы известны из настройки или из usage
     assert parse_provider_cost({"total_cost": 0.01}, usd_rub=100, unit="usd") == (pytest.approx(1.0), None)
     assert parse_provider_cost({"cost": 5, "currency": "RUB"}) == (5.0, None)
-    # заголовок LiteLLM (доллары)
-    assert parse_provider_cost({}, {"x-litellm-response-cost": "0.02"}, usd_rub=50)[0] == pytest.approx(1.0)
+    # заголовок LiteLLM: единицы — из настройки
+    assert parse_provider_cost({}, {"x-litellm-response-cost": "0.02"}, usd_rub=50, unit="usd")[0] == pytest.approx(1.0)
 
 
 @pytest.mark.parametrize("usage", [None, {}, [], "x", {"cost": None}, {"cost": "abc"}, {"cost": -1}, {"cost": True}])
@@ -395,3 +396,14 @@ def test_model_override_only_for_probe(tmp_path):
         c.call(step="card", messages=MSG, schema=Answer, trace_id="t", model_override="gemma-4-26b")
     with pytest.raises(ValueError):
         c.call(step="probe", messages=MSG, schema=Answer, trace_id="t", model_override="gpt-4o")
+
+
+def test_litellm_headers_in_rub_and_key_spend():
+    from newsai.llm.client import parse_key_spend, parse_provider_cost
+
+    h = {"x-litellm-response-cost": "0.0067", "x-litellm-key-spend": "0.0294"}
+    assert parse_provider_cost({}, h, unit="rub") == (0.0067, None)
+    assert parse_provider_cost({}, h, unit="usd", usd_rub=80.0)[0] == pytest.approx(0.536)
+    assert parse_provider_cost({}, h, unit="unknown") == (None, 0.0067)
+    assert parse_key_spend(h, unit="rub") == 0.0294
+    assert parse_key_spend({}, unit="rub") is None
