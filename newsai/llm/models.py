@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel
@@ -35,11 +35,18 @@ class ModelSpec(BaseModel):
         return (tokens_in * self.price_in_rub_per_m + tokens_out * self.price_out_rub_per_m) / 1_000_000
 
 
+ReasoningEffort = Literal["none", "low", "medium", "high"]
+
+
 class StepSpec(BaseModel):
     name: str
     model: str
     fallback: str | None = None
     budget_group: str
+    # Рассуждение моделей (GLM, Qwen3.6, DeepSeek, Kimi) стоит в 10–100 раз дороже ответа:
+    # по умолчанию выключено, включается на шаге явно. None — не передавать параметр провайдеру.
+    reasoning_effort: ReasoningEffort | None = "none"
+    max_tokens: int | None = None  # потолок выходных токенов шага; вызов может задать свой
 
 
 class ModelsConfig(BaseModel):

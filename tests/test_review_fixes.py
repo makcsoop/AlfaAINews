@@ -173,15 +173,35 @@ def test_critic_number_match_is_exact():
     assert unsupported_numbers("ставка 14", [only]) == ["14"]
 
 
-def test_critic_summary_checked_against_own_refs(analyzed):  # noqa: F811
+def test_critic_summary_checked_against_whole_dossier(analyzed):  # noqa: F811
+    """Сводка пересказывает досье: число из досье проходит, даже если драйверы на него не ссылаются."""
     dossier, results = analyzed
     dossier = dossier.model_copy(deep=True)
     dossier.add(DossierItem(id="fact:extra:1", kind="news", title="x", text="Объём 777 единиц"))
-    ok = mutated(results, "finance", lambda r: setattr(r.report, "summary", "Итог по объёму."))
-    assert critique(dossier, ok).ok
-    bad = mutated(results, "finance", lambda r: setattr(r.report, "summary", "Итог по объёму 777."))
+    in_dossier = mutated(results, "finance", lambda r: setattr(r.report, "summary", "Итог по объёму 777."))
+    assert critique(dossier, in_dossier).ok
+    bad = mutated(results, "finance", lambda r: setattr(r.report, "summary", "Итог по объёму 778."))
     v = critique(dossier, bad)
-    assert any(f.code == "number_unverified" and "777" in f.detail for f in v.failures)
+    assert any(f.code == "number_unverified" and "778" in f.detail for f in v.failures)
+
+
+def test_critic_coverage_without_material_asks_planner_with_material_does_not(analyzed):  # noqa: F811
+    dossier, results = analyzed
+    dossier = dossier.model_copy(deep=True)
+    dossier.event_type = "rate_decision"  # каналы: rate_cost, deposit_yield, fx_rub
+    def drop_fx(r):
+        r.drivers = [d for d in r.drivers if d.driver.channel != "fx_rub"]
+        r.report.channels = [c for c in r.report.channels if c.channel != "fx_rub"]
+
+    no_fx = mutated(mutated(results, "finance", drop_fx), "business", drop_fx)
+    dossier.items = [i for i in dossier.items if (i.data or {}).get("channel") != "fx_rub"]
+    v = critique(dossier, no_fx)
+    assert any(f.code == "no_channel_coverage" for f in v.failures)
+    assert v.planner_task and "fx_rub" in v.planner_task
+    dossier.add(DossierItem(id="cmi_fx#p1#c1", kind="bank_position", title="курс", data={"channel": "fx_rub"}))
+    v2 = critique(dossier, no_fx)
+    assert any(f.code == "no_channel_coverage" for f in v2.failures)
+    assert not (v2.planner_task and "fx_rub" in v2.planner_task)
 
 
 # --- лимит частоты --------------------------------------------------------------------------------

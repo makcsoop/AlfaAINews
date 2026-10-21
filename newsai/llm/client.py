@@ -64,6 +64,7 @@ class CompletionRequest(BaseModel):
     temperature: float
     max_tokens: int | None = None
     fixture_key: str | None = None
+    reasoning_effort: str | None = None
 
 
 class CompletionResponse(BaseModel):
@@ -202,6 +203,8 @@ class HttpTransport:
         }
         if req.max_tokens:
             body["max_tokens"] = req.max_tokens
+        if req.reasoning_effort:
+            body["reasoning_effort"] = req.reasoning_effort
         try:
             return self._once(self._base, "primary", body, req)
         except _Retryable as e:
@@ -430,7 +433,8 @@ class LLMClient:
             attempts += 1
             req = CompletionRequest(
                 step=step, model=spec, messages=msgs, temperature=temperature,
-                max_tokens=max_tokens, fixture_key=fixture_key,
+                max_tokens=max_tokens or step_spec.max_tokens, fixture_key=fixture_key,
+                reasoning_effort=step_spec.reasoning_effort,
             )
             try:
                 resp = self.transport.complete(req)

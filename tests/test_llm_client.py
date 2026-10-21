@@ -407,3 +407,21 @@ def test_litellm_headers_in_rub_and_key_spend():
     assert parse_provider_cost({}, h, unit="unknown") == (None, 0.0067)
     assert parse_key_spend(h, unit="rub") == 0.0294
     assert parse_key_spend({}, unit="rub") is None
+
+
+def test_step_reasoning_and_token_cap_reach_provider(tmp_path):
+    """Рассуждение по умолчанию выключено, потолок токенов шага уходит провайдеру."""
+    import json as _json
+
+    bodies: list[dict] = []
+
+    def handler(request):
+        bodies.append(_json.loads(request.content))
+        return httpx.Response(200, json=_ok_body())
+
+    t, _ = _http(handler)
+    c = make_client(tmp_path, t)
+    call(c)  # шаг card
+    spec = c.config.step("card")
+    assert bodies[0]["reasoning_effort"] == "none" == spec.reasoning_effort
+    assert bodies[0]["max_tokens"] == spec.max_tokens

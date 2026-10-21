@@ -276,13 +276,15 @@ def critique(
                     f"найти позицию ЦМИ по каналу {v.channel}",
                 )
 
+        # Сводка пересказывает досье целиком (в т.ч. прогнозы ЦМИ, на которые драйверы не ссылаются),
+        # поэтому её числа сверяются со всем видимым досье; числа драйверов — строго по их refs (выше).
+        # На живом прогоне 21.10.2026 сверка сводки только по refs драйверов давала ложные круги критика.
         summary = res.report.summary
-        own_refs = list(dict.fromkeys(r for v in views for r in v.refs if r in visible))
-        for tok in unsupported_numbers(summary, [visible[r] for r in own_refs]):
+        for tok in unsupported_numbers(summary, list(visible.values())):
             fail(
                 NUMBER_UNVERIFIED,
                 analyst,
-                f"число или дата {tok} из сводки нет в цитатах ссылок этого аналитика",
+                f"число или дата {tok} из сводки нет в досье",
                 None,
                 f"найти материал с числом {tok}",
             )
@@ -299,12 +301,15 @@ def critique(
 
     for ch in event_channels().get(dossier.event_type or "", []):
         if ch not in covered:
+            # Новый круг планировщика нужен, только если в досье нет материала по каналу:
+            # если материал есть, а аналитики канал не оценили, новые данные это не исправят.
+            has_material = any((i.data or {}).get("channel") == ch for i in dossier.items)
             fail(
                 NO_CHANNEL_COVERAGE,
                 "all",
                 f"нет оценки канала {ch}",
                 ch,
-                f"найти позицию ЦМИ или материал по каналу {ch}",
+                None if has_material else f"найти позицию ЦМИ или материал по каналу {ch}",
             )
 
     notes = list(dict.fromkeys(notes))

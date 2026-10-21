@@ -46,17 +46,20 @@ models:
     rpm_limit: null
 
 # шаг -> основная модель, запасная (null — запасной нет), группа бюджета
+# reasoning_effort (none|low|medium|high) — рассуждение модели; по умолчанию none: на ключе 21.10.2026
+# с рассуждением запрос стоил в 10–100 раз дороже (Kimi 2,43 ₽ против 0,02 ₽, Qwen3.6 0,24 против 0,009),
+# а JSON-ответ по схеме модели дают и без него. max_tokens — потолок выходных токенов шага.
 steps:
-  extract:           {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: extract}
-  knowledge_stream:  {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: knowledge}
-  knowledge_archive: {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: archive}
-  planner:           {model: glm-5.3-flash,       fallback: deepseek-v4.1-flash, budget_group: deep}
-  analyst_business:  {model: qwen3.6-35b,         fallback: gemma-4-26b,         budget_group: deep}
-  analyst_finance:   {model: glm-5.3-flash,       fallback: deepseek-v4.1-flash, budget_group: deep}
-  critic_llm:        {model: deepseek-v4.1-flash, fallback: glm-5.3-flash,       budget_group: deep}
-  card:              {model: qwen3.6-35b,         fallback: deepseek-v4.1-flash, budget_group: card}
-  qa:                {model: deepseek-v4.1-flash, fallback: qwen3.6-35b,         budget_group: qa}
-  bank_registry:     {model: kimi-k2.6,           fallback: glm-5.3-flash,       budget_group: registry}
-  vision:            {model: qwen3-vl-30b,        fallback: null,                budget_group: vision}
+  extract:           {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: extract, max_tokens: 1500}
+  knowledge_stream:  {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: knowledge, max_tokens: 1200}
+  knowledge_archive: {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: archive, max_tokens: 1200}
+  planner:           {model: glm-5.3-flash,       fallback: deepseek-v4.1-flash, budget_group: deep, max_tokens: 800}
+  analyst_business:  {model: qwen3.6-35b,         fallback: gemma-4-26b,         budget_group: deep, max_tokens: 2000}
+  analyst_finance:   {model: glm-5.3-flash,       fallback: deepseek-v4.1-flash, budget_group: deep, max_tokens: 2000}
+  critic_llm:        {model: deepseek-v4.1-flash, fallback: glm-5.3-flash,       budget_group: deep, max_tokens: 1000}
+  card:              {model: qwen3.6-35b,         fallback: deepseek-v4.1-flash, budget_group: card, max_tokens: 2500}
+  qa:                {model: deepseek-v4.1-flash, fallback: qwen3.6-35b,         budget_group: qa, max_tokens: 1200}
+  bank_registry:     {model: kimi-k2.6,           fallback: glm-5.3-flash,       budget_group: registry, max_tokens: 3000}
+  vision:            {model: qwen3-vl-30b,        fallback: null,                budget_group: vision, max_tokens: 1500}
   # проверка моделей на ключе (python -m newsai.llm.probe): модель задаётся model_override, запасной нет
   probe:             {model: gemma-4-26b,         fallback: null,                budget_group: system}
