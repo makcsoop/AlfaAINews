@@ -116,7 +116,7 @@ def test_foreign_company_query_is_403_and_audited(client, audit):
     assert rec.endpoint == "GET /feed" and rec.trace_id == r.headers["X-Trace-Id"]
     lines = next(iter(audit.directory.glob("*.jsonl"))).read_text(encoding="utf-8").splitlines()
     saved = json.loads(lines[0])
-    assert set(saved) == {"at", "user_id", "session_company", "requested_company", "endpoint", "trace_id"}
+    assert set(saved) == {"at", "user_id", "session_company", "requested_company", "endpoint", "trace_id", "requested_role"}
     # своя компания в параметре допустима
     assert client.get("/feed", params={"company_id": BORROWER}).status_code == 200
 
@@ -218,3 +218,14 @@ def test_cors_allows_post_with_credentials(client):
     assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert r.headers["access-control-allow-credentials"] == "true"
     assert "POST" in r.headers["access-control-allow-methods"]
+
+
+def test_feed_role_comes_only_from_session(client, audit):
+    login(client, role="cfo")
+    assert client.get("/feed", params={"role": "cfo"}).status_code == 200  # равная роли сессии допустима
+    r = client.get("/feed", params={"role": "treasurer"})
+    assert_error(r, 403, "forbidden")
+    assert audit.records and audit.records[-1].requested_role == "treasurer"
+    assert audit.records[-1].session_company == BORROWER
+    # без параметра лента строится по роли сессии
+    assert [c["user_role"] for c in client.get("/feed").json()] == ["cfo"]

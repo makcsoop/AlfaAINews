@@ -109,6 +109,18 @@ def test_invalid_then_retry_same_model(tmp_path):
     assert [e["attempt"] for e in j] == [1, 2]
 
 
+def test_validation_reason_has_no_model_output(tmp_path):
+    leak = "СЕКРЕТНЫЙ_ТЕКСТ_МОДЕЛИ"
+    t = StubTransport([json.dumps({"verdict": leak, "score": leak}), GOOD])
+    c = make_client(tmp_path, t)
+    call(c)
+    retry_prompt = t.requests[1].messages[-1]["content"]
+    journal = json.dumps(c.journal.by_trace("t1"), ensure_ascii=False)
+    for text in (retry_prompt, journal):
+        assert leak not in text
+    assert "score" in retry_prompt and "int_parsing" in retry_prompt
+
+
 def test_invalid_twice_then_fallback_other_family(tmp_path):
     t = StubTransport(["не json", '{"verdict": 1}', GOOD])
     c = make_client(tmp_path, t)

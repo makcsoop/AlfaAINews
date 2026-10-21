@@ -110,14 +110,19 @@ def feed(
     session: SessionDep,
     store: StoreDep,
     audit: AuditDep,
-    role: Annotated[UserRole | None, Query(description="Роль; по умолчанию из сессии")] = None,
+    role: Annotated[
+        UserRole | None, Query(description="Только роль сессии; другая даёт 403 (роль берётся из сессии)")
+    ] = None,
     company_id: Annotated[
         str | None, Query(description="Только своя компания из сессии; чужая даёт 403")
     ] = None,
 ) -> list[InsightCard]:
     """Карточки компании из сессии, по убыванию значимости (relevance.score)."""
     cid = enforce_company(session, company_id, request, audit)
-    cards = store.list_cards(cid, role or session.role)
+    if role is not None and role != session.role:
+        audit_foreign(audit, request, session, None, requested_role=role)
+        raise HTTPException(status_code=403, detail="Роль берётся только из сессии")
+    cards = store.list_cards(cid, session.role)
     return sorted(cards, key=lambda c: c.relevance.score, reverse=True)
 
 

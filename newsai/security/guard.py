@@ -10,13 +10,20 @@ def trace_id_of(request: Request) -> str | None:
     return getattr(request.state, "trace_id", None)
 
 
-def audit_foreign(audit: AuditLog, request: Request, session: Session, requested_company: str | None) -> None:
+def audit_foreign(
+    audit: AuditLog,
+    request: Request,
+    session: Session,
+    requested_company: str | None,
+    requested_role: str | None = None,
+) -> None:
     audit.record(
         user_id=session.user_id,
         session_company=session.company_id,
         requested_company=requested_company,
         endpoint=f"{request.method} {request.url.path}",
         trace_id=trace_id_of(request),
+        requested_role=requested_role,
     )
 
 

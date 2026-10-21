@@ -92,7 +92,32 @@ class Dossier(BaseModel):
                 untrusted.append(f"[{i.id}] ({i.kind}) {i.title}\n{i.text}{data}")
             else:
                 trusted.append(i.model_dump(mode="json", exclude_none=True, exclude={"source_tool"}))
-        out = "Досье (ссылайся только на эти id):\n" + json.dumps(trusted, ensure_ascii=False)
-        if untrusted:
-            out += "\n\nВнешние материалы:\n" + data_block("\n\n".join(untrusted))
-        return out[:max_chars]
+        # Бюджет символов режет содержимое, а не готовую строку: обёртка <data>…</data> всегда цела.
+        head = "Досье (ссылайся только на эти id):\n"
+        while trusted and len(head + json.dumps(trusted, ensure_ascii=False)) > max_chars:
+            trusted.pop()  # доверенная часть режется целыми элементами с хвоста
+        out = head + json.dumps(trusted, ensure_ascii=False)
+        if not untrusted:
+            return out
+        prefix = "\n\nВнешние материалы:\n"
+        room = max_chars - len(out) - len(prefix) - len(data_block(""))
+        if room <= 0:
+            return out
+        parts: list[str] = []
+        used = 0
+        for u in untrusted:
+            sep = 2 if parts else 0
+            if used + sep + len(u) <= room:
+                parts.append(u)
+                used += sep + len(u)
+            else:
+                left = room - used - sep
+                if left > 0:
+                    parts.append(u[:left])  # последний элемент обрезается, остальные отбрасываются
+                break
+        body = "\n\n".join(parts)
+        block = data_block(body)
+        while len(block) > max_chars - len(out) - len(prefix) and body:  # экранирование удлиняет текст
+            body = body[: -max(1, len(block) - (max_chars - len(out) - len(prefix)))]
+            block = data_block(body)
+        return out + prefix + block if body else out

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from newsai.agents.dossier import Dossier
 from newsai.cards.features import ROLE_FOCUS, channel_label, company_features
+from newsai.llm import data_block
 from newsai.schemas import AnalystReport, CompanyProfile, CounterpartyGraph, RelevanceScore, Story
 from newsai.schemas.common import UserRole
 
@@ -14,6 +15,7 @@ PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "card.md"
 # что из досье в промпт карточки не попадает: сырой профиль и граф платежей (вместо них — признаки и доли)
 EXCLUDED_KINDS = frozenset({"profile", "counterparties"})
 FORBIDDEN_KEYS = frozenset({"pay_amt", "pay_cnt", "revenue"})
+_PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 _SIGN_WORD = {-1: "риск", 0: "нейтрально", 1: "возможность"}
 
 
@@ -88,7 +90,7 @@ def build_messages(
     for c in relevance.contributions:
         feats.extend(f for f in c.client_features if f not in feats)
     values = {
-        "story_title": story.title,
+        "story_title": data_block(story.title),
         "event_type": dossier.event_type or story.event_type or "other",
         "story_status": story.status,
         "role": role,
@@ -98,6 +100,6 @@ def build_messages(
         "features": "\n".join(f"- {f}" for f in feats) or "(нет данных)",
         "contributions": render_contributions(relevance),
     }
-    for key, val in values.items():
-        user = user.replace("{{" + key + "}}", val)
+    # один проход: значение, содержащее «{{имя}}», повторно не раскрывается
+    user = _PLACEHOLDER.sub(lambda m: values.get(m.group(1), m.group(0)), user)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

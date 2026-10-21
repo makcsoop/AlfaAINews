@@ -51,6 +51,11 @@ EVALUATIVE_PATTERNS: tuple[str, ...] = (
 _EVALUATIVE = re.compile("|".join(EVALUATIVE_PATTERNS), re.IGNORECASE)
 
 
+_DIRECTION_WORD = {"up": "фактор растёт", "down": "фактор снижается", "flat": "без заметного сдвига"}
+_STRENGTH_WORD = {"low": "слабая", "medium": "средняя", "high": "высокая"}
+_HORIZON_WORD = {"days": "дни", "quarter": "кварталы", "year": "годы"}
+
+
 def find_evaluative(text: str) -> list[str]:
     """Оценочные фразы, найденные в тексте (нижний регистр)."""
     return [m.group(0).lower() for m in _EVALUATIVE.finditer(text)]
@@ -185,6 +190,22 @@ def validate_output(
     return list(kept.values()), notes, summary_flags
 
 
+def neutral_summary(drivers: list[Driver]) -> str:
+    """Сводка без оценок: по каждому каналу направление фактора, сила и горизонт."""
+    if not drivers:
+        return "Каналов влияния без оценочных формулировок не выделено."
+    try:
+        names = load_channels()
+    except (OSError, KeyError, ValueError):
+        names = {}
+    parts = [
+        f"{d.channel} ({names.get(d.channel, d.channel)}): {_DIRECTION_WORD[d.direction]}, "
+        f"сила {_STRENGTH_WORD[d.strength]}, горизонт {_HORIZON_WORD[d.horizon]}"
+        for d in drivers
+    ]
+    return "Каналы влияния: " + "; ".join(parts) + "."
+
+
 def to_report(
     out: AnalystOutput,
     drivers: list[CheckedDriver],
@@ -214,14 +235,17 @@ def to_report(
                 evidence=evidence,
             )
         )
+    summary = out.summary
+    if find_evaluative(summary):  # оценочную сводку заменяет нейтральная, собранная кодом из драйверов
+        summary = neutral_summary([cd.driver for cd in drivers if cd.clean])
     return AnalystReport(
         story_id=dossier.story_id,
         sector=dossier.sector,
         analyst=analyst,
         model=model,
         channels=channels,
-        summary=out.summary,
-        open_questions=out.open_questions,
+        summary=summary,
+        open_questions=[q for q in out.open_questions if not find_evaluative(q)],
     )
 
 

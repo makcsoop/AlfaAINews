@@ -165,6 +165,19 @@ def _short(s: str, n: int = 200) -> str:
     return " ".join(s.split())[:n]
 
 
+def _validation_reason(e: ValueError) -> str:
+    """Причина невалидного ответа без самого ответа: только loc/type/msg (input_value не пишем)."""
+    if isinstance(e, ValidationError):
+        errs = e.errors(include_input=False, include_url=False, include_context=False)
+        parts = [
+            f"{'.'.join(str(x) for x in err['loc']) or '-'}: {err['type']} ({_short(err['msg'], 80)})"
+            for err in errs[:5]
+        ]
+        more = f" (+{len(errs) - 5})" if len(errs) > 5 else ""
+        return _short("; ".join(parts) + more, 400)
+    return "ответ не разобран"
+
+
 # --- клиент ---
 
 
@@ -284,7 +297,7 @@ class LLMClient:
             try:
                 value = schema.model_validate_json(extract_json(resp.text))
             except (ValidationError, ValueError) as e:
-                reason = _short(str(e))
+                reason = _validation_reason(e)
                 log(spec, attempt=attempts, fb=fb, tin=resp.tokens_in, tout=resp.tokens_out, cost=cost,
                     cached=False, validation="invalid", error=reason)
                 return None, resp.text, reason

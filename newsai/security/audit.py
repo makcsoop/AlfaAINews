@@ -23,6 +23,7 @@ class AuditRecord(BaseModel):
     requested_company: str | None
     endpoint: str
     trace_id: str | None
+    requested_role: str | None = None  # попытка подменить роль сессии
 
 
 class AuditLog:
@@ -40,6 +41,7 @@ class AuditLog:
         requested_company: str | None,
         endpoint: str,
         trace_id: str | None,
+        requested_role: str | None = None,
     ) -> AuditRecord:
         rec = AuditRecord(
             at=datetime.now(UTC),
@@ -48,6 +50,7 @@ class AuditLog:
             requested_company=requested_company,
             endpoint=endpoint,
             trace_id=trace_id,
+            requested_role=requested_role,
         )
         with self._lock:
             self.records.append(rec)

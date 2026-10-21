@@ -182,6 +182,10 @@ def test_evaluative_driver_is_flagged_and_excluded_from_report(tmp_path, dossier
     assert res.summary_flags  # «негатив…», «неблагоприятн…» в summary
     assert res.check_failures == 2
     assert [c.channel for c in res.report.channels] == ["deposit_yield"]  # оценочный драйвер в отчёт не идёт
+    # оценочная сводка заменена нейтральной, собранной кодом из драйверов
+    assert not find_evaluative(res.report.summary)
+    assert "deposit_yield" in res.report.summary and "средняя" in res.report.summary
+    assert "кварталы" in res.report.summary and "rate_cost" not in res.report.summary
 
 
 def test_missing_ref_and_unknown_channel_dropped(tmp_path, dossier):
@@ -366,3 +370,18 @@ def test_metrics_valid_json_and_refs_share(dossier, capsys):
     for f in default_files:
         out = AnalystOutput.model_validate_json(f.read_text("utf-8"))
         assert all(r in dossier.ids() for d in out.drivers for r in d.refs)
+
+
+def test_evaluative_open_questions_dropped_and_clean_summary_kept(tmp_path, dossier):
+    from newsai.agents.analysts import to_report
+
+    out = AnalystOutput(
+        drivers=[],
+        summary="Ставка остаётся на уровне 14%.",
+        open_questions=["Как это плохо скажется на спросе?", "Когда ЦБ начнёт снижать ставку?"],
+    )
+    rep = to_report(out, [], dossier, "finance", "m")
+    assert rep.summary == "Ставка остаётся на уровне 14%."  # чистая сводка не трогается
+    assert rep.open_questions == ["Когда ЦБ начнёт снижать ставку?"]
+    bad = out.model_copy(update={"summary": "Это негативно."})
+    assert not find_evaluative(to_report(bad, [], dossier, "finance", "m").summary)
