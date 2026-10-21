@@ -1,6 +1,6 @@
 """Настоящие обработчики шагов автомата: планировщик, аналитики, карточка.
 
-Остальные шаги (факты, скоринг, быстрая карточка, критик, арбитр, проверка, публикация) пока
+Остальные шаги (факты, скоринг, быстрая карточка, проверка, публикация) пока
 заглушки из `stub_steps`; `make_handlers` собирает реестр, `run_for_client` гонит один прогон.
 """
 
@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from newsai.agents.analysts import run_analysts_detailed
+from newsai.agents.analysts import AnalystResult, run_analysts_detailed
+from newsai.agents.arbiter import arbitrate
+from newsai.agents.critic import critique
 from newsai.agents.dossier import Dossier
 from newsai.agents.pipeline import Handlers, PipelineContext, State, run_pipeline
 from newsai.agents.planner import build_dossier, replan
@@ -124,6 +126,63 @@ def analysts_step(ctx: PipelineContext) -> PipelineContext:
         ctx.flags.append("analyst_unavailable:" + ",".join(sorted(failed)))
     if not ctx.reports:
         raise RuntimeError("оба аналитика недоступны: " + "; ".join(f"{a}: {f}" for a, f in failed.items()))
+    return ctx
+
+
+# --- критик и арбитр ------------------------------------------------------------------------------
+
+
+def _analyst_results(ctx: PipelineContext) -> dict[str, AnalystResult]:
+    raw = ctx.artifacts.get("analysts") or {}
+    results = {a: AnalystResult.model_validate(r) for a, r in raw.items()}
+    if not results:  # отчёты пришли не из analysts_step (кеш, заглушка): оборачиваем как есть
+        results = {r.analyst: AnalystResult(analyst=r.analyst, report=r) for r in ctx.reports}
+    return results
+
+
+def critic_step(ctx: PipelineContext) -> PipelineContext:
+    """CRITIQUED: проверка кодом; задача планировщику -> verdict "retry" (автомат вернётся в PLANNED)."""
+    if not ctx.dossier:
+        raise ValueError("критику нужно досье (шаг PLANNED не выполнен)")
+    verdict = critique(Dossier.model_validate(ctx.dossier), _analyst_results(ctx))
+    rounds: list[dict[str, Any]] = ctx.artifacts.setdefault("critic_rounds", [])
+    rounds.append(
+        {
+            "round": ctx.critic_rounds + 1,
+            "ok": verdict.ok,
+            "failures": [f.model_dump() for f in verdict.failures],
+            "planner_task": verdict.planner_task,
+            "notes": verdict.notes,
+        }
+    )
+    ctx.artifacts["critic"] = verdict.model_dump(mode="json")
+    if ctx.trace is not None:
+        ctx.trace.verify_failures.extend(
+            f"critic[{ctx.critic_rounds + 1}] {f.code}: {f.analyst}"
+            f"{'/' + f.channel if f.channel else ''}: {f.detail}"
+            for f in verdict.failures
+        )
+    if verdict.planner_task:
+        ctx.critic_verdict = "retry"
+        ctx.critic_notes = list(verdict.planner_tasks)  # автомат склеит их в planner_task
+    else:
+        ctx.critic_verdict = "ok"
+        ctx.critic_notes = list(verdict.notes)
+        if not verdict.ok:
+            ctx.flags.append("critic_notes")
+    return ctx
+
+
+def arbiter_step(ctx: PipelineContext) -> PipelineContext:
+    """ARBITRATED: споры аналитиков -> on_review, сверка с позициями ЦМИ из досье (не блокирует)."""
+    dossier = Dossier.model_validate(ctx.dossier) if ctx.dossier else None
+    result = arbitrate(ctx.reports, dossier.by_kind("bank_position") if dossier else [])
+    ctx.on_review = result.on_review
+    ctx.artifacts["arbiter"] = result.model_dump(mode="json")
+    if result.on_review:
+        ctx.flags.append("analyst_dispute:" + ",".join(d.channel for d in result.disputes))
+    if result.confidence_reasons:
+        ctx.flags.append("bank_disagrees:" + ",".join(c.channel for c in result.bank_check if not c.agree))
     return ctx
 
 
@@ -294,6 +353,8 @@ def make_handlers(
     handlers = dict(make_stub_handlers(bundle))
     handlers[State.PLANNED] = planned
     handlers[State.ANALYZED] = analyzed
+    handlers[State.CRITIQUED] = critic_step
+    handlers[State.ARBITRATED] = arbiter_step
     handlers[State.CARD_DRAFTED] = drafted
     handlers[State.CARD_VERIFIED] = verified
     return handlers
@@ -378,9 +439,11 @@ __all__ = [
     "AnalysisCache",
     "PipelineFailed",
     "analysts_step",
+    "arbiter_step",
     "arun_for_client",
     "card_step",
     "card_verify_step",
+    "critic_step",
     "make_handlers",
     "planner_step",
     "run_for_client",
