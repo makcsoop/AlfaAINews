@@ -1,0 +1,35 @@
+{
+  "headline": "Плохой черновик: метка банка у мнения рынка",
+  "what_happened": [
+    {
+      "text": "Банк России сохранил ключевую ставку на уровне 14% годовых.",
+      "refs": ["fact:st_2026-09-11_keyrate:summary"],
+      "client_features": []
+    }
+  ],
+  "why_it_matters": [
+    {
+      "text": "У компании есть кредиты и лизинг в банке.",
+      "refs": ["fact:st_2026-09-11_keyrate:summary"],
+      "client_features": ["CL_PRODUCT_LOA_MARK=1", "CL_PRODUCT_LEA_MARK=1"]
+    }
+  ],
+  "consequences": [
+    {
+      "text": "Банк ожидает снижение ставки уже в этом году, поэтому кредиты скоро подешевеют.",
+      "refs": ["fact:st_2026-09-11_keyrate:summary"],
+      "client_features": ["CL_PRODUCT_LOA_MARK=1"]
+    }
+  ],
+  "actions": [],
+  "bank_and_market": [
+    {
+      "kind": "bank_view",
+      "text": "Консенсус аналитиков ждал снижения ставки.",
+      "refs": ["mk_consensus_2026-09-11"],
+      "client_features": []
+    }
+  ],
+  "what_would_change": [],
+  "surprise": null
+}
