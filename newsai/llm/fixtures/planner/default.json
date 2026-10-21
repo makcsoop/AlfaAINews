@@ -1,0 +1,4 @@
+{"steps": [
+  {"tool": "find_similar_cases", "args": {"event_type": "rate_decision", "limit": 5}, "why": "no_similar_cases: расширить поиск прошлых решений без фильтра по отрасли"},
+  {"tool": "search_news", "args": {"query": "ожидания рынка перед заседанием по ключевой ставке", "limit": 5}, "why": "no_market_consensus: ожидания рынка в материалах"}
+]}
