@@ -27,7 +27,8 @@ DossierKind = Literal[
 ]
 
 # Виды, чей текст пришёл извне и может содержать внедрённые команды
-UNTRUSTED_KINDS: frozenset[str] = frozenset({"news", "market_knowledge", "case"})
+# (факты и заголовок сюжета тоже: их цитаты извлечены из текста новостей)
+UNTRUSTED_KINDS: frozenset[str] = frozenset({"story", "fact", "news", "market_knowledge", "case"})
 
 
 class DossierItem(BaseModel):
@@ -87,7 +88,8 @@ class Dossier(BaseModel):
             if kinds is not None and i.kind not in kinds:
                 continue
             if i.kind in UNTRUSTED_KINDS:
-                untrusted.append(f"[{i.id}] ({i.kind}) {i.title}\n{i.text}")
+                data = f"\n{json.dumps(i.data, ensure_ascii=False, default=str)}" if i.data else ""
+                untrusted.append(f"[{i.id}] ({i.kind}) {i.title}\n{i.text}{data}")
             else:
                 trusted.append(i.model_dump(mode="json", exclude_none=True, exclude={"source_tool"}))
         out = "Досье (ссылайся только на эти id):\n" + json.dumps(trusted, ensure_ascii=False)
