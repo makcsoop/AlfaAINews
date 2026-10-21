@@ -110,20 +110,22 @@
     {
       "company_id": "U_DEMO_DEPOSITOR",
       "group_id": null,
-      "okved_code": "41.20",
-      "okved_name": "Строительство жилых и нежилых зданий",
-      "sector": "41",
+      "okved_code": "24.10",
+      "okved_name": "Производство чугуна, стали и ферросплавов",
+      "sector": "24",
       "revenue": 18500000000,
       "revenue_rank_in_okved": 12,
-      "revenue_peers_in_okved": 140,
+      "revenue_peers_in_okved": 40,
       "city": "Екатеринбург",
       "region": "Свердловская область",
-      "fts_flag": false,
+      "fts_flag": true,
+      "fts_country": "Турция",
       "client_type": "действующий клиент",
       "products": {"rko": true, "guarantees": true, "loans": false, "leasing": false, "deposits": true, "payroll": true, "factoring": false},
       "exposures": [
-        {"channel": "deposit_yield", "exposure": 0.8, "drivers": ["CL_PRODUCT_DEP_MARK=1"]},
-        {"channel": "construction", "exposure": 0.9, "drivers": ["MAINOKVED_CODE=41.20"]}
+        {"channel": "deposit_yield", "exposure": 0.8, "drivers": ["CL_PRODUCT_DEP_MARK=1", "CL_PRODUCT_LOA_MARK=0"]},
+        {"channel": "fx_rub", "exposure": 0.6, "drivers": ["FTS_FLAG=1", "ОКВЭД 24: скорее экспортёр"], "is_assumption": true},
+        {"channel": "metals", "exposure": 0.9, "drivers": ["MAINOKVED_CODE=24.10"]}
       ],
       "completeness": 0.8
     }
@@ -177,7 +179,8 @@
       "expected_value": 13.5,
       "expected_unit": "%",
       "target_event_date": "2026-09-11",
-      "origin": "before_event",
+      "origin": "telegram",
+      "timing": "before_event",
       "evidence": []
     }
   ],
@@ -196,9 +199,9 @@
       "score": 0.61, "quality": 0.93, "freshness": 1.0,
       "contributions": [
         {"factor": "deposit_yield", "value": 0.32, "client_features": ["CL_PRODUCT_DEP_MARK=1"], "sign": 1},
-        {"factor": "construction", "value": 0.18, "client_features": ["MAINOKVED_CODE=41.20"], "sign": -1}
+        {"factor": "fx_rub", "value": 0.14, "client_features": ["FTS_FLAG=1", "ОКВЭД 24: скорее экспортёр"], "sign": -1}
       ],
-      "polarity": "mixed", "deep_analysis": false
+      "polarity": "opportunity", "deep_analysis": false
     }
   ],
   "analyst_report": [
@@ -250,8 +253,71 @@
         {"type": "analysis_question", "text": "Какая доля долга и лизинга компании привязана к плавающей ставке?"},
         {"type": "bank_product", "text": "Обсудить фиксацию ставки по кредитному портфелю", "is_advertising": true}
       ],
-      "bank_and_market": ["B1"],
+      "bank_and_market": ["B1", "M1"],
       "what_would_change": ["Снижение ставки на заседании 23.10 вернёт сценарий удешевления рефинансирования."],
+      "surprise": {
+        "metric": "ключевая ставка", "unit": "%", "actual": 14.0,
+        "market_expected": 13.5, "market_ref": "mk_consensus_2026-09-11",
+        "direction": "above"
+      },
+      "claims": [
+        {
+          "claim_id": "F1", "type": "fact",
+          "text": "Совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых.",
+          "evidence": [{"source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "quote": "сохранить ключевую ставку на уровне 14% годовых", "verified": true}],
+          "verified": {"numbers": true, "entailment": "yes"}
+        },
+        {
+          "claim_id": "B1", "type": "bank_view",
+          "text": "ЦМИ Альфа-Банка оценивает риторику ЦБ как более жёсткую.",
+          "evidence": [{"source_id": "cmi_keyrate_2026_09#p1#c1", "quote": "ЗАГЛУШКА: заменить дословной цитатой из PDF", "doc_date": "2026-09-11T00:00:00Z"}]
+        },
+        {
+          "claim_id": "M1", "type": "market_view",
+          "text": "Аналитики рынка перед заседанием в среднем ждали снижения ставки до 13,5%.",
+          "evidence": [{"source_id": "mk_consensus_2026-09-11"}]
+        },
+        {
+          "claim_id": "I1", "type": "model_inference",
+          "text": "Стоимость обслуживания кредитов и лизинга компании в ближайшие кварталы не снизится; рефинансирование под более низкую ставку откладывается.",
+          "based_on": {"facts": ["F1"], "bank_views": ["B1"], "client_features": ["CL_PRODUCT_LOA_MARK=1", "CL_PRODUCT_LEA_MARK=1"]},
+          "polarity": "risk", "horizon": "3–6 мес."
+        }
+      ],
+      "confidence": "high",
+      "confidence_reasons": ["первоисточник — ЦБ", "позиция ЦМИ совпадает по знаку", "прямой канал через кредиты и лизинг"],
+      "review_status": "published",
+      "trace_id": "run_fixture_rate14"
+    },
+    {
+      "card_id": "card_st_2026-09-11_keyrate_U_DEMO_DEPOSITOR_treasurer",
+      "company_id": "U_DEMO_DEPOSITOR",
+      "user_role": "treasurer",
+      "event": {
+        "story_id": "st_2026-09-11_keyrate", "event_type": "rate_decision", "status": "confirmed",
+        "title": "ЦБ сохранил ключевую ставку на уровне 14%", "first_seen": "2026-09-11T10:30:00Z",
+        "sources": [{"source_id": "cbr_press", "tier": 0, "url": "https://www.cbr.ru/press/pr/?file=11092026_133000key.htm"}],
+        "independent_sources": 1
+      },
+      "relevance": {
+        "story_id": "st_2026-09-11_keyrate", "company_id": "U_DEMO_DEPOSITOR", "role": "treasurer",
+        "score": 0.61, "quality": 0.93, "freshness": 1.0,
+        "contributions": [
+          {"factor": "deposit_yield", "value": 0.32, "client_features": ["CL_PRODUCT_DEP_MARK=1"], "sign": 1},
+          {"factor": "fx_rub", "value": 0.14, "client_features": ["FTS_FLAG=1", "ОКВЭД 24: скорее экспортёр"], "sign": -1}
+        ],
+        "polarity": "opportunity", "deep_analysis": false
+      },
+      "what_happened": ["F1"],
+      "why_it_matters": ["I1", "I2"],
+      "consequences": ["I1", "I2"],
+      "actions": [
+        {"type": "analysis_question", "text": "Не сокращать сроки размещения в расчёте на скорое снижение ставки?"},
+        {"type": "scenario", "text": "Проверить план продажи валютной выручки при крепком рубле."},
+        {"type": "bank_product", "text": "Депозит на более длинный срок по текущей ставке", "is_advertising": true}
+      ],
+      "bank_and_market": ["B1"],
+      "what_would_change": ["Данные о валюте выручки клиента уточнят эффект курса."],
       "claims": [
         {
           "claim_id": "F1", "type": "fact",
@@ -266,15 +332,20 @@
         },
         {
           "claim_id": "I1", "type": "model_inference",
-          "text": "Стоимость обслуживания кредитов и лизинга компании в ближайшие кварталы не снизится; рефинансирование под более низкую ставку откладывается.",
-          "based_on": {"facts": ["F1"], "bank_views": ["B1"], "client_features": ["CL_PRODUCT_LOA_MARK=1", "CL_PRODUCT_LEA_MARK=1"]},
-          "polarity": "risk", "horizon": "3–6 мес."
+          "text": "Доходность депозитов и остатков компании держится на уровне ставки дольше, чем шло по тренду.",
+          "based_on": {"facts": ["F1"], "bank_views": ["B1"], "client_features": ["CL_PRODUCT_DEP_MARK=1", "CL_PRODUCT_LOA_MARK=0"]},
+          "polarity": "opportunity", "horizon": "3–6 мес."
+        },
+        {
+          "claim_id": "I2", "type": "model_inference",
+          "text": "Высокая ставка обычно поддерживает рубль — для валютной выручки это минус в рублях.",
+          "based_on": {"facts": ["F1"], "client_features": ["FTS_FLAG=1"]},
+          "polarity": "risk", "horizon": "1–3 мес."
         }
       ],
-      "confidence": "high",
-      "confidence_reasons": ["первоисточник — ЦБ", "позиция ЦМИ совпадает по знаку", "прямой канал через кредиты и лизинг"],
-      "review_status": "published",
-      "trace_id": "run_fixture_rate14"
+      "confidence": "medium",
+      "confidence_reasons": ["первоисточник — ЦБ", "эффект на курс — общий механизм, без данных о валюте выручки клиента"],
+      "review_status": "published"
     }
   ],
   "run_trace": [

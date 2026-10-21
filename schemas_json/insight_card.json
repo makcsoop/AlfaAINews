@@ -96,6 +96,7 @@
           "enum": [
             "fact",
             "bank_view",
+            "market_view",
             "model_inference",
             "bank_offer"
           ],
@@ -439,6 +440,105 @@
       ],
       "title": "StorySource",
       "type": "object"
+    },
+    "Surprise": {
+      "additionalProperties": false,
+      "description": "«Рынок ждал X, банк ждал Y, вышло Z». Ожидания — только опубликованные до события.",
+      "properties": {
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "actual": {
+          "title": "Actual",
+          "type": "number"
+        },
+        "market_expected": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Market Expected"
+        },
+        "market_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "id market_knowledge с консенсусом",
+          "title": "Market Ref"
+        },
+        "bank_expected": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bank Expected"
+        },
+        "bank_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "id bank_position",
+          "title": "Bank Ref"
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "above",
+                "below",
+                "in_line"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Direction"
+        }
+      },
+      "required": [
+        "metric",
+        "actual"
+      ],
+      "title": "Surprise",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -513,6 +613,17 @@
       },
       "title": "What Would Change",
       "type": "array"
+    },
+    "surprise": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Surprise"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "claims": {
       "items": {

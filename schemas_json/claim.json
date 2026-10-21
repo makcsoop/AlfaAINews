@@ -100,6 +100,7 @@
       "enum": [
         "fact",
         "bank_view",
+        "market_view",
         "model_inference",
         "bank_offer"
       ],

@@ -89,6 +89,19 @@ class CardEvent(Schema):
     independent_sources: int
 
 
+class Surprise(Schema):
+    """«Рынок ждал X, банк ждал Y, вышло Z». Ожидания — только опубликованные до события."""
+
+    metric: str
+    unit: str | None = None
+    actual: float
+    market_expected: float | None = None
+    market_ref: str | None = Field(default=None, description="id market_knowledge с консенсусом")
+    bank_expected: float | None = None
+    bank_ref: str | None = Field(default=None, description="id bank_position")
+    direction: Literal["above", "below", "in_line"] | None = None
+
+
 class InsightCard(Schema):
     """11. Персональная карточка: 6 вопросов ТЗ + что изменит вывод."""
 
@@ -105,6 +118,7 @@ class InsightCard(Schema):
         default_factory=list, description="claim_id bank_view и консенсус рынка"
     )
     what_would_change: list[str] = Field(default_factory=list)
+    surprise: Surprise | None = None
     claims: list[Claim]
     confidence: Confidence
     confidence_reasons: list[str] = Field(default_factory=list)

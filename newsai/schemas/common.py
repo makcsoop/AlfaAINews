@@ -11,8 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = "0.1.0"
 
-# Метка утверждения в карточке: факт, позиция банка, вывод AI, предложение банка (реклама)
-ClaimType = Literal["fact", "bank_view", "model_inference", "bank_offer"]
+# Метка утверждения в карточке: факт, позиция банка (только ЦМИ), мнение рынка (аналитики, вкл.
+# Альфа-Инвестиции), вывод AI, предложение банка (реклама)
+ClaimType = Literal["fact", "bank_view", "market_view", "model_inference", "bank_offer"]
 
 # Статус утверждения внутри события: намерение и слух помечаются явно
 EventStatus = Literal["fact", "announced", "planned", "rumor", "forecast"]

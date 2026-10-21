@@ -207,12 +207,24 @@
       "title": "Target Event Date"
     },
     "origin": {
+      "default": "telegram",
+      "description": "откуда знание: из Telegram отключается одной настройкой (п. 1.5 условий API)",
+      "enum": [
+        "telegram",
+        "site",
+        "manual"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "timing": {
       "default": "before_event",
+      "description": "в разбор берём только опубликованное до сюжета",
       "enum": [
         "before_event",
         "after_event"
       ],
-      "title": "Origin",
+      "title": "Timing",
       "type": "string"
     },
     "evidence": {
@@ -235,6 +247,12 @@
       ],
       "default": null,
       "title": "Channel Weight"
+    },
+    "one_sided": {
+      "default": false,
+      "description": "85%+ «покупать» — вес ×0,5",
+      "title": "One Sided",
+      "type": "boolean"
     },
     "outcome_hit": {
       "anyOf": [

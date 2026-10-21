@@ -11,13 +11,26 @@ def test_fixture_covers_every_schema():
     assert all(bundle.values())
 
 
-def test_card_claim_refs_resolve():
-    card: InsightCard = load_bundle("rate_14")["insight_card"][0]
+@pytest.mark.parametrize("idx", [0, 1])
+def test_card_claim_refs_resolve(idx):
+    card: InsightCard = load_bundle("rate_14")["insight_card"][idx]
     ids = {c.claim_id for c in card.claims}
     for section in (card.what_happened, card.why_it_matters, card.consequences, card.bank_and_market):
         assert set(section) <= ids
     assert all(c.type == "fact" for c in card.claims if c.claim_id in card.what_happened)
-    assert all(c.type == "bank_view" for c in card.claims if c.claim_id in card.bank_and_market)
+    assert all(
+        c.type in {"bank_view", "market_view"} for c in card.claims if c.claim_id in card.bank_and_market
+    )
+    # позиция банка — только со ссылкой на материал ЦМИ
+    for c in card.claims:
+        if c.type == "bank_view":
+            assert c.evidence and all(e.source_id.startswith("cmi_") for e in c.evidence)
+
+
+def test_same_story_differs_by_client():
+    a, b = load_bundle("rate_14")["insight_card"]
+    assert a.event.story_id == b.event.story_id
+    assert a.relevance.polarity == "risk" and b.relevance.polarity == "opportunity"
 
 
 def test_extra_fields_rejected():

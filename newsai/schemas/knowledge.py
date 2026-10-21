@@ -46,7 +46,14 @@ class MarketKnowledge(Schema):
     expected_value: float | None = None
     expected_unit: str | None = None
     target_event_date: date | None = Field(default=None, description="для ожиданий: дата планового события")
-    origin: Literal["before_event", "after_event"] = "before_event"
+    origin: Literal["telegram", "site", "manual"] = Field(
+        default="telegram",
+        description="откуда знание: из Telegram отключается одной настройкой (п. 1.5 условий API)",
+    )
+    timing: Literal["before_event", "after_event"] = Field(
+        default="before_event", description="в разбор берём только опубликованное до сюжета"
+    )
     evidence: list[Evidence] = Field(default_factory=list)
     channel_weight: Score01 | None = None
+    one_sided: bool = Field(default=False, description="85%+ «покупать» — вес ×0,5")
     outcome_hit: bool | None = Field(default=None, description="сбылся ли прогноз")
