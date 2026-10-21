@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
@@ -19,7 +19,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from newsai.agents.dossier import Dossier, DossierKind
+from newsai.agents.examples import Example
 from newsai.llm import BudgetExceeded, LLMClient, LLMUnavailable
+from newsai.llm.client import data_block
 from newsai.schemas import AnalystReport, ChannelImpact, Evidence
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -135,10 +137,28 @@ def load_prompt(step: str) -> tuple[str, str]:
     return text, (m.group(1) if m else f"{step}@0")
 
 
+EXAMPLES_NOTE = (
+    "Примеры разборов аналитиков рынка до даты сюжета — образец рассуждения, не факты по текущему событию; "
+    "ссылаться на них нельзя (в refs только id из досье)."
+)
+
+
+def render_examples(examples: Sequence[Example]) -> str:
+    """Блок примеров: пометка и тексты внутри <data>. id примеров аналитику не показываются."""
+    body = "\n\n".join(
+        f"Пример {n} (канал {e.channel_source}, {e.published_at.date().isoformat()}): {e.text}"
+        for n, e in enumerate(examples, 1)
+    )
+    return f"{EXAMPLES_NOTE}\n{data_block(body)}"
+
+
 def build_messages(
-    analyst: AnalystName, dossier: Dossier, channels: Mapping[str, str]
+    analyst: AnalystName,
+    dossier: Dossier,
+    channels: Mapping[str, str],
+    examples: Sequence[Example] | None = None,
 ) -> list[dict[str, str]]:
-    """Сообщения одного аналитика. Ответ другого сюда не попадает: вход — только досье и каналы."""
+    """Сообщения одного аналитика. Ответ другого сюда не попадает: вход — только досье, каналы, примеры."""
     system, _ = load_prompt(STEP[analyst])
     kinds = set(get_args(DossierKind)) - EXCLUDED_KINDS
     channel_lines = "\n".join(f"- {cid}: {name}" for cid, name in channels.items())
@@ -151,6 +171,8 @@ def build_messages(
     )
     if dossier.gaps:
         user += "\n\nВ досье не хватает: " + "; ".join(dossier.gaps)
+    if examples:
+        user += "\n\n" + render_examples(examples)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
@@ -261,6 +283,7 @@ def _run_one(
     trace_id: str,
     priority: float | None,
     fixture_key: str | None,
+    examples: Sequence[Example] | None = None,
 ) -> AnalystResult:
     step = STEP[analyst]
     _, version = load_prompt(step)
@@ -269,7 +292,7 @@ def _run_one(
     try:
         call = client.call(
             step=step,
-            messages=build_messages(analyst, dossier, channels),
+            messages=build_messages(analyst, dossier, channels, examples),
             schema=AnalystOutput,
             trace_id=trace_id,
             priority=priority,
@@ -296,6 +319,7 @@ def run_analysts_detailed(
     priority: float | None = None,
     fixture_keys: Mapping[str, str] | None = None,
     channels: Mapping[str, str] | None = None,
+    examples: Sequence[Example] | None = None,
 ) -> dict[str, AnalystResult]:
     """Параллельный запуск двух аналитиков; сбой одного не роняет другого (failure в его результате)."""
     chans = channels if channels is not None else load_channels()
@@ -311,6 +335,7 @@ def run_analysts_detailed(
                 trace_id=trace_id,
                 priority=priority,
                 fixture_key=keys.get(a),
+                examples=examples,
             )
             for a in ANALYSTS
         }
@@ -324,10 +349,16 @@ def run_analysts(
     trace_id: str,
     priority: float | None = None,
     fixture_keys: Mapping[str, str] | None = None,
+    examples: Sequence[Example] | None = None,
 ) -> dict[str, AnalystReport | None]:
     """{analyst: AnalystReport | None}; None — аналитик недоступен (причина в run_analysts_detailed)."""
     detailed = run_analysts_detailed(
-        dossier, client=client, trace_id=trace_id, priority=priority, fixture_keys=fixture_keys
+        dossier,
+        client=client,
+        trace_id=trace_id,
+        priority=priority,
+        fixture_keys=fixture_keys,
+        examples=examples,
     )
     return {a: r.report for a, r in detailed.items()}
 
