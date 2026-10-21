@@ -1,0 +1,97 @@
+# Реестр источников. Правка источника = правка этого файла, код не трогаем.
+# tier: 0 — регулятор/первоисточник, 1 — информагентства, 2 — деловые СМИ/биржи/аналитика, 3 — агрегаторы/авторские
+# weight: стартовый вес достоверности (ручной), дальше уточняется подтверждениями/опровержениями
+# value: ценность для бизнеса 1–5 из sources.md
+# full_text: feed — полный текст в ленте; fetch — скачиваем статью (trafilatura); none — только заголовок и лид
+# is_partial: пейволл — храним только заголовок и лид, страницу не качаем
+# official: одного такого источника достаточно для статуса «подтверждено»
+
+defaults:
+  poll_seconds: 180
+  host_rps: 1.0
+
+sources:
+  # ---------- RSS: день 1 ----------
+  - {id: prime, name: "ПРАЙМ", kind: rss, url: "https://1prime.ru/export/rss2/index.xml",
+     tier: 1, weight: 0.85, value: 4, poll_seconds: 120, full_text: fetch,
+     tags: [agency, fx, commodities], audience: "Казначейство, ВЭД, сырьевые компании"}
+  - {id: interfax, name: "Интерфакс", kind: rss, url: "https://www.interfax.ru/rss.asp",
+     tier: 1, weight: 0.9, value: 5, poll_seconds: 120, full_text: fetch,
+     tags: [agency], audience: "Все отрасли; основной источник подтверждения фактов"}
+  - {id: rbc, name: "РБК", kind: rss, url: "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
+     tier: 2, weight: 0.8, value: 4, poll_seconds: 180, full_text: feed,
+     tags: [business_media], audience: "Все"}
+
+  # ---------- RSS: день 2 (код тот же, включаются флагом) ----------
+  - {id: tass, name: "ТАСС", kind: rss, url: "https://tass.ru/rss/v2.xml",
+     tier: 1, weight: 0.85, value: 4, full_text: fetch, enabled: false,
+     tags: [agency], audience: "ВЭД, госсектор"}
+  - {id: kommersant, name: "Коммерсантъ", kind: rss, url: "https://www.kommersant.ru/RSS/news.xml",
+     tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true, enabled: false,
+     tags: [business_media], audience: "Отраслевые эксклюзивы"}
+  - {id: vedomosti, name: "Ведомости", kind: rss, url: "https://www.vedomosti.ru/rss/news",
+     tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true, enabled: false,
+     tags: [business_media], audience: "Отраслевые рубрики"}
+  - {id: cbr_press, name: "ЦБ — пресс-релизы", kind: rss, url: "http://www.cbr.ru/rss/RssPress",
+     tier: 0, weight: 1.0, value: 5, poll_seconds: 300, full_text: fetch, official: true, enabled: false,
+     tags: [regulator, rate], audience: "Заёмщики, казначейство, ВЭД"}
+  - {id: cbr_events, name: "ЦБ — новости и выступления", kind: rss, url: "http://www.cbr.ru/rss/eventrss",
+     tier: 0, weight: 1.0, value: 4, poll_seconds: 600, full_text: fetch, official: true, enabled: false,
+     tags: [regulator], audience: "Казначейство, финдиректора"}
+  - {id: agroinvestor, name: "Агроинвестор", kind: rss, url: "https://www.agroinvestor.ru/rss/",
+     tier: 2, weight: 0.7, value: 3, poll_seconds: 600, full_text: fetch, enabled: false,
+     tags: [industry, agro], audience: "АПК и пищепром"}
+
+  # ---------- Данные (структурированные, не новости) ----------
+  - {id: cbr_fx, name: "ЦБ — курсы валют", kind: api, url: "https://www.cbr.ru/scripts/XML_daily.asp",
+     tier: 0, weight: 1.0, value: 5, poll_seconds: 3600, full_text: none, official: true, enabled: false,
+     tags: [data, fx]}
+  - {id: cbr_dailyinfo, name: "ЦБ — ключевая ставка, RUONIA", kind: api,
+     url: "https://cbr.ru/DailyInfoWebServ/DailyInfo.asmx",
+     tier: 0, weight: 1.0, value: 5, poll_seconds: 3600, full_text: none, official: true, enabled: false,
+     tags: [data, rate]}
+  - {id: moex_iss, name: "Московская биржа — ISS", kind: api, url: "https://iss.moex.com/iss/",
+     tier: 0, weight: 1.0, value: 5, poll_seconds: 900, full_text: none, official: true, enabled: false,
+     tags: [data, market]}
+
+  # ---------- Telegram: день 2 (Telethon по числовым id, t.me/s — запасной путь) ----------
+  - {id: tg_centralbank_russia, name: "Банк России", kind: telegram, url: "https://t.me/centralbank_russia",
+     tier: 0, weight: 1.0, value: 5, official: true, enabled: false, tags: [regulator]}
+  - {id: tg_minfin, name: "Минфин России", kind: telegram, url: "https://t.me/minfin",
+     tier: 0, weight: 1.0, value: 5, official: true, enabled: false, tags: [regulator]}
+  - {id: tg_interfaxonline, name: "Интерфакс", kind: telegram, url: "https://t.me/interfaxonline",
+     tier: 1, weight: 0.9, value: 5, enabled: false, tags: [agency]}
+  - {id: tg_minec_russia, name: "Минэкономразвития", kind: telegram, url: "https://t.me/minec_russia",
+     tier: 0, weight: 1.0, value: 4, official: true, enabled: false, tags: [regulator]}
+  - {id: tg_news_kremlin, name: "Кремль. Новости", kind: telegram, url: "https://t.me/news_kremlin",
+     tier: 0, weight: 1.0, value: 4, official: true, enabled: false, tags: [primary]}
+  - {id: tg_tass_agency, name: "ТАСС", kind: telegram, url: "https://t.me/tass_agency",
+     tier: 1, weight: 0.85, value: 4, enabled: false, tags: [agency]}
+  - {id: tg_prime1, name: "ПРАЙМ", kind: telegram, url: "https://t.me/prime1",
+     tier: 1, weight: 0.85, value: 4, enabled: false, tags: [agency]}
+  - {id: tg_rbc_news, name: "РБК. Главное", kind: telegram, url: "https://t.me/rbc_news",
+     tier: 2, weight: 0.8, value: 4, enabled: false, tags: [business_media]}
+  - {id: tg_moex_derivatives, name: "MOEX Derivatives", kind: telegram, url: "https://t.me/moex_derivatives",
+     tier: 0, weight: 1.0, value: 4, official: true, enabled: false, tags: [exchange]}
+  - {id: tg_rosstat_official, name: "Росстат", kind: telegram, url: "https://t.me/rosstat_official",
+     tier: 0, weight: 1.0, value: 3, official: true, enabled: false, tags: [statistics]}
+  - {id: tg_dohod, name: "ДОХОДЪ", kind: telegram, url: "https://t.me/dohod",
+     tier: 2, weight: 0.7, value: 3, enabled: false, tags: [analytics]}
+  - {id: tg_smartlabnews, name: "СМАРТЛАБ", kind: telegram, url: "https://t.me/smartlabnews",
+     tier: 3, weight: 0.6, value: 3, enabled: false, tags: [aggregator, analytics]}
+  - {id: tg_alfa_investments, name: "Альфа-Инвестиции", kind: telegram, url: "https://t.me/alfa_investments",
+     tier: 2, weight: 0.75, value: 3, enabled: false, tags: [analytics, bank]}
+  - {id: tg_markettwits, name: "MarketTwits", kind: telegram, url: "https://t.me/markettwits",
+     tier: 3, weight: 0.5, value: 3, enabled: false, tags: [aggregator, speed]}
+  - {id: tg_banksta, name: "Банкста", kind: telegram, url: "https://t.me/banksta",
+     tier: 3, weight: 0.5, value: 3, enabled: false, tags: [author]}
+  - {id: tg_swaneconomy, name: "Черный Лебедь", kind: telegram, url: "https://t.me/swaneconomy",
+     tier: 3, weight: 0.45, value: 3, enabled: false, tags: [author, ved]}
+  - {id: tg_cb_economics, name: "КБ. экономика", kind: telegram, url: "https://t.me/cb_economics",
+     tier: 3, weight: 0.4, value: 2, enabled: false, tags: [author]}
+  - {id: tg_bbbreaking, name: "Раньше всех. Ну почти.", kind: telegram, url: "https://t.me/bbbreaking",
+     tier: 3, weight: 0.35, value: 2, enabled: false, tags: [aggregator, speed]}
+
+  # ---------- Аналитика банка (офлайн, день 3) ----------
+  - {id: alfa_cmi, name: "ЦМИ Альфа-Банка", kind: bank_pdf, tier: 0, weight: 1.0, value: 5,
+     full_text: none, enabled: false, tags: [bank]}
