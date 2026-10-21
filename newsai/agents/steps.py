@@ -18,6 +18,7 @@ from newsai.agents.analysts import AnalystResult, run_analysts_detailed
 from newsai.agents.arbiter import arbitrate
 from newsai.agents.critic import critique
 from newsai.agents.dossier import Dossier
+from newsai.agents.examples import select_examples
 from newsai.agents.pipeline import Handlers, PipelineContext, State, run_pipeline
 from newsai.agents.planner import build_dossier, replan
 from newsai.agents.stub_steps import make_stub_handlers
@@ -42,7 +43,7 @@ def set_tool_source(source: ToolDataSource | None) -> None:
     _source = source
 
 
-def _get_source() -> ToolDataSource:
+def get_tool_source() -> ToolDataSource:
     global _source
     if _source is None:
         _source = FixtureDataSource("rate_14")
@@ -77,7 +78,7 @@ def planner_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> 
         story_id=ctx.story.id,
         story_published_at=ctx.story.last_seen,
         trace_id=ctx.trace_id,
-        source=source or _get_source(),
+        source=source or get_tool_source(),
     )
     client = get_client()
     before = _llm_mark(ctx, client)
@@ -103,16 +104,24 @@ def planner_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> 
 # --- аналитики ------------------------------------------------------------------------------------
 
 
-def analysts_step(ctx: PipelineContext) -> PipelineContext:
+def analysts_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> PipelineContext:
     """ANALYZED: два аналитика на досье; один упал — идём дальше, оба упали — исключение (DEGRADED)."""
     if not ctx.dossier:
         raise ValueError("аналитикам нужно досье (шаг PLANNED не выполнен)")
     dossier = Dossier.model_validate(ctx.dossier)
+    # Примеры разборов аналитиков рынка: только опубликованные до сюжета, одинаковые для обоих
+    examples = select_examples(
+        source or get_tool_source(),
+        event_type=dossier.event_type,
+        sector=dossier.sector,
+        story_published_at=dossier.story_published_at,
+    )
+    ctx.artifacts["examples"] = [e.id for e in examples]
     client = get_client()
     before = _llm_mark(ctx, client)
     try:
         results = run_analysts_detailed(
-            dossier, client=client, trace_id=ctx.trace_id, priority=ctx.priority
+            dossier, client=client, trace_id=ctx.trace_id, priority=ctx.priority, examples=examples
         )
     finally:
         _llm_sync(ctx, client, before)
@@ -207,7 +216,7 @@ def card_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> Pip
         raise ValueError("карточке нужны company_id и роль из сессии")
     if ctx.story is None or ctx.relevance is None or not ctx.dossier:
         raise ValueError("карточке нужны сюжет, скоринг и досье")
-    src = source or _get_source()
+    src = source or get_tool_source()
     profile = src.profile(ctx.company_id)
     if profile is None:
         raise LookupError(f"нет профиля компании {ctx.company_id}")
@@ -262,7 +271,7 @@ def card_verify_step(ctx: PipelineContext, source: ToolDataSource | None = None)
     """CARD_VERIFIED: финальная проверка карточки кодом; что делать при провале, решает автомат."""
     if ctx.card is None or ctx.company_id is None or not ctx.dossier:
         raise ValueError("проверке нужны карточка, company_id из сессии и досье")
-    src = source or _get_source()
+    src = source or get_tool_source()
     profile = src.profile(ctx.company_id)
     if profile is None:
         raise LookupError(f"нет профиля компании {ctx.company_id}")
@@ -328,7 +337,7 @@ def make_handlers(
     def analyzed(ctx: PipelineContext) -> PipelineContext:
         if ctx.artifacts.get("analysis_cached"):
             return ctx
-        ctx = analysts_step(ctx)
+        ctx = analysts_step(ctx, src)
         if cache is not None:
             cache.put(
                 ctx.analysis_key,
@@ -444,6 +453,7 @@ __all__ = [
     "card_step",
     "card_verify_step",
     "critic_step",
+    "get_tool_source",
     "make_handlers",
     "planner_step",
     "run_for_client",

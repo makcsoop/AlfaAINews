@@ -137,3 +137,21 @@ def test_ref_to_example_is_dropped():
     )
     kept, notes, _ = validate_output(out, dossier, channels)
     assert kept == [] and len(notes) == 2 and all(ex_id in n for n in notes)
+
+
+def test_pipeline_step_passes_examples_to_analysts(monkeypatch):
+    from newsai.agents.pipeline import PipelineContext
+    from newsai.agents.steps import analysts_step
+    from newsai.llm import reset_client
+
+    monkeypatch.setenv("LLM_MODE", "fixture")
+    reset_client()
+    src = Src([mk("past_review", datetime(2026, 7, 24, 18, tzinfo=UTC))])
+    ctx = PipelineContext(
+        story_id="st_2026-09-11_keyrate", story_version=1, sector="46", priority=0.9, trace_id="t-examples"
+    )
+    ctx.dossier = rate14_dossier().model_dump(mode="json")
+    ctx = analysts_step(ctx, src)
+    assert ctx.artifacts["examples"] == ["past_review"]
+    assert ctx.reports
+    reset_client()

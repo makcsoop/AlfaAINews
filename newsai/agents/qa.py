@@ -242,9 +242,9 @@ def card_items(card: InsightCard, positions: dict[str, Any] | None = None) -> li
 
 def _source() -> ToolDataSource:
     try:
-        from newsai.agents.steps import _get_source
+        from newsai.agents.steps import get_tool_source
 
-        return _get_source()
+        return get_tool_source()
     except ImportError:
         return FixtureDataSource("rate_14")
 
