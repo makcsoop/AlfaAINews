@@ -4,6 +4,7 @@ from newsai.schemas.client import ChannelExposure, CompanyProfile, Counterparty,
 from newsai.schemas.common import SCHEMA_VERSION, ChannelImpact, Evidence, NumberFact
 from newsai.schemas.insight import (
     Action,
+    Analysis,
     AnalystReport,
     Claim,
     Contribution,
@@ -14,10 +15,10 @@ from newsai.schemas.insight import (
     RunTrace,
     ToolCall,
 )
-from newsai.schemas.knowledge import BankPosition, MarketKnowledge
-from newsai.schemas.news import EventFacts, Participant, RawItem, Source, Story
+from newsai.schemas.knowledge import BankPosition, Forecast, MarketKnowledge
+from newsai.schemas.news import EventFacts, ItemEdit, Participant, RawItem, Source, Story
 
-# 13 основных объектов + market_knowledge — для экспорта JSON Schema и проверки фикстур
+# Объекты «Контрактов данных» финальной архитектуры + служебные — для экспорта JSON Schema и проверки фикстур
 ALL_SCHEMAS = {
     "source": Source,
     "raw_item": RawItem,
@@ -28,6 +29,7 @@ ALL_SCHEMAS = {
     "bank_position": BankPosition,
     "relevance_score": RelevanceScore,
     "analyst_report": AnalystReport,
+    "analysis": Analysis,
     "claim": Claim,
     "insight_card": InsightCard,
     "run_trace": RunTrace,
@@ -39,6 +41,7 @@ __all__ = [
     "ALL_SCHEMAS",
     "SCHEMA_VERSION",
     "Action",
+    "Analysis",
     "AnalystReport",
     "BankPosition",
     "ChannelExposure",
@@ -51,7 +54,9 @@ __all__ = [
     "EventFacts",
     "Evidence",
     "Feedback",
+    "Forecast",
     "InsightCard",
+    "ItemEdit",
     "LlmCall",
     "MarketKnowledge",
     "NumberFact",

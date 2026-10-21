@@ -18,8 +18,19 @@ log = logging.getLogger(__name__)
 SYNTHETIC_DIR = Path("data/case_synthetic")
 
 
+# Переименования колонок в уже созданных базах (create_all существующие таблицы не меняет)
+_RENAMES = [("stories", "independent_sources", "corroboration")]
+
+
 def create_schema(conn: Connection) -> None:
     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    for table, old, new in _RENAMES:
+        exists = conn.execute(
+            text("SELECT 1 FROM information_schema.columns WHERE table_name = :t AND column_name = :c"),
+            {"t": table, "c": old},
+        ).first()
+        if exists:
+            conn.execute(text(f"ALTER TABLE {table} RENAME COLUMN {old} TO {new}"))
     m.metadata.create_all(conn)
 
 
@@ -60,7 +71,7 @@ def load_fixtures(conn: Connection, name: str = "rate_14") -> None:
                 "title": s.title,
                 "event_type": s.event_type,
                 "status": s.status,
-                "independent_sources": s.independent_sources,
+                "corroboration": s.corroboration,
                 "first_seen": s.first_seen,
                 "last_seen": s.last_seen,
                 "version": s.version,
@@ -105,6 +116,21 @@ def load_fixtures(conn: Connection, name: str = "rate_14") -> None:
                 "data": dump(k),
             }
             for k in b["market_knowledge"]
+        ],
+    )
+    _upsert(
+        conn,
+        m.analyses,
+        [
+            {
+                "story_id": a.story_id,
+                "sector": a.sector,
+                "version": a.version,
+                "status": a.status,
+                "trace_id": a.trace_id,
+                "data": dump(a),
+            }
+            for a in b["analysis"]
         ],
     )
     _upsert(

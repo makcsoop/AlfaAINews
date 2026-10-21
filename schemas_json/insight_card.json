@@ -67,8 +67,8 @@
           "title": "Sources",
           "type": "array"
         },
-        "independent_sources": {
-          "title": "Independent Sources",
+        "corroboration": {
+          "title": "Corroboration",
           "type": "integer"
         }
       },
@@ -79,14 +79,14 @@
         "title",
         "first_seen",
         "sources",
-        "independent_sources"
+        "corroboration"
       ],
       "title": "CardEvent",
       "type": "object"
     },
     "Claim": {
       "additionalProperties": false,
-      "description": "10. Утверждение карточки с меткой и обоснованием.",
+      "description": "10. Утверждение с меткой (kind в контракте) и обоснованием (refs).",
       "properties": {
         "claim_id": {
           "title": "Claim Id",
@@ -173,6 +173,19 @@
           "default": false,
           "title": "Is Advertising",
           "type": "boolean"
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "продуктовый триггер предложения: 'loa+rate_up'",
+          "title": "Trigger"
         }
       },
       "required": [
@@ -564,6 +577,48 @@
       "title": "User Role",
       "type": "string"
     },
+    "version": {
+      "default": 1,
+      "description": "растёт при существенном обновлении сюжета (У8)",
+      "title": "Version",
+      "type": "integer"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "stage": {
+      "default": "fast",
+      "description": "быстрая карточка без LLM или с догруженным глубоким разбором",
+      "enum": [
+        "fast",
+        "deep"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "analysis_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "'story_id:sector:version' разбора",
+      "title": "Analysis Ref"
+    },
     "event": {
       "$ref": "#/$defs/CardEvent"
     },
@@ -684,5 +739,5 @@
   ],
   "title": "InsightCard",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

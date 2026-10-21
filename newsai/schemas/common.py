@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = "0.1.0"
+SCHEMA_VERSION = "0.2.0"  # 0.2.0: контракты финальной архитектуры, факторы с направлением (У17), analysis
 
 # Метка утверждения в карточке: факт, позиция банка (только ЦМИ), мнение рынка (аналитики, вкл.
 # Альфа-Инвестиции), вывод AI, предложение банка (реклама)
@@ -64,12 +64,18 @@ class NumberFact(Schema):
     verified: bool | None = None
 
 
-class ChannelImpact(Schema):
-    """Воздействие на канал влияния (ставка, курс, нефть…). Знак — для отрасли, не для клиента."""
+Horizon = Literal["days", "weeks", "months", "quarters", "years"]
 
-    channel: str = Field(description="id канала из config/taxonomy.yaml")
-    impact: Signed = Field(description="−1…1: направление и сила воздействия")
-    horizon: Literal["days", "weeks", "months", "quarters", "years"] | None = None
+
+class ChannelImpact(Schema):
+    """Как событие двигает фактор: «ставка выше», «рубль крепче». Это направление фактора,
+    а не «хорошо / плохо» (У17): знак для клиента получается только умножением на его
+    чувствительность к фактору (ChannelExposure.sensitivity)."""
+
+    channel: str = Field(description="id фактора из config/taxonomy.yaml")
+    direction: Literal["up", "down", "flat"]
+    strength: Score01
+    horizon: Horizon | None = None
     rationale: str | None = None
     evidence: list[Evidence] = Field(default_factory=list)
 

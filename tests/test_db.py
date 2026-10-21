@@ -21,7 +21,9 @@ TEST_URL = os.environ.get(
 @pytest.fixture(scope="module")
 def engine():
     url = make_url(TEST_URL)
-    admin = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        url.set(database="postgres"), isolation_level="AUTOCOMMIT", connect_args={"connect_timeout": 3}
+    )
     try:
         with admin.connect() as c:
             c.execute(text(f'DROP DATABASE IF EXISTS "{url.database}" WITH (FORCE)'))

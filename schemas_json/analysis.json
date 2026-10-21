@@ -1,0 +1,409 @@
+{
+  "$defs": {
+    "AnalystReport": {
+      "additionalProperties": false,
+      "description": "9. Отчёт независимого аналитика (бизнес / финансы) по паре «сюжет × отрасль».",
+      "properties": {
+        "story_id": {
+          "title": "Story Id",
+          "type": "string"
+        },
+        "sector": {
+          "title": "Sector",
+          "type": "string"
+        },
+        "analyst": {
+          "enum": [
+            "business",
+            "finance"
+          ],
+          "title": "Analyst",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "channels": {
+          "items": {
+            "$ref": "#/$defs/ChannelImpact"
+          },
+          "title": "Channels",
+          "type": "array"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "open_questions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Open Questions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "story_id",
+        "sector",
+        "analyst",
+        "model",
+        "channels",
+        "summary"
+      ],
+      "title": "AnalystReport",
+      "type": "object"
+    },
+    "ChannelImpact": {
+      "additionalProperties": false,
+      "description": "Как событие двигает фактор: «ставка выше», «рубль крепче». Это направление фактора,\nа не «хорошо / плохо» (У17): знак для клиента получается только умножением на его\nчувствительность к фактору (ChannelExposure.sensitivity).",
+      "properties": {
+        "channel": {
+          "description": "id фактора из config/taxonomy.yaml",
+          "title": "Channel",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "flat"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "strength": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Strength",
+          "type": "number"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "enum": [
+                "days",
+                "weeks",
+                "months",
+                "quarters",
+                "years"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "channel",
+        "direction",
+        "strength"
+      ],
+      "title": "ChannelImpact",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "description": "10. Утверждение с меткой (kind в контракте) и обоснованием (refs).",
+      "properties": {
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "fact",
+            "bank_view",
+            "market_view",
+            "model_inference",
+            "bank_offer"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "based_on": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "facts / bank_views / client_features, на которые опирается вывод",
+          "title": "Based On",
+          "type": "object"
+        },
+        "polarity": {
+          "anyOf": [
+            {
+              "enum": [
+                "risk",
+                "opportunity",
+                "neutral",
+                "mixed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polarity"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "verified": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "title": "Verified",
+          "type": "object"
+        },
+        "is_advertising": {
+          "default": false,
+          "title": "Is Advertising",
+          "type": "boolean"
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "продуктовый триггер предложения: 'loa+rate_up'",
+          "title": "Trigger"
+        }
+      },
+      "required": [
+        "claim_id",
+        "type",
+        "text"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Ссылка на фрагмент первоисточника. quote — дословная цитата, span — позиции в тексте.",
+      "properties": {
+        "source_id": {
+          "description": "raw_item id, bank chunk id 'doc#p3#c2' или 'csv:FIELD'",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Date"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Глубокий разбор на пару «сюжет × отрасль × версия». drivers — направление факторов (У17),\nзнак для клиента появляется только в карточке. Кешируется и переиспользуется для всех клиентов отрасли.",
+  "properties": {
+    "story_id": {
+      "title": "Story Id",
+      "type": "string"
+    },
+    "sector": {
+      "title": "Sector",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "drivers": {
+      "items": {
+        "$ref": "#/$defs/ChannelImpact"
+      },
+      "title": "Drivers",
+      "type": "array"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "reports": {
+      "items": {
+        "$ref": "#/$defs/AnalystReport"
+      },
+      "title": "Reports",
+      "type": "array"
+    },
+    "agreement": {
+      "additionalProperties": {
+        "enum": [
+          "agree",
+          "disagree",
+          "single"
+        ],
+        "type": "string"
+      },
+      "description": "по каждому фактору: аналитики согласны по направлению?",
+      "title": "Agreement",
+      "type": "object"
+    },
+    "status": {
+      "default": "published",
+      "enum": [
+        "published",
+        "on_review"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "trace_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Id"
+    }
+  },
+  "required": [
+    "story_id",
+    "sector",
+    "drivers"
+  ],
+  "title": "Analysis",
+  "type": "object",
+  "$comment": "newsai schema 0.2.0"
+}

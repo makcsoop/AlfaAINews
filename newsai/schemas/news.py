@@ -38,12 +38,22 @@ class Source(Schema):
     audience: str | None = None
 
 
+class ItemEdit(Schema):
+    """Правка материала после публикации (Telegram edit_date, РБК newsModifDate)."""
+
+    at: datetime
+    title: str | None = None
+    content_hash: str
+    deleted: bool = Field(default=False, description="пост удалён — слабый сигнал опровержения")
+
+
 class RawItem(Schema):
     """2. Нормализованный материал из любой ленты. id = sha1(source_id:native_id)."""
 
     id: str
     source_id: str
     native_id: str
+    tier: SourceTier | None = Field(default=None, description="уровень источника на момент сбора")
     url: str | None = None
     title: str
     lead: str | None = None
@@ -63,6 +73,7 @@ class RawItem(Schema):
     dropped_reason: str | None = Field(
         default=None, description="почему отсеяно: реклама, дайджест, служебное"
     )
+    edits: list[ItemEdit] = Field(default_factory=list)
 
 
 class Story(Schema):
@@ -73,7 +84,7 @@ class Story(Schema):
     event_type: str | None = None
     status: StoryStatus = "single"
     item_ids: list[str]
-    independent_sources: int = Field(ge=0, description="без перепечаток (SimHash) и пересылок")
+    corroboration: int = Field(ge=0, description="число независимых источников, без перепечаток и пересылок")
     source_ids: list[str] = Field(default_factory=list)
     first_seen: datetime
     last_seen: datetime
@@ -97,11 +108,15 @@ class EventFacts(Schema):
     """4. Структурированное событие сюжета. Каждое поле подкреплено цитатой."""
 
     story_id: str
+    version: int = Field(default=1, description="версия сюжета, по которой извлечены факты")
     event_type: str = Field(description="тип из config/taxonomy.yaml")
     status: EventStatus
     summary: str
     summary_evidence: list[Evidence] = Field(default_factory=list)
     participants: list[Participant] = Field(default_factory=list)
+    entities: list[str] = Field(
+        default_factory=list, description="нормализованные сущности (Natasha + словари)"
+    )
     numbers: list[NumberFact] = Field(default_factory=list)
     event_date: datetime | None = None
     effective_date: datetime | None = None

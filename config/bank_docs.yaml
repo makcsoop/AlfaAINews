@@ -11,7 +11,7 @@ docs:
     date: 2026-09-11
     pages: 4
     kind: macro
-    channels: [rate_cost, deposit_yield, inflation]
+    channels: [key_rate, inflation]
 
   - id: cmi_inflation_2026_08w5
     file: Inflation_tracker_02.pdf
@@ -29,7 +29,7 @@ docs:
     date: 2026-09-14
     pages: 5
     kind: fixed_income
-    channels: [rate_cost, deposit_yield]
+    channels: [key_rate]
 
   - id: cmi_gold_2026_08
     file: Gold_digest_August26.pdf
@@ -48,7 +48,7 @@ docs:
     date: 2026-07-22
     pages: 27
     kind: fixed_income
-    channels: [rate_cost, deposit_yield, fx_rub]
+    channels: [key_rate, fx_rub]
 
   - id: cmi_macro_7m26
     file: ALFA-7M26.pdf
@@ -57,7 +57,7 @@ docs:
     date: 2026-09-07
     pages: 4
     kind: macro
-    channels: [labor_market, consumer_demand, rate_cost]
+    channels: [labor_costs, consumer_demand, key_rate]
 
   - id: cmi_consumption_2026_08
     file: ALFA-consumption.pdf
@@ -66,7 +66,7 @@ docs:
     date: 2026-08-05
     pages: 4
     kind: macro
-    channels: [consumer_demand, labor_market]
+    channels: [consumer_demand, labor_costs]
 
   - id: cmi_macro_1h26
     file: ALFA-macro_stat1H26.pdf
@@ -75,7 +75,7 @@ docs:
     date: 2026-07-31
     pages: 5
     kind: macro
-    channels: [consumer_demand, labor_market, inflation, rate_cost, fx_rub]
+    channels: [consumer_demand, labor_costs, inflation, key_rate, fx_rub]
 
   # В брифе указан «Commodities performance», а в архиве лежит отчёт 2021 года по сталелитейщикам.
   # Не используем как позицию банка, пока организаторы не пришлют нужный файл.

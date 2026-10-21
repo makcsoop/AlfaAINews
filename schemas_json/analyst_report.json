@@ -2,18 +2,26 @@
   "$defs": {
     "ChannelImpact": {
       "additionalProperties": false,
-      "description": "Воздействие на канал влияния (ставка, курс, нефть…). Знак — для отрасли, не для клиента.",
+      "description": "Как событие двигает фактор: «ставка выше», «рубль крепче». Это направление фактора,\nа не «хорошо / плохо» (У17): знак для клиента получается только умножением на его\nчувствительность к фактору (ChannelExposure.sensitivity).",
       "properties": {
         "channel": {
-          "description": "id канала из config/taxonomy.yaml",
+          "description": "id фактора из config/taxonomy.yaml",
           "title": "Channel",
           "type": "string"
         },
-        "impact": {
-          "description": "−1…1: направление и сила воздействия",
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "flat"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "strength": {
           "maximum": 1.0,
-          "minimum": -1.0,
-          "title": "Impact",
+          "minimum": 0.0,
+          "title": "Strength",
           "type": "number"
         },
         "horizon": {
@@ -57,7 +65,8 @@
       },
       "required": [
         "channel",
-        "impact"
+        "direction",
+        "strength"
       ],
       "title": "ChannelImpact",
       "type": "object"
@@ -203,5 +212,5 @@
   ],
   "title": "AnalystReport",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

@@ -127,5 +127,5 @@
   ],
   "title": "Source",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

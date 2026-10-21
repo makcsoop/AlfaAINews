@@ -8,10 +8,11 @@
           "title": "Channel",
           "type": "string"
         },
-        "exposure": {
+        "sensitivity": {
+          "description": "что получает клиент, когда фактор растёт: + выигрывает, − проигрывает; модуль — сила",
           "maximum": 1.0,
           "minimum": -1.0,
-          "title": "Exposure",
+          "title": "Sensitivity",
           "type": "number"
         },
         "drivers": {
@@ -31,7 +32,7 @@
       },
       "required": [
         "channel",
-        "exposure",
+        "sensitivity",
         "drivers"
       ],
       "title": "ChannelExposure",
@@ -312,5 +313,5 @@
   ],
   "title": "CompanyProfile",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

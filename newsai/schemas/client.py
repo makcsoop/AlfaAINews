@@ -11,7 +11,9 @@ class ChannelExposure(Schema):
     """Чувствительность компании к каналу со знаком и причиной (поле CSV или контрагенты)."""
 
     channel: str
-    exposure: Signed
+    sensitivity: Signed = Field(
+        description="что получает клиент, когда фактор растёт: + выигрывает, − проигрывает; модуль — сила"
+    )
     drivers: list[str] = Field(description="'CL_PRODUCT_LOA_MARK=1', 'payments: 35% исходящих → ОКВЭД 24'")
     is_assumption: bool = Field(
         default=False, description="предположение AI (например, импорт/экспорт по ОКВЭД)"

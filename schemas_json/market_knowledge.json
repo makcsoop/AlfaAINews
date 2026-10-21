@@ -90,7 +90,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "Знание аналитиков рынка: механизм, ожидание (консенсус) или разбор после события.",
+  "description": "Знание аналитиков рынка: механизм «событие → фактор → отрасль», ожидание перед плановым\nсобытием, прогноз с горизонтом или разбор случая после события.",
   "properties": {
     "id": {
       "title": "Id",
@@ -100,12 +100,14 @@
       "enum": [
         "mechanism",
         "expectation",
-        "post_event_review"
+        "forecast",
+        "case"
       ],
       "title": "Kind",
       "type": "string"
     },
     "source_id": {
+      "description": "канал или сайт аналитика (channel_id в контракте)",
       "title": "Source Id",
       "type": "string"
     },
@@ -166,7 +168,27 @@
         }
       ],
       "default": null,
+      "description": "направление фактора: + вверх, − вниз",
       "title": "Direction"
+    },
+    "horizon": {
+      "anyOf": [
+        {
+          "enum": [
+            "days",
+            "weeks",
+            "months",
+            "quarters",
+            "years"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Horizon"
     },
     "expected_value": {
       "anyOf": [
@@ -278,5 +300,5 @@
   ],
   "title": "MarketKnowledge",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

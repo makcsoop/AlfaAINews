@@ -52,7 +52,7 @@ class AnalystReport(Schema):
 
 
 class Claim(Schema):
-    """10. Утверждение карточки с меткой и обоснованием."""
+    """10. Утверждение с меткой (kind в контракте) и обоснованием (refs)."""
 
     claim_id: str
     type: ClaimType
@@ -65,6 +65,7 @@ class Claim(Schema):
     horizon: str | None = None
     verified: dict[str, bool | str] = Field(default_factory=dict)
     is_advertising: bool = False
+    trigger: str | None = Field(default=None, description="продуктовый триггер предложения: 'loa+rate_up'")
 
     @model_validator(mode="after")
     def _label_rules(self) -> Self:
@@ -73,13 +74,34 @@ class Claim(Schema):
             raise ValueError(f"{self.claim_id}: факт без источника")
         if self.type == "bank_view" and not (bank_refs and all(bank_refs)):
             raise ValueError(f"{self.claim_id}: позиция банка должна ссылаться только на материалы ЦМИ")
+        if self.type == "market_view" and not self.evidence:
+            raise ValueError(f"{self.claim_id}: мнение рынка без ссылки на пост или консенсус")
         if self.type == "market_view" and any(bank_refs):
             raise ValueError(f"{self.claim_id}: мнение рынка ссылается на ЦМИ — это позиция банка")
         if self.type == "model_inference" and not any(self.based_on.values()):
             raise ValueError(f"{self.claim_id}: вывод AI без based_on")
         if self.type == "bank_offer" and not self.is_advertising:
             raise ValueError(f"{self.claim_id}: предложение банка должно быть помечено как реклама")
+        if self.type == "bank_offer" and not self.trigger:
+            raise ValueError(f"{self.claim_id}: предложение банка только по продуктовому триггеру")
         return self
+
+
+class Analysis(Schema):
+    """Глубокий разбор на пару «сюжет × отрасль × версия». drivers — направление факторов (У17),
+    знак для клиента появляется только в карточке. Кешируется и переиспользуется для всех клиентов отрасли."""
+
+    story_id: str
+    sector: str
+    version: int = 1
+    drivers: list[ChannelImpact]
+    claims: list[Claim] = Field(default_factory=list)
+    reports: list[AnalystReport] = Field(default_factory=list)
+    agreement: dict[str, Literal["agree", "disagree", "single"]] = Field(
+        default_factory=dict, description="по каждому фактору: аналитики согласны по направлению?"
+    )
+    status: Literal["published", "on_review"] = "published"
+    trace_id: str | None = None
 
 
 class Action(Schema):
@@ -108,7 +130,7 @@ class CardEvent(Schema):
     title: str
     first_seen: datetime
     sources: list[StorySource]
-    independent_sources: int
+    corroboration: int
 
 
 class Surprise(Schema):
@@ -130,6 +152,12 @@ class InsightCard(Schema):
     card_id: str
     company_id: str
     user_role: UserRole
+    version: int = Field(default=1, description="растёт при существенном обновлении сюжета (У8)")
+    updated_at: datetime | None = None
+    stage: Literal["fast", "deep"] = Field(
+        default="fast", description="быстрая карточка без LLM или с догруженным глубоким разбором"
+    )
+    analysis_ref: str | None = Field(default=None, description="'story_id:sector:version' разбора")
     event: CardEvent
     relevance: RelevanceScore
     what_happened: list[str] = Field(description="claim_id типа fact")

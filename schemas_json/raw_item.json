@@ -1,4 +1,45 @@
 {
+  "$defs": {
+    "ItemEdit": {
+      "additionalProperties": false,
+      "description": "Правка материала после публикации (Telegram edit_date, РБК newsModifDate).",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "deleted": {
+          "default": false,
+          "description": "пост удалён — слабый сигнал опровержения",
+          "title": "Deleted",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "at",
+        "content_hash"
+      ],
+      "title": "ItemEdit",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "description": "2. Нормализованный материал из любой ленты. id = sha1(source_id:native_id).",
   "properties": {
@@ -13,6 +54,25 @@
     "native_id": {
       "title": "Native Id",
       "type": "string"
+    },
+    "tier": {
+      "anyOf": [
+        {
+          "enum": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "уровень источника на момент сбора",
+      "title": "Tier"
     },
     "url": {
       "anyOf": [
@@ -165,6 +225,13 @@
       "default": null,
       "description": "почему отсеяно: реклама, дайджест, служебное",
       "title": "Dropped Reason"
+    },
+    "edits": {
+      "items": {
+        "$ref": "#/$defs/ItemEdit"
+      },
+      "title": "Edits",
+      "type": "array"
     }
   },
   "required": [
@@ -178,5 +245,5 @@
   ],
   "title": "RawItem",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

@@ -5,7 +5,14 @@ from typing import Literal
 
 from pydantic import Field
 
-from newsai.schemas.common import Evidence, Schema, Score01, Signed
+from newsai.schemas.common import Evidence, Horizon, Schema, Score01, Signed
+
+
+class Forecast(Schema):
+    metric: str = Field(description="'key_rate_eoy_2026', 'cpi_yoy_2026', 'usdrub_eoy_2026'")
+    value: float
+    unit: str | None = None
+    horizon: str | None = Field(default=None, description="'конец 2026', 'заседание 23.10.2026'")
 
 
 class BankPosition(Schema):
@@ -18,10 +25,10 @@ class BankPosition(Schema):
     page: int
     thesis: str
     channel: str | None = None
-    stance: Signed | None = Field(default=None, description="знак ожидания по каналу")
-    forecast_value: float | None = None
-    forecast_unit: str | None = None
-    forecast_horizon: str | None = None
+    direction: Signed | None = Field(
+        default=None, description="куда банк ждёт движения фактора: + вверх, − вниз (не «хорошо/плохо»)"
+    )
+    forecast: Forecast | None = None
     quote: str
     quote_verified: bool | None = None
     valid_until: date | None = Field(default=None, description="срок актуальности позиции")
@@ -31,18 +38,20 @@ class BankPosition(Schema):
 
 
 class MarketKnowledge(Schema):
-    """Знание аналитиков рынка: механизм, ожидание (консенсус) или разбор после события."""
+    """Знание аналитиков рынка: механизм «событие → фактор → отрасль», ожидание перед плановым
+    событием, прогноз с горизонтом или разбор случая после события."""
 
     id: str
-    kind: Literal["mechanism", "expectation", "post_event_review"]
-    source_id: str
+    kind: Literal["mechanism", "expectation", "forecast", "case"]
+    source_id: str = Field(description="канал или сайт аналитика (channel_id в контракте)")
     item_id: str = Field(description="raw_item, из которого извлечено")
     published_at: datetime
     event_type: str | None = None
     channel: str | None = None
     sectors_okved: list[str] = Field(default_factory=list)
     statement: str
-    direction: Signed | None = None
+    direction: Signed | None = Field(default=None, description="направление фактора: + вверх, − вниз")
+    horizon: Horizon | None = None
     expected_value: float | None = None
     expected_unit: str | None = None
     target_event_date: date | None = Field(default=None, description="для ожиданий: дата планового события")

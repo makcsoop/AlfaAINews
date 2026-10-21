@@ -41,10 +41,10 @@
       "title": "Item Ids",
       "type": "array"
     },
-    "independent_sources": {
-      "description": "без перепечаток (SimHash) и пересылок",
+    "corroboration": {
+      "description": "число независимых источников, без перепечаток и пересылок",
       "minimum": 0,
-      "title": "Independent Sources",
+      "title": "Corroboration",
       "type": "integer"
     },
     "source_ids": {
@@ -108,11 +108,11 @@
     "id",
     "title",
     "item_ids",
-    "independent_sources",
+    "corroboration",
     "first_seen",
     "last_seen"
   ],
   "title": "Story",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

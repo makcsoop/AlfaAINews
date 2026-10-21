@@ -1,46 +1,51 @@
-# Стартовая таксономия: каналы влияния и типы событий.
+# Стартовая таксономия: факторы (каналы влияния) и типы событий.
 # Полная версия (30 каналов, 40 типов) лежит в рабочей папке — заменить этим файлом без правки кода.
+#
+# Канал = фактор, у которого есть направление (У17 финальной архитектуры). Событие двигает фактор
+# вверх или вниз; «хорошо / плохо» для клиента получается только умножением на его чувствительность
+# к фактору: ставка ↑ × кредит (−) = риск, ставка ↑ × депозиты (+) = возможность.
+# up — что означает рост фактора.
 
 channels:
-  rate_cost:        {name: "Стоимость заёмных средств (ключевая ставка, RUONIA)"}
-  deposit_yield:    {name: "Доходность размещения ликвидности"}
-  fx_rub:           {name: "Курс рубля (USD, EUR, CNY)"}
-  oil_gas:          {name: "Нефть и газ"}
-  metals:           {name: "Металлы"}
-  agro:             {name: "Агросырьё"}
-  gold:             {name: "Золото"}
-  consumer_demand:  {name: "Потребительский спрос"}
-  labor_market:     {name: "Рынок труда и зарплаты"}
-  construction:     {name: "Стройка и ипотека"}
-  tariffs_sanctions: {name: "Пошлины и санкции"}
-  logistics:        {name: "Логистика и платежи ВЭД"}
-  taxes_regulation: {name: "Налоги и регулирование"}
-  public_procurement: {name: "Госзаказ и господдержка"}
-  inflation:        {name: "Инфляция и издержки"}
+  key_rate:           {name: "Ключевая ставка и стоимость денег", up: "кредиты дороже, депозиты доходнее"}
+  fx_rub:             {name: "Курс рубля", up: "рубль крепче: импорт дешевле, валютная выручка в рублях меньше"}
+  oil_gas:            {name: "Цены на нефть и газ", up: "нефть и газ дороже"}
+  metals:             {name: "Цены на металлы", up: "металлы дороже"}
+  agro:               {name: "Цены на агросырьё", up: "зерно и агросырьё дороже"}
+  gold:               {name: "Цена золота", up: "золото дороже"}
+  inflation:          {name: "Инфляция", up: "цены и издержки растут быстрее"}
+  consumer_demand:    {name: "Потребительский спрос", up: "спрос растёт"}
+  labor_costs:        {name: "Рынок труда и зарплаты", up: "зарплаты и дефицит кадров растут"}
+  construction:       {name: "Стройка и ипотека", up: "строительная активность растёт"}
+  trade_restrictions: {name: "Пошлины, санкции, ограничения ВЭД", up: "ограничений больше"}
+  logistics_costs:    {name: "Логистика и платежи ВЭД", up: "логистика и платежи дороже и дольше"}
+  tax_burden:         {name: "Налоговая нагрузка", up: "налоги выше"}
+  regulation:         {name: "Отраслевое регулирование", up: "регулирование жёстче"}
+  public_spending:    {name: "Госзаказ, бюджет и господдержка", up: "госрасходы и поддержка растут"}
 
 event_types:
-  rate_decision:        {channels: [rate_cost, deposit_yield, fx_rub]}
-  monetary_signal:      {channels: [rate_cost, deposit_yield]}
+  rate_decision:        {channels: [key_rate, fx_rub, inflation]}
+  monetary_signal:      {channels: [key_rate]}
   fx_move:              {channels: [fx_rub]}
-  fx_control:           {channels: [fx_rub, logistics]}
-  inflation_data:       {channels: [inflation, rate_cost, consumer_demand]}
-  macro_data:           {channels: [consumer_demand, labor_market]}
-  tax_change_adopted:   {channels: [taxes_regulation]}
-  tax_change_proposed:  {channels: [taxes_regulation]}
-  regulation_adopted:   {channels: [taxes_regulation]}
-  regulation_proposed:  {channels: [taxes_regulation]}
-  tariff_duty:          {channels: [tariffs_sanctions]}
-  sanctions:            {channels: [tariffs_sanctions, logistics, fx_rub]}
+  fx_control:           {channels: [fx_rub, logistics_costs]}
+  inflation_data:       {channels: [inflation, key_rate, consumer_demand]}
+  macro_data:           {channels: [consumer_demand, labor_costs]}
+  tax_change_adopted:   {channels: [tax_burden]}
+  tax_change_proposed:  {channels: [tax_burden]}
+  regulation_adopted:   {channels: [regulation]}
+  regulation_proposed:  {channels: [regulation]}
+  tariff_duty:          {channels: [trade_restrictions]}
+  sanctions:            {channels: [trade_restrictions, logistics_costs, fx_rub]}
   commodity_price:      {channels: [oil_gas, metals, agro, gold]}
-  supply_disruption:    {channels: [logistics]}
+  supply_disruption:    {channels: [logistics_costs]}
   corporate_results:    {channels: []}
   m_and_a:              {channels: []}
   default_bankruptcy:   {channels: []}
   rating_action:        {channels: []}
-  state_support:        {channels: [public_procurement]}
-  public_procurement:   {channels: [public_procurement]}
-  labor_policy:         {channels: [labor_market]}
-  budget_policy:        {channels: [taxes_regulation, public_procurement]}
-  ofz_auction:          {channels: [rate_cost, deposit_yield]}
+  state_support:        {channels: [public_spending]}
+  public_procurement:   {channels: [public_spending]}
+  labor_policy:         {channels: [labor_costs]}
+  budget_policy:        {channels: [tax_burden, public_spending]}
+  ofz_auction:          {channels: [key_rate]}
   energy_policy:        {channels: [oil_gas]}
   other:                {channels: []}

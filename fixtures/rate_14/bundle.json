@@ -45,7 +45,8 @@
       "fetched_at": "2026-09-11T10:31:12Z",
       "source_tags": [],
       "metrics": {},
-      "content_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+      "content_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+      "tier": 0
     },
     {
       "id": "0f9e8d7c6b5a49382716a5b4c3d2e1f0a9b8c7d6",
@@ -65,7 +66,8 @@
       "priority": 1,
       "attributed_to": "cbr_press",
       "metrics": {},
-      "content_hash": "b2c3d4e5f60718293a4b5c6d7e8f901234567890"
+      "content_hash": "b2c3d4e5f60718293a4b5c6d7e8f901234567890",
+      "tier": 1
     }
   ],
   "story": [
@@ -78,7 +80,6 @@
         "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
         "0f9e8d7c6b5a49382716a5b4c3d2e1f0a9b8c7d6"
       ],
-      "independent_sources": 1,
       "source_ids": [
         "cbr_press",
         "prime"
@@ -90,7 +91,8 @@
         "Банк России"
       ],
       "quality": 0.93,
-      "version": 1
+      "version": 1,
+      "corroboration": 1
     }
   ],
   "event_facts": [
@@ -146,22 +148,28 @@
       ],
       "channels": [
         {
-          "channel": "rate_cost",
-          "impact": -0.6,
+          "channel": "key_rate",
+          "direction": "up",
+          "strength": 0.6,
           "horizon": "quarters",
-          "rationale": "Цикл удешевления кредитов приостановлен: стоимость заёмных средств не снизится в ближайшие кварталы."
+          "rationale": "Цикл снижения ставки приостановлен: стоимость денег останется высокой дольше, чем шло по тренду."
         },
         {
-          "channel": "deposit_yield",
-          "impact": 0.4,
-          "horizon": "quarters",
-          "rationale": "Доходность размещения ликвидности остаётся высокой дольше ожиданий."
+          "channel": "fx_rub",
+          "direction": "up",
+          "strength": 0.3,
+          "horizon": "months",
+          "rationale": "Высокая ставка обычно поддерживает рубль."
         }
       ],
       "is_rumor": false,
       "is_intent": false,
       "extractor_model": "fixture",
-      "unverified_fields": []
+      "unverified_fields": [],
+      "version": 1,
+      "entities": [
+        "Банк России"
+      ]
     }
   ],
   "company_profile": [
@@ -190,8 +198,8 @@
       },
       "exposures": [
         {
-          "channel": "rate_cost",
-          "exposure": 0.9,
+          "channel": "key_rate",
+          "sensitivity": -0.9,
           "drivers": [
             "CL_PRODUCT_LOA_MARK=1",
             "CL_PRODUCT_LEA_MARK=1"
@@ -199,7 +207,7 @@
         },
         {
           "channel": "fx_rub",
-          "exposure": -0.7,
+          "sensitivity": 0.7,
           "drivers": [
             "FTS_FLAG=1",
             "FTS_COUNTRY_NAME=Китай",
@@ -235,8 +243,8 @@
       },
       "exposures": [
         {
-          "channel": "deposit_yield",
-          "exposure": 0.8,
+          "channel": "key_rate",
+          "sensitivity": 0.8,
           "drivers": [
             "CL_PRODUCT_DEP_MARK=1",
             "CL_PRODUCT_LOA_MARK=0"
@@ -244,7 +252,7 @@
         },
         {
           "channel": "fx_rub",
-          "exposure": 0.6,
+          "sensitivity": -0.6,
           "drivers": [
             "FTS_FLAG=1",
             "ОКВЭД 24: скорее экспортёр"
@@ -253,7 +261,7 @@
         },
         {
           "channel": "metals",
-          "exposure": 0.9,
+          "sensitivity": 0.9,
           "drivers": [
             "MAINOKVED_CODE=24.10"
           ]
@@ -322,14 +330,17 @@
       "doc_date": "2026-07-31",
       "page": 1,
       "thesis": "ЦМИ ждёт ключевую ставку 13,5% на конец 2026 г.",
-      "channel": "rate_cost",
-      "stance": -0.3,
-      "forecast_value": 13.5,
-      "forecast_unit": "%",
-      "forecast_horizon": "конец 2026",
+      "channel": "key_rate",
       "quote": "Мы смещаем наши ожидания по ставке на конец 2026 г. на уровень 13,5%.",
       "quote_verified": false,
-      "superseded_by": "st_2026-09-11_keyrate"
+      "superseded_by": "st_2026-09-11_keyrate",
+      "forecast": {
+        "metric": "key_rate_eoy_2026",
+        "value": 13.5,
+        "unit": "%",
+        "horizon": "конец 2026"
+      },
+      "direction": -0.3
     },
     {
       "id": "cmi_keyrate_2026_09#p1#c1",
@@ -338,14 +349,17 @@
       "doc_date": "2026-09-11",
       "page": 1,
       "thesis": "ЦМИ ждёт сохранения ставки 14,0% до конца 2026 г. (раньше ждал 13,5%).",
-      "channel": "rate_cost",
-      "stance": -0.5,
-      "forecast_value": 14.0,
-      "forecast_unit": "%",
-      "forecast_horizon": "конец 2026",
+      "channel": "key_rate",
       "quote": "теперь мы ожидаем ее сохранения на текущем значении 14,0% до конца года",
       "quote_verified": false,
-      "valid_until": "2026-10-23"
+      "valid_until": "2026-10-23",
+      "forecast": {
+        "metric": "key_rate_eoy_2026",
+        "value": 14.0,
+        "unit": "%",
+        "horizon": "конец 2026"
+      },
+      "direction": 0.5
     },
     {
       "id": "cmi_keyrate_2026_09#p1#c2",
@@ -354,13 +368,16 @@
       "doc_date": "2026-09-11",
       "page": 1,
       "thesis": "Прогноз ЦМИ по ставке на конец 2027 г. — 12,0%.",
-      "channel": "rate_cost",
-      "stance": 0.3,
-      "forecast_value": 12.0,
-      "forecast_unit": "%",
-      "forecast_horizon": "конец 2027",
+      "channel": "key_rate",
       "quote": "При этом наш прогноз по ставке на конец 2027 г. остается на уровне 12,0%.",
-      "quote_verified": false
+      "quote_verified": false,
+      "forecast": {
+        "metric": "key_rate_eoy_2027",
+        "value": 12.0,
+        "unit": "%",
+        "horizon": "конец 2027"
+      },
+      "direction": -0.3
     },
     {
       "id": "cmi_keyrate_2026_09#p1#c3",
@@ -369,11 +386,11 @@
       "doc_date": "2026-09-11",
       "page": 1,
       "thesis": "ЦМИ оценивает коммуникацию ЦБ после решения 11.09 как более жёсткую.",
-      "channel": "rate_cost",
-      "stance": -0.5,
+      "channel": "key_rate",
       "quote": "пресс-релиз содержит несколько важных корректировок в коммуникации, также свидетельствующих об ужесточении позиции",
       "quote_verified": false,
-      "valid_until": "2026-10-23"
+      "valid_until": "2026-10-23",
+      "direction": 0.5
     },
     {
       "id": "cmi_keyrate_2026_09#p1#c4",
@@ -382,12 +399,15 @@
       "doc_date": "2026-09-11",
       "page": 1,
       "thesis": "Перед заседанием ЦМИ ждал паузы на 14,0% (публикация от 4 сентября 2026 г.).",
-      "channel": "rate_cost",
-      "forecast_value": 14.0,
-      "forecast_unit": "%",
-      "forecast_horizon": "заседание 11.09.2026",
+      "channel": "key_rate",
       "quote": "Ждем паузу на 14,0% в сентябре",
-      "quote_verified": false
+      "quote_verified": false,
+      "forecast": {
+        "metric": "key_rate_decision_2026_09_11",
+        "value": 14.0,
+        "unit": "%",
+        "horizon": "заседание 11.09.2026"
+      }
     }
   ],
   "market_knowledge": [
@@ -398,7 +418,7 @@
       "item_id": "aggregate",
       "published_at": "2026-09-10T18:00:00Z",
       "event_type": "rate_decision",
-      "channel": "rate_cost",
+      "channel": "key_rate",
       "statement": "ЗАГЛУШКА: консенсус каналов перед заседанием 11.09 — посчитать по архиву Telegram.",
       "expected_value": null,
       "expected_unit": "%",
@@ -418,7 +438,7 @@
       "freshness": 1.0,
       "contributions": [
         {
-          "factor": "rate_cost",
+          "factor": "key_rate",
           "value": 0.54,
           "client_features": [
             "CL_PRODUCT_LOA_MARK=1",
@@ -447,7 +467,7 @@
       "freshness": 1.0,
       "contributions": [
         {
-          "factor": "deposit_yield",
+          "factor": "key_rate",
           "value": 0.32,
           "client_features": [
             "CL_PRODUCT_DEP_MARK=1"
@@ -473,15 +493,22 @@
       "story_id": "st_2026-09-11_keyrate",
       "sector": "46",
       "analyst": "finance",
-      "model": "glm-5.3-flash",
+      "model": "z-ai/glm-5.3-flash",
       "channels": [
         {
-          "channel": "rate_cost",
-          "impact": -0.6,
+          "channel": "key_rate",
+          "direction": "up",
+          "strength": 0.6,
           "horizon": "quarters"
+        },
+        {
+          "channel": "fx_rub",
+          "direction": "up",
+          "strength": 0.3,
+          "horizon": "months"
         }
       ],
-      "summary": "Для оптовиков с заёмным финансированием стоимость обслуживания долга не снизится в ближайшие кварталы.",
+      "summary": "Стоимость денег останется высокой дольше: обслуживание долга оптовиков не подешевеет в ближайшие кварталы.",
       "open_questions": [
         "Доля долга с плавающей ставкой?"
       ]
@@ -490,16 +517,18 @@
       "story_id": "st_2026-09-11_keyrate",
       "sector": "46",
       "analyst": "business",
-      "model": "qwen3.6-35b-a3b",
+      "model": "qwen/qwen3.6-35b-a3b",
       "channels": [
         {
-          "channel": "rate_cost",
-          "impact": -0.5,
+          "channel": "key_rate",
+          "direction": "up",
+          "strength": 0.5,
           "horizon": "quarters"
         },
         {
           "channel": "consumer_demand",
-          "impact": -0.2,
+          "direction": "down",
+          "strength": 0.2,
           "horizon": "quarters"
         }
       ],
@@ -548,7 +577,7 @@
             "url": "https://1prime.ru/20260911/stavka-873900001.html"
           }
         ],
-        "independent_sources": 1
+        "corroboration": 1
       },
       "relevance": {
         "story_id": "st_2026-09-11_keyrate",
@@ -559,7 +588,7 @@
         "freshness": 1.0,
         "contributions": [
           {
-            "factor": "rate_cost",
+            "factor": "key_rate",
             "value": 0.54,
             "client_features": [
               "CL_PRODUCT_LOA_MARK=1",
@@ -666,7 +695,10 @@
         "прямой канал через кредиты и лизинг"
       ],
       "review_status": "published",
-      "trace_id": "run_fixture_rate14"
+      "trace_id": "run_fixture_rate14",
+      "version": 1,
+      "stage": "deep",
+      "analysis_ref": "st_2026-09-11_keyrate:46:1"
     },
     {
       "card_id": "card_st_2026-09-11_keyrate_U_DEMO_DEPOSITOR_treasurer",
@@ -685,7 +717,7 @@
             "url": "https://www.cbr.ru/press/pr/?file=11092026_133000key.htm"
           }
         ],
-        "independent_sources": 1
+        "corroboration": 1
       },
       "relevance": {
         "story_id": "st_2026-09-11_keyrate",
@@ -696,7 +728,7 @@
         "freshness": 1.0,
         "contributions": [
           {
-            "factor": "deposit_yield",
+            "factor": "key_rate",
             "value": 0.32,
             "client_features": [
               "CL_PRODUCT_DEP_MARK=1"
@@ -822,7 +854,9 @@
         "первоисточник — ЦБ",
         "эффект на курс — общий механизм, без данных о валюте выручки клиента"
       ],
-      "review_status": "published"
+      "review_status": "published",
+      "version": 1,
+      "stage": "fast"
     }
   ],
   "run_trace": [
@@ -881,6 +915,104 @@
       "user_role": "cfo",
       "kind": "useful",
       "at": "2026-09-11T12:00:00Z"
+    }
+  ],
+  "analysis": [
+    {
+      "story_id": "st_2026-09-11_keyrate",
+      "sector": "46",
+      "version": 1,
+      "drivers": [
+        {
+          "channel": "key_rate",
+          "direction": "up",
+          "strength": 0.55,
+          "horizon": "quarters"
+        },
+        {
+          "channel": "fx_rub",
+          "direction": "up",
+          "strength": 0.3,
+          "horizon": "months"
+        },
+        {
+          "channel": "consumer_demand",
+          "direction": "down",
+          "strength": 0.2,
+          "horizon": "quarters"
+        }
+      ],
+      "claims": [
+        {
+          "claim_id": "A1",
+          "type": "model_inference",
+          "text": "Для оптовиков с заёмным финансированием стоимость обслуживания долга не снизится в ближайшие кварталы.",
+          "based_on": {
+            "facts": [
+              "F1"
+            ],
+            "bank_views": [
+              "B1"
+            ]
+          },
+          "horizon": "3–6 мес."
+        }
+      ],
+      "reports": [
+        {
+          "story_id": "st_2026-09-11_keyrate",
+          "sector": "46",
+          "analyst": "finance",
+          "model": "z-ai/glm-5.3-flash",
+          "channels": [
+            {
+              "channel": "key_rate",
+              "direction": "up",
+              "strength": 0.6,
+              "horizon": "quarters"
+            },
+            {
+              "channel": "fx_rub",
+              "direction": "up",
+              "strength": 0.3,
+              "horizon": "months"
+            }
+          ],
+          "summary": "Стоимость денег останется высокой дольше: обслуживание долга оптовиков не подешевеет в ближайшие кварталы.",
+          "open_questions": [
+            "Доля долга с плавающей ставкой?"
+          ]
+        },
+        {
+          "story_id": "st_2026-09-11_keyrate",
+          "sector": "46",
+          "analyst": "business",
+          "model": "qwen/qwen3.6-35b-a3b",
+          "channels": [
+            {
+              "channel": "key_rate",
+              "direction": "up",
+              "strength": 0.5,
+              "horizon": "quarters"
+            },
+            {
+              "channel": "consumer_demand",
+              "direction": "down",
+              "strength": 0.2,
+              "horizon": "quarters"
+            }
+          ],
+          "summary": "Дорогие деньги сдерживают инвестиционный спрос покупателей оборудования.",
+          "open_questions": []
+        }
+      ],
+      "agreement": {
+        "key_rate": "agree",
+        "fx_rub": "single",
+        "consumer_demand": "single"
+      },
+      "status": "published",
+      "trace_id": "run_fixture_rate14"
     }
   ]
 }

@@ -1,4 +1,51 @@
 {
+  "$defs": {
+    "Forecast": {
+      "additionalProperties": false,
+      "properties": {
+        "metric": {
+          "description": "'key_rate_eoy_2026', 'cpi_yoy_2026', 'usdrub_eoy_2026'",
+          "title": "Metric",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "'конец 2026', 'заседание 23.10.2026'",
+          "title": "Horizon"
+        }
+      },
+      "required": [
+        "metric",
+        "value"
+      ],
+      "title": "Forecast",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "description": "7. Атомарная позиция ЦМИ Альфа-Банка. Цитата сверяется с PDF кодом.",
   "properties": {
@@ -40,7 +87,7 @@
       "default": null,
       "title": "Channel"
     },
-    "stance": {
+    "direction": {
       "anyOf": [
         {
           "maximum": 1.0,
@@ -52,44 +99,19 @@
         }
       ],
       "default": null,
-      "description": "знак ожидания по каналу",
-      "title": "Stance"
+      "description": "куда банк ждёт движения фактора: + вверх, − вниз (не «хорошо/плохо»)",
+      "title": "Direction"
     },
-    "forecast_value": {
+    "forecast": {
       "anyOf": [
         {
-          "type": "number"
+          "$ref": "#/$defs/Forecast"
         },
         {
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Forecast Value"
-    },
-    "forecast_unit": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Forecast Unit"
-    },
-    "forecast_horizon": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Forecast Horizon"
+      "default": null
     },
     "quote": {
       "title": "Quote",
@@ -146,5 +168,5 @@
   ],
   "title": "BankPosition",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }

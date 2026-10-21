@@ -63,7 +63,7 @@ stories = Table(
     Column("title", Text, nullable=False),
     Column("event_type", String, index=True),
     Column("status", String, nullable=False),
-    Column("independent_sources", Integer, nullable=False, server_default="0"),
+    Column("corroboration", Integer, nullable=False, server_default="0"),
     Column("first_seen", DateTime(timezone=True), nullable=False, index=True),
     Column("last_seen", DateTime(timezone=True), nullable=False),
     Column("version", Integer, nullable=False, server_default="1"),
@@ -101,6 +101,18 @@ market_knowledge = Table(
     Column("channel", String, index=True),
     Column("published_at", DateTime(timezone=True), nullable=False),
     Column("embedding", Vector(EMBED_DIM)),
+    Column("data", JSONB, nullable=False),
+)
+
+analyses = Table(
+    "analyses",
+    metadata,
+    Column("story_id", String, primary_key=True),
+    Column("sector", String, primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("status", String, nullable=False),
+    Column("trace_id", String),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
     Column("data", JSONB, nullable=False),
 )
 

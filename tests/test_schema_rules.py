@@ -34,6 +34,8 @@ def _claim(**kw) -> dict:
         (_claim(type="model_inference"), "без based_on"),
         (_claim(type="model_inference", based_on={"facts": []}), "без based_on"),
         (_claim(type="bank_offer"), "как реклама"),
+        (_claim(type="bank_offer", is_advertising=True), "по продуктовому триггеру"),
+        (_claim(type="market_view"), "без ссылки на пост"),
     ],
 )
 def test_claim_label_rules(claim, msg):
@@ -44,7 +46,7 @@ def test_claim_label_rules(claim, msg):
 def test_valid_claims_pass():
     Claim.model_validate(_claim(type="bank_view", evidence=[{"source_id": "cmi_keyrate_2026_09#p1#c1"}]))
     Claim.model_validate(_claim(type="market_view", evidence=[{"source_id": "mk_consensus"}]))
-    Claim.model_validate(_claim(type="bank_offer", is_advertising=True))
+    Claim.model_validate(_claim(type="bank_offer", is_advertising=True, trigger="loa+rate_up"))
     Claim.model_validate(_claim(type="model_inference", based_on={"facts": ["F1"]}))
 
 

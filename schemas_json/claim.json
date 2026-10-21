@@ -90,7 +90,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "10. Утверждение карточки с меткой и обоснованием.",
+  "description": "10. Утверждение с меткой (kind в контракте) и обоснованием (refs).",
   "properties": {
     "claim_id": {
       "title": "Claim Id",
@@ -177,6 +177,19 @@
       "default": false,
       "title": "Is Advertising",
       "type": "boolean"
+    },
+    "trigger": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "продуктовый триггер предложения: 'loa+rate_up'",
+      "title": "Trigger"
     }
   },
   "required": [
@@ -186,5 +199,5 @@
   ],
   "title": "Claim",
   "type": "object",
-  "$comment": "newsai schema 0.1.0"
+  "$comment": "newsai schema 0.2.0"
 }
