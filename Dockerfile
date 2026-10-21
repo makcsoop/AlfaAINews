@@ -14,10 +14,10 @@ WORKDIR /app
 COPY pyproject.toml uv.lock .python-version README.md ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-COPY newsai ./newsai
+COPY backend ./backend
 COPY config ./config
 COPY fixtures ./fixtures
 COPY scripts ./scripts
 RUN uv sync --frozen --no-dev
 
-CMD ["uvicorn", "newsai.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -4,9 +4,9 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
-from newsai.db import models as m
-from newsai.db.engine import get_engine
-from newsai.ingest.store import ingest_stats
+from backend.db import models as m
+from backend.db.engine import get_engine
+from backend.ingest.store import ingest_stats
 
 app = FastAPI(title="AlfaAINews")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])

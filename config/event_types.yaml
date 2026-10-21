@@ -1,0 +1,29 @@
+# Типы событий и факторы, которые они двигают. Стартовая версия: 25 типов; полная — 40 из рабочей папки (ПП).
+# Принятое и предлагаемое регулирование — разные типы (правило GDELT).
+
+event_types:
+  rate_decision:        {channels: [key_rate, fx_rub, inflation]}
+  monetary_signal:      {channels: [key_rate]}
+  fx_move:              {channels: [fx_rub]}
+  fx_control:           {channels: [fx_rub, logistics_costs]}
+  inflation_data:       {channels: [inflation, key_rate, consumer_demand]}
+  macro_data:           {channels: [consumer_demand, labor_costs]}
+  tax_change_adopted:   {channels: [tax_burden]}
+  tax_change_proposed:  {channels: [tax_burden]}
+  regulation_adopted:   {channels: [regulation]}
+  regulation_proposed:  {channels: [regulation]}
+  tariff_duty:          {channels: [trade_restrictions]}
+  sanctions:            {channels: [trade_restrictions, logistics_costs, fx_rub]}
+  commodity_price:      {channels: [oil_gas, metals, agro, gold]}
+  supply_disruption:    {channels: [logistics_costs]}
+  corporate_results:    {channels: []}
+  m_and_a:              {channels: []}
+  default_bankruptcy:   {channels: []}
+  rating_action:        {channels: []}
+  state_support:        {channels: [public_spending]}
+  public_procurement:   {channels: [public_spending]}
+  labor_policy:         {channels: [labor_costs]}
+  budget_policy:        {channels: [tax_burden, public_spending]}
+  ofz_auction:          {channels: [key_rate]}
+  energy_policy:        {channels: [oil_gas]}
+  other:                {channels: []}

@@ -2,7 +2,7 @@ from functools import lru_cache
 
 from sqlalchemy import Engine, create_engine
 
-from newsai.config import get_settings
+from backend.config import get_settings
 
 
 @lru_cache

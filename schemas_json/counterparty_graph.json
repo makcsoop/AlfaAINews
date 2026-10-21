@@ -200,5 +200,5 @@
   ],
   "title": "CounterpartyGraph",
   "type": "object",
-  "$comment": "newsai schema 0.2.0"
+  "$comment": "schema 0.2.0"
 }

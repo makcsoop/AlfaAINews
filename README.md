@@ -16,7 +16,7 @@ docker compose up --build
 - `backend` (FastAPI) работает на http://localhost:8000: `/health`, `/raw_items`, `/stats/ingest`, документация в `/docs`.
 - `frontend` работает на http://localhost:3000 (пока это заглушка со свежими материалами).
 
-CSV кейса (`df_Uid_data_hack.csv` и остальные) в репозиторий не коммитятся: положите их в `data/case/`. Повторный `up` не перезаливает CSV, если файлы не менялись; принудительно — `docker compose run --rm init python -m newsai.db.init --load-case --force-case`.
+CSV кейса (`df_Uid_data_hack.csv` и остальные) в репозиторий не коммитятся: положите их в `data/case/`. Повторный `up` не перезаливает CSV, если файлы не менялись; принудительно — `docker compose run --rm init python -m backend.db.init --load-case --force-case`.
 
 Postgres доступен с хоста на `localhost:55432` (порт задаёт `DB_HOST_PORT`), чтобы не конфликтовать с локально установленным PostgreSQL. PDF ЦМИ кладутся в `data/bank/pdf/`.
 
@@ -26,23 +26,45 @@ Postgres доступен с хоста на `localhost:55432` (порт зад�
 uv sync
 uv run pytest
 uv run ruff check .
-uv run python -m newsai.ingest.run --once   # один проход сбора (нужен Postgres)
+uv run python -m backend.ingest.run --once   # один проход сбора (нужен Postgres)
 ```
 
 ## Структура
 
-| Путь | Что внутри | Владелец |
-|---|---|---|
-| `newsai/schemas/` | Pydantic-схемы всех объектов (13 + `market_knowledge`) | Р1 |
-| `newsai/db/` | таблицы, инициализация, загрузка CSV | Р1 |
-| `newsai/ingest/` | сбор RSS и Telegram → `raw_items` | Р1 |
-| `newsai/stories/` | отсев, склейка в сюжеты, статусы | Р1 |
-| `newsai/extract/` | извлечение фактов с цитатами | Р1 |
-| `newsai/knowledge/` | знания аналитиков рынка | Р1 |
-| `newsai/bank/` | реестр позиций ЦМИ и поиск по нему | Р1 |
-| `newsai/profile/` | профиль клиента, граф платежей | Р1 и Р2 |
-| `newsai/agents/` | агенты разбора | Р3 (Р1: `bank_market.py`, `statistician.py`) |
-| `config/` | `sources.yaml`, `taxonomy.yaml` | Р1 |
-| `fixtures/` | сквозные фикстуры («ставка 14%») | Р1 |
+Дерево повторяет раздел «Стек и структура репозитория» финальной архитектуры. Р1 — данные и знания,
+Р2 — скоринг и интерфейс, Р3 — агенты и LLM.
 
-Любая правка схем делается через Р1 и сразу вместе с фикстурами.
+```
+├── docker-compose.yml, Dockerfile, pyproject.toml, uv.lock
+├── config/
+│   ├── sources.yaml           # источники, уровни 0–3, ручные веса                       Р1
+│   ├── channels_matrix.yaml   # каналы-факторы и матрица ОКВЭД → чувствительность         Р1 (каналы), Р2 (матрица)
+│   ├── event_types.yaml       # типы событий и факторы, которые они двигают              Р1
+│   └── bank_docs.yaml         # реестр обзоров ЦМИ                                        Р1
+├── data/                      # CSV кейса, PDF ЦМИ (не в git), синтетические данные
+├── backend/
+│   ├── schemas/               # Pydantic-контракты всех объектов                         Р1
+│   ├── db/                    # таблицы, init, загрузка CSV                               Р1
+│   ├── ingest/                # RSS, Telegram, полный текст → raw_items                   Р1
+│   ├── stories/               # отсев, SimHash, склейка, версии сюжета                   Р1
+│   ├── extract/               # NER, LLM-экстрактор, проверка цитат                       Р1
+│   ├── profile/               # профиль клиента; graph.py — граф платежей                Р2; graph.py — Р1
+│   ├── bank/                  # реестр позиций ЦМИ, поиск                                 Р1
+│   ├── knowledge/             # знания аналитиков рынка, консенсус, origin                Р1
+│   ├── ranking/               # скоринг, быстрая карточка                                 Р2
+│   ├── agents/                # планировщик, аналитики, критик, арбитр                    Р3; bank_market.py, statistician.py — Р1
+│   ├── cards/                 # персональная карточка, вопрос-ответ                       Р3
+│   ├── llm/                   # клиент, бюджет, запасные модели, журнал                   Р3
+│   ├── security/              # доступ по company_id, фильтры инъекций                    Р3
+│   ├── api/                   # FastAPI                                                   все
+│   └── fixtures.py            # загрузка сквозных фикстур
+├── fixtures/                  # сквозная фикстура «ставка 14%»                            Р1
+├── schemas_json/              # JSON Schema контрактов для фронта и промптов              Р1
+├── eval/labeling/             # разметка пар «сюжет × клиент»                             Р1
+├── frontend/                  # интерфейс Альфа-Бизнеса (сейчас заглушка)                 Р2
+├── docs/                      # заметки по данным кейса
+└── tests/
+```
+
+Любая правка схем делается через Р1 и сразу вместе с фикстурами: после правки
+`uv run python scripts/export_json_schemas.py`, иначе тест `test_schemas_json_up_to_date` упадёт.

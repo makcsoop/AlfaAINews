@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from newsai.schemas import ALL_SCHEMAS
+from backend.schemas import ALL_SCHEMAS
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures"
 

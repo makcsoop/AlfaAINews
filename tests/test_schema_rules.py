@@ -6,8 +6,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from newsai.fixtures import FIXTURES_DIR
-from newsai.schemas import Action, Claim, InsightCard
+from backend.fixtures import FIXTURES_DIR
+from backend.schemas import Action, Claim, InsightCard
 
 
 @pytest.fixture

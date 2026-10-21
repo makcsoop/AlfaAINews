@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from newsai.db.case_loader import detect
+from backend.db.case_loader import detect
 
 COMPANY_HEADER = "SYNTHETIC_U;MAINOKVED_CODE;MAINOKVED_NAME;REVENUE_COMPANY;CITY"
 

@@ -2,8 +2,8 @@ from pathlib import Path
 
 import yaml
 
-from newsai.config import get_settings
-from newsai.schemas import Source
+from backend.config import get_settings
+from backend.schemas import Source
 
 
 def load_sources(path: str | Path | None = None, *, enabled_only: bool = False) -> list[Source]:

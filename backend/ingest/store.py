@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from sqlalchemy import Connection, func, select, text
 from sqlalchemy.dialects.postgresql import insert
 
-from newsai.db import models as m
-from newsai.schemas import RawItem
+from backend.db import models as m
+from backend.schemas import RawItem
 
 
 def get_state(conn: Connection, source_id: str) -> dict:

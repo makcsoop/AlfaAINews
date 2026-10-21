@@ -9,9 +9,9 @@ from email.utils import parsedate_to_datetime
 import feedparser
 import trafilatura
 
-from newsai.ingest.http import Fetcher
-from newsai.ingest.normalize import clean_text, content_hash, item_id, simhash, strip_dateline
-from newsai.schemas import RawItem, Source
+from backend.ingest.http import Fetcher
+from backend.ingest.normalize import clean_text, content_hash, item_id, simhash, strip_dateline
+from backend.schemas import RawItem, Source
 
 log = logging.getLogger(__name__)
 

@@ -3,6 +3,55 @@ revision = 5
 requires-python = ">=3.12"
 
 [[package]]
+name = "alfa-ai-news"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "feedparser" },
+    { name = "httpx" },
+    { name = "pgvector" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+    { name = "redis" },
+    { name = "sqlalchemy" },
+    { name = "trafilatura" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "feedparser", specifier = ">=6.0.11" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "pgvector", specifier = ">=0.3.6" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "redis", specifier = ">=5.2" },
+    { name = "sqlalchemy", specifier = ">=2.0.36" },
+    { name = "trafilatura", specifier = ">=2.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "ruff", specifier = ">=0.8" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -561,55 +610,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0a/63/195dfdde380a84df309e3bccf4384b034b745dba43426886f7ae623b4fba/lxml_html_clean-0.4.5.tar.gz", hash = "sha256:e2a4c7d5beedd17cd7b484d848a0571e54baa239a4f9df5546e3acba7f990560", size = 24142, upload-time = "2026-05-20T12:17:53.574Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/bd/6e2b76a6c5dee10397db9c929f0c5066766ec1036046f0335b7ca7ca08b8/lxml_html_clean-0.4.5-py3-none-any.whl", hash = "sha256:c76fcadd1e5bfb9b8bafc2200d51e4e78eb0dad67f56881c21dfb6484c7e7746", size = 14573, upload-time = "2026-05-20T12:17:52.215Z" },
-]
-
-[[package]]
-name = "newsai"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "fastapi" },
-    { name = "feedparser" },
-    { name = "httpx" },
-    { name = "pgvector" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyyaml" },
-    { name = "redis" },
-    { name = "sqlalchemy" },
-    { name = "trafilatura" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "feedparser", specifier = ">=6.0.11" },
-    { name = "httpx", specifier = ">=0.28" },
-    { name = "pgvector", specifier = ">=0.3.6" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "pydantic-settings", specifier = ">=2.6" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "redis", specifier = ">=5.2" },
-    { name = "sqlalchemy", specifier = ">=2.0.36" },
-    { name = "trafilatura", specifier = ">=2.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "ruff", specifier = ">=0.8" },
 ]
 
 [[package]]

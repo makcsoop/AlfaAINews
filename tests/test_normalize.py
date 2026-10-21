@@ -1,4 +1,4 @@
-from newsai.ingest.normalize import clean_text, content_hash, item_id, simhash, strip_dateline
+from backend.ingest.normalize import clean_text, content_hash, item_id, simhash, strip_dateline
 
 
 def test_clean_text_spaces_entities_tags():

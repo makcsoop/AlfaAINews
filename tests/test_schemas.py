@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from newsai.fixtures import load_bundle
-from newsai.schemas import ALL_SCHEMAS, Claim, InsightCard
+from backend.fixtures import load_bundle
+from backend.schemas import ALL_SCHEMAS, Claim, InsightCard
 
 
 def test_fixture_covers_every_schema():

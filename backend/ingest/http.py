@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from newsai.config import get_settings
+from backend.config import get_settings
 
 
 class HostLimiter:

@@ -5,7 +5,7 @@ from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
-from newsai.schemas.common import (
+from backend.schemas.common import (
     BANK_SOURCE_PREFIX,
     ChannelImpact,
     ClaimType,

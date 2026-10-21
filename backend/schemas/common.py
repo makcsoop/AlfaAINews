@@ -72,7 +72,7 @@ class ChannelImpact(Schema):
     а не «хорошо / плохо» (У17): знак для клиента получается только умножением на его
     чувствительность к фактору (ChannelExposure.sensitivity)."""
 
-    channel: str = Field(description="id фактора из config/taxonomy.yaml")
+    channel: str = Field(description="id фактора из config/channels_matrix.yaml")
     direction: Literal["up", "down", "flat"]
     strength: Score01
     horizon: Horizon | None = None

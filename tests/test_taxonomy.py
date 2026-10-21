@@ -2,17 +2,35 @@
 
 import yaml
 
-from newsai.fixtures import load_bundle
+from backend.fixtures import load_bundle
 from tests.conftest import ROOT
 
-TAXONOMY = yaml.safe_load((ROOT / "config" / "taxonomy.yaml").read_text(encoding="utf-8"))
-CHANNELS = set(TAXONOMY["channels"])
+
+def _yaml(name: str) -> dict:
+    return yaml.safe_load((ROOT / "config" / name).read_text(encoding="utf-8"))
+
+
+MATRIX = _yaml("channels_matrix.yaml")
+EVENT_TYPES = _yaml("event_types.yaml")["event_types"]
+CHANNELS = set(MATRIX["channels"])
 DIRECTION = {"up": 1, "down": -1, "flat": 0}
 
 
 def test_event_types_reference_known_channels():
-    for name, et in TAXONOMY["event_types"].items():
+    for name, et in EVENT_TYPES.items():
         assert set(et["channels"]) <= CHANNELS, name
+
+
+def test_matrix_rows_use_known_channels():
+    for okved, row in (MATRIX.get("okved") or {}).items():
+        assert set(row) <= CHANNELS, okved
+        assert all(-1 <= v <= 1 for v in row.values()), okved
+
+
+def test_fixture_event_types_known():
+    b = load_bundle("rate_14")
+    used = {e.event_type for e in b["event_facts"]} | {s.event_type for s in b["story"] if s.event_type}
+    assert used <= set(EVENT_TYPES), used - set(EVENT_TYPES)
 
 
 def test_bank_docs_reference_known_channels():

@@ -5,7 +5,7 @@
       "description": "Как событие двигает фактор: «ставка выше», «рубль крепче». Это направление фактора,\nа не «хорошо / плохо» (У17): знак для клиента получается только умножением на его\nчувствительность к фактору (ChannelExposure.sensitivity).",
       "properties": {
         "channel": {
-          "description": "id фактора из config/taxonomy.yaml",
+          "description": "id фактора из config/channels_matrix.yaml",
           "title": "Channel",
           "type": "string"
         },
@@ -212,5 +212,5 @@
   ],
   "title": "AnalystReport",
   "type": "object",
-  "$comment": "newsai schema 0.2.0"
+  "$comment": "schema 0.2.0"
 }

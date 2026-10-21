@@ -7,11 +7,11 @@ import pytest
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import make_url
 
-from newsai.db import models as m
-from newsai.db.case_loader import load_case_dir
-from newsai.db.init import create_schema, load_fixtures
-from newsai.ingest.store import insert_items, known_native_ids
-from newsai.schemas import RawItem
+from backend.db import models as m
+from backend.db.case_loader import load_case_dir
+from backend.db.init import create_schema, load_fixtures
+from backend.ingest.store import insert_items, known_native_ids
+from backend.schemas import RawItem
 
 TEST_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://newsai:newsai@localhost:55432/newsai_test"

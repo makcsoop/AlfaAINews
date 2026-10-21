@@ -4,9 +4,9 @@ from pathlib import Path
 import feedparser
 import pytest
 
-from newsai.ingest.normalize import clean_text, content_hash, hamming, simhash, strip_dateline
-from newsai.ingest.registry import load_sources
-from newsai.ingest.rss import entry_to_item, extract_page
+from backend.ingest.normalize import clean_text, content_hash, hamming, simhash, strip_dateline
+from backend.ingest.registry import load_sources
+from backend.ingest.rss import entry_to_item, extract_page
 
 DATA = Path(__file__).parent / "data"
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)

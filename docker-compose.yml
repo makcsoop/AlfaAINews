@@ -42,7 +42,7 @@ services:
   # Однократно: таблицы, расширение vector, CSV кейса и фикстура «ставка 14%»
   init:
     <<: *app
-    command: ["python", "-m", "newsai.db.init", "--load-case", "--load-fixtures"]
+    command: ["python", "-m", "backend.db.init", "--load-case", "--load-fixtures"]
     restart: "no"
 
   backend:
@@ -55,7 +55,7 @@ services:
 
   ingest:
     <<: *app
-    command: ["python", "-m", "newsai.ingest.run"]
+    command: ["python", "-m", "backend.ingest.run"]
     restart: unless-stopped
     depends_on:
       init:

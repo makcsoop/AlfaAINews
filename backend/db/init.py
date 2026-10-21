@@ -1,4 +1,4 @@
-"""Инициализация БД: `python -m newsai.db.init [--load-case] [--load-fixtures]`."""
+"""Инициализация БД: `python -m backend.db.init [--load-case] [--load-fixtures]`."""
 
 import argparse
 import logging
@@ -7,11 +7,11 @@ from pathlib import Path
 from sqlalchemy import Connection, text
 from sqlalchemy.dialects.postgresql import insert
 
-from newsai.config import get_settings
-from newsai.db import models as m
-from newsai.db.case_loader import load_case_dir
-from newsai.db.engine import get_engine
-from newsai.fixtures import load_bundle
+from backend.config import get_settings
+from backend.db import models as m
+from backend.db.case_loader import load_case_dir
+from backend.db.engine import get_engine
+from backend.fixtures import load_bundle
 
 log = logging.getLogger(__name__)
 

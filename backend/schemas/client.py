@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from newsai.schemas.common import Schema, Score01, Signed
+from backend.schemas.common import Schema, Score01, Signed
 
 
 class ChannelExposure(Schema):

@@ -1,4 +1,4 @@
-"""Воркер сбора: `python -m newsai.ingest.run [--once] [--source prime]`.
+"""Воркер сбора: `python -m backend.ingest.run [--once] [--source prime]`.
 
 Каждая лента опрашивается раз в `poll_seconds`; сбой одной ленты не останавливает остальные.
 """
@@ -8,14 +8,14 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
-from newsai.db.engine import get_engine
-from newsai.ingest import store
-from newsai.ingest.http import Fetcher
-from newsai.ingest.registry import load_sources
-from newsai.ingest.rss import entry_to_item, fetch_text, native_id, poll_feed
-from newsai.schemas import Source
+from backend.db.engine import get_engine
+from backend.ingest import store
+from backend.ingest.http import Fetcher
+from backend.ingest.registry import load_sources
+from backend.ingest.rss import entry_to_item, fetch_text, native_id, poll_feed
+from backend.schemas import Source
 
-log = logging.getLogger("newsai.ingest")
+log = logging.getLogger("backend.ingest")
 
 
 async def ingest_rss(fetcher: Fetcher, src: Source) -> int:

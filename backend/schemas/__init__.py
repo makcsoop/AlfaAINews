@@ -1,8 +1,8 @@
-"""Pydantic-схемы всех объектов системы. Импортируйте отсюда: `from newsai.schemas import Story`."""
+"""Pydantic-схемы всех объектов системы. Импортируйте отсюда: `from backend.schemas import Story`."""
 
-from newsai.schemas.client import ChannelExposure, CompanyProfile, Counterparty, CounterpartyGraph
-from newsai.schemas.common import SCHEMA_VERSION, ChannelImpact, Evidence, NumberFact
-from newsai.schemas.insight import (
+from backend.schemas.client import ChannelExposure, CompanyProfile, Counterparty, CounterpartyGraph
+from backend.schemas.common import SCHEMA_VERSION, ChannelImpact, Evidence, NumberFact
+from backend.schemas.insight import (
     Action,
     Analysis,
     AnalystReport,
@@ -15,8 +15,8 @@ from newsai.schemas.insight import (
     RunTrace,
     ToolCall,
 )
-from newsai.schemas.knowledge import BankPosition, Forecast, MarketKnowledge
-from newsai.schemas.news import EventFacts, ItemEdit, Participant, RawItem, Source, Story
+from backend.schemas.knowledge import BankPosition, Forecast, MarketKnowledge
+from backend.schemas.news import EventFacts, ItemEdit, Participant, RawItem, Source, Story
 
 # Объекты «Контрактов данных» финальной архитектуры + служебные — для экспорта JSON Schema и проверки фикстур
 ALL_SCHEMAS = {

@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from newsai.schemas.common import (
+from backend.schemas.common import (
     ChannelImpact,
     EventStatus,
     Evidence,
@@ -109,7 +109,7 @@ class EventFacts(Schema):
 
     story_id: str
     version: int = Field(default=1, description="версия сюжета, по которой извлечены факты")
-    event_type: str = Field(description="тип из config/taxonomy.yaml")
+    event_type: str = Field(description="тип из config/event_types.yaml")
     status: EventStatus
     summary: str
     summary_evidence: list[Evidence] = Field(default_factory=list)

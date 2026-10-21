@@ -5,9 +5,9 @@ import time
 import httpx
 import pytest
 
-from newsai.ingest.http import Fetcher, HostLimiter
-from newsai.ingest.rss import poll_feed
-from newsai.schemas import Source
+from backend.ingest.http import Fetcher, HostLimiter
+from backend.ingest.rss import poll_feed
+from backend.schemas import Source
 
 SRC = Source(id="t", name="t", kind="rss", url="https://feed.test/rss", tier=1, weight=0.9)
 
