@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(npm run:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/*.session)",
+      "Read(./data/raw/**)",
+      "Read(./data/cmi/**)",
+      "Read(./frontend/node_modules/**)",
+      "Read(./.venv/**)"
+    ]
+  },
+  "env": {
+    "LLM_MODE": "fixture"
+  }
+}

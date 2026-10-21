@@ -13,3 +13,4 @@ node_modules/
 .DS_Store
 data/bank/pdf/
 data/bank/pages/
+CLAUDE.local.md
