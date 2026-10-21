@@ -1,0 +1,22 @@
+{
+  "drivers": [
+    {
+      "channel": "rate_cost",
+      "direction": "up",
+      "strength": "high",
+      "horizon": "quarter",
+      "refs": ["fact:keyrate_level"],
+      "rationale": "Ставка 14% — это плохо для оптовиков с кредитами, существенный риск для отрасли."
+    },
+    {
+      "channel": "deposit_yield",
+      "direction": "up",
+      "strength": "medium",
+      "horizon": "quarter",
+      "refs": ["cmi_keyrate_2026_09#p1#c1"],
+      "rationale": "Доходность размещения ликвидности остаётся высокой дольше ожидавшегося."
+    }
+  ],
+  "summary": "Негативный сигнал для заёмщиков: условия остаются неблагоприятными.",
+  "open_questions": []
+}
