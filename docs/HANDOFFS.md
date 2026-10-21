@@ -29,3 +29,4 @@
 | Р3 | Р1, Р2 | Реализация `ToolDataSource` из БД (`newsai/agents/tools/source.py`: profile, counterparties, raw_items, bank_positions, market_knowledge, stories, event_facts, sources) | сейчас инструменты агентов работают на `FixtureDataSource("rate_14")` | ⬜ |
 | Р3 | Р1 | Добавить `mypy` в dev-зависимости `pyproject.toml` | команда `uv run mypy newsai` из CLAUDE.md не запускается | ⬜ |
 | Р3 | Р1 | `Action` и `what_would_change` в `InsightCard` без `refs`/`kind` (строки) | инвариант 4: у каждого утверждения карточки метка и ссылки; сейчас ссылки проверяются кодом, но в карточку не сохраняются | ⬜ |
+| Р3 | Р1 | Добавить `LLM_API_BASE_FALLBACK=https://api.alfahack-gateway26.ru/v1` в `.env.example` (пустая строка — отключить запасной адрес) | клиент `newsai/llm/client.py` при сетевой ошибке/5xx на основном адресе один раз повторяет запрос на запасной (адрес для российских хостингов); по умолчанию уже зашит в `newsai/llm/settings.py` | ⬜ |

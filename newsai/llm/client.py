@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 import threading
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, Literal, Protocol, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -13,7 +14,7 @@ from pydantic import BaseModel, ValidationError
 from newsai.llm.budget import BudgetExceeded, BudgetManager
 from newsai.llm.cache import ResponseCache, cache_key, sha256_json
 from newsai.llm.journal import Journal, JournalEntry
-from newsai.llm.models import ModelsConfig, ModelSpec, default_models_config
+from newsai.llm.models import ALLOWED_PROVIDER_NAMES, ModelsConfig, ModelSpec, default_models_config
 from newsai.llm.settings import LLMSettings
 
 T = TypeVar("T", bound=BaseModel)
@@ -39,6 +40,8 @@ class LlmResult(BaseModel, Generic[T]):  # noqa: UP046
     cost_rub: float
     cached: bool
     trace_id: str
+    base: Literal["primary", "fallback"] | None = None
+    provider_cost: float | None = None
 
 
 # --- транспорт ---
@@ -48,6 +51,10 @@ class TransportError(Exception):
     def __init__(self, message: str, *, budget: bool = False):
         super().__init__(message)
         self.budget = budget
+
+
+class _Retryable(Exception):
+    """Сбой, после которого имеет смысл один раз попробовать запасной адрес: сеть, таймаут, 5xx."""
 
 
 class CompletionRequest(BaseModel):
@@ -63,6 +70,9 @@ class CompletionResponse(BaseModel):
     text: str
     tokens_in: int
     tokens_out: int
+    base: Literal["primary", "fallback"] | None = None
+    provider_cost_rub: float | None = None  # стоимость от провайдера в ₽ (уже пересчитана)
+    provider_cost_raw: float | None = None  # сырое число, если единицы неизвестны
 
 
 class Transport(Protocol):
@@ -87,11 +97,81 @@ class FixtureTransport:
         return CompletionResponse(text=text, tokens_in=tin, tokens_out=estimate_tokens(text))
 
 
+_COST_RUB_KEYS = ("cost_rub", "total_cost_rub")
+_COST_USD_KEYS = ("cost_usd", "total_cost_usd")
+_COST_PLAIN_KEYS = ("cost", "total_cost", "response_cost")
+_COST_HEADER = "x-litellm-response-cost"  # у LiteLLM-прокси в долларах
+
+
+def _num(v: object) -> float | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v) if v >= 0 else None
+    if isinstance(v, str):
+        try:
+            f = float(v)
+        except ValueError:
+            return None
+        return f if f >= 0 else None
+    return None
+
+
+def parse_provider_cost(
+    usage: object, headers: Mapping[str, str] | None = None, *, usd_rub: float = 83.5, unit: str = "unknown"
+) -> tuple[float | None, float | None]:
+    """Стоимость из usage/заголовков: (в ₽ | None, сырое число | None). Любые сбои формата -> (None, None)."""
+    try:
+        u = usage if isinstance(usage, dict) else {}
+        for k in _COST_RUB_KEYS:
+            v = _num(u.get(k))
+            if v is not None:
+                return v, None
+        for k in _COST_USD_KEYS:
+            v = _num(u.get(k))
+            if v is not None:
+                return v * usd_rub, None
+        for k in _COST_PLAIN_KEYS:
+            raw = u.get(k)
+            if isinstance(raw, dict):  # например {"total": 0.001}
+                raw = next((raw[x] for x in ("total_cost", "total", "cost") if x in raw), None)
+            v = _num(raw)
+            if v is None:
+                continue
+            cur = str(u.get("currency") or u.get("cost_currency") or unit).lower()
+            if cur in ("rub", "руб", "₽"):
+                return v, None
+            if cur in ("usd", "$"):
+                return v * usd_rub, None
+            return None, v
+        if headers:
+            v = _num(headers.get(_COST_HEADER))
+            if v is not None:
+                return v * usd_rub, None
+    except Exception:
+        return None, None
+    return None, None
+
+
 class HttpTransport:
-    def __init__(self, api_base: str, api_key: str, timeout_s: float) -> None:
+    def __init__(
+        self,
+        api_base: str,
+        api_key: str,
+        timeout_s: float,
+        *,
+        fallback_base: str = "",
+        usd_rub: float = 83.5,
+        cost_unit: str = "unknown",
+        http_client: httpx.Client | None = None,
+    ) -> None:
         self._base = api_base.rstrip("/")
+        self._fallback_base = fallback_base.strip().rstrip("/")
         self._key = api_key  # только для заголовка, нигде не сохраняется в логах
         self._timeout = timeout_s
+        self._usd_rub = usd_rub
+        self._cost_unit = cost_unit
+        self._post = http_client.post if http_client is not None else httpx.post
 
     def complete(self, req: CompletionRequest) -> CompletionResponse:
         body: dict = {
@@ -103,29 +183,55 @@ class HttpTransport:
         if req.max_tokens:
             body["max_tokens"] = req.max_tokens
         try:
-            r = httpx.post(
-                f"{self._base}/chat/completions",
+            return self._once(self._base, "primary", body, req)
+        except _Retryable as e:
+            if not self._fallback_base or self._fallback_base == self._base:
+                raise TransportError(str(e)) from None
+            first = str(e)
+        # сеть/таймаут/5xx на основном адресе: тот же запрос к запасному, один раз
+        try:
+            return self._once(self._fallback_base, "fallback", body, req)
+        except _Retryable as e:
+            raise TransportError(f"{first}; запасной адрес: {e}") from None
+
+    def _once(
+        self, base: str, which: Literal["primary", "fallback"], body: dict, req: CompletionRequest
+    ) -> CompletionResponse:
+        try:
+            r = self._post(
+                f"{base}/chat/completions",
                 json=body,
                 headers={"Authorization": f"Bearer {self._key}"},
                 timeout=self._timeout,
             )
         except httpx.HTTPError as e:
-            raise TransportError(f"сеть: {type(e).__name__}") from None
+            raise _Retryable(f"сеть: {type(e).__name__}") from None
         if r.status_code >= 400:
             text = r.text[:300]
             if "budget has been exceeded" in text.lower():
                 raise TransportError("провайдер: бюджет исчерпан", budget=True)
-            raise TransportError(f"HTTP {r.status_code}: {text[:150]}")
+            msg = f"HTTP {r.status_code}: {text[:150]}"
+            if r.status_code >= 500:
+                raise _Retryable(msg)
+            raise TransportError(msg)
         try:
             data = r.json()
             text = data["choices"][0]["message"]["content"] or ""
             usage = data.get("usage") or {}
-        except (ValueError, KeyError, IndexError, TypeError):
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
             raise TransportError("неожиданный формат ответа провайдера") from None
+        if not isinstance(usage, dict):
+            usage = {}
         est_in = sum(estimate_tokens(m.get("content", "")) for m in req.messages)
         tin = int(usage.get("prompt_tokens") or est_in)
         tout = int(usage.get("completion_tokens") or estimate_tokens(text))
-        return CompletionResponse(text=text, tokens_in=tin, tokens_out=tout)
+        cost_rub, cost_raw = parse_provider_cost(
+            usage, r.headers, usd_rub=self._usd_rub, unit=self._cost_unit
+        )
+        return CompletionResponse(
+            text=text, tokens_in=tin, tokens_out=tout, base=which,
+            provider_cost_rub=cost_rub, provider_cost_raw=cost_raw,
+        )
 
 
 # --- разбор ответа ---
@@ -206,11 +312,25 @@ class LLMClient:
         s = self.settings
         if s.llm_mode == "fixture":
             return FixtureTransport(s.llm_fixtures_dir)
-        return HttpTransport(s.llm_api_base, s.llm_api_key.get_secret_value(), s.llm_timeout_s)
+        return HttpTransport(
+            s.llm_api_base, s.llm_api_key.get_secret_value(), s.llm_timeout_s,
+            fallback_base=s.llm_api_base_fallback, usd_rub=s.llm_usd_rub, cost_unit=s.llm_cost_unit,
+        )
 
     @property
     def _cache_active(self) -> bool:
         return self.settings.llm_mode == "live" and self.cache.enabled
+
+    def _resolve_override(self, step: str, model_override: str) -> ModelSpec:
+        """Прямой вызов конкретной модели: только шаг probe и только модель из белого списка."""
+        if step != "probe":
+            raise ValueError("model_override разрешён только для шага probe")
+        spec = self.config.models.get(model_override) or next(
+            (m for m in self.config.models.values() if m.provider_name == model_override), None
+        )
+        if spec is None or spec.provider_name not in ALLOWED_PROVIDER_NAMES:
+            raise ValueError(f"модель {model_override} не входит в список разрешённых")
+        return spec
 
     def call(
         self,
@@ -225,24 +345,33 @@ class LLMClient:
         fixture_key: str | None = None,
         temperature: float = 0.2,
         max_tokens: int | None = None,
+        model_override: str | None = None,
+        allow_fallback: bool = True,
     ) -> LlmResult[T]:
         step_spec = self.config.step(step)
+        primary = (
+            self._resolve_override(step, model_override)
+            if model_override is not None
+            else self.config.model(step_spec.model)
+        )
         self.budget.check(step, priority)
 
-        primary = self.config.model(step_spec.model)
-        fallback = self.config.model(step_spec.fallback) if step_spec.fallback else None
+        fallback = self.config.model(step_spec.fallback) if step_spec.fallback and allow_fallback else None
         prompt_hash = sha256_json(messages)
         args_hash = sha256_json(
             {"step": step, "schema": schema.__name__, "temperature": temperature, "fixture_key": fixture_key}
         )
 
         def log(spec: ModelSpec, *, attempt: int, fb: bool, tin: int, tout: int, cost: float,
-                cached: bool, validation: str, error: str | None) -> None:
+                cached: bool, validation: str, error: str | None, base: str | None = None,
+                pcost: float | None = None, praw: float | None = None) -> None:
             self.journal.record(
                 JournalEntry(
                     trace_id=trace_id, step=step, dev=dev, model=spec.provider_name,
                     fallback_used=fb, attempt=attempt, tokens_in=tin, tokens_out=tout,
-                    cost_rub=cost, cached=cached, prompt_version=prompt_version,
+                    cost_rub=cost, base=base,  # type: ignore[arg-type]
+                    provider_cost=pcost, provider_cost_raw=praw,
+                    cached=cached, prompt_version=prompt_version,
                     prompt_hash=prompt_hash, args_hash=args_hash,
                     validation=validation,  # type: ignore[arg-type]
                     error=error,
@@ -251,7 +380,8 @@ class LLMClient:
 
         # кеш
         ckey = cache_key(primary.provider_name, messages, schema.__name__, temperature)
-        if self._cache_active:
+        use_cache = self._cache_active and step != "probe"  # probe всегда ходит к модели
+        if use_cache:
             hit = self.cache.get(ckey)
             if hit:
                 try:
@@ -269,11 +399,13 @@ class LLMClient:
         attempts = 0
         tot_in = tot_out = 0
         tot_cost = 0.0
+        last_base: str | None = None
+        tot_pcost: float | None = None
         last_reason = "нет ответа"
 
         def one_attempt(spec: ModelSpec, msgs: list[dict[str, str]], fb: bool) -> tuple[T | None, str, str]:
             """Один вызов модели. Возвращает (значение | None, сырой текст, причина сбоя)."""
-            nonlocal attempts, tot_in, tot_out, tot_cost
+            nonlocal attempts, tot_in, tot_out, tot_cost, last_base, tot_pcost
             attempts += 1
             req = CompletionRequest(
                 step=step, model=spec, messages=msgs, temperature=temperature,
@@ -289,7 +421,16 @@ class LLMClient:
                     raise BudgetExceeded(step, "provider") from None
                 return None, "", reason
             fixture = self.settings.llm_mode == "fixture"
-            cost = 0.0 if fixture else spec.cost_rub(resp.tokens_in, resp.tokens_out)
+            pcost, praw = resp.provider_cost_rub, resp.provider_cost_raw
+            if fixture:
+                cost = 0.0
+            elif pcost is not None and pcost > 0:
+                cost = pcost  # стоимость от провайдера точнее оценки по models.yaml
+            else:
+                cost = spec.cost_rub(resp.tokens_in, resp.tokens_out)
+            last_base = resp.base
+            if pcost is not None:
+                tot_pcost = (tot_pcost or 0.0) + pcost
             self.budget.record(step, dev, resp.tokens_in, resp.tokens_out, cost)
             tot_in += resp.tokens_in
             tot_out += resp.tokens_out
@@ -299,18 +440,21 @@ class LLMClient:
             except (ValidationError, ValueError) as e:
                 reason = _validation_reason(e)
                 log(spec, attempt=attempts, fb=fb, tin=resp.tokens_in, tout=resp.tokens_out, cost=cost,
-                    cached=False, validation="invalid", error=reason)
+                    cached=False, validation="invalid", error=reason,
+                    base=resp.base, pcost=pcost, praw=praw)
                 return None, resp.text, reason
             log(spec, attempt=attempts, fb=fb, tin=resp.tokens_in, tout=resp.tokens_out, cost=cost,
-                cached=False, validation="ok", error=None)
+                cached=False, validation="ok", error=None,
+                base=resp.base, pcost=pcost, praw=praw)
             return value, resp.text, ""
 
         def done(value: T, spec: ModelSpec, fb: bool, text: str) -> LlmResult[T]:
-            if self._cache_active:
+            if use_cache:
                 self.cache.put(ckey, text, tot_in, tot_out)
             return LlmResult[T](
                 value=value, step=step, model=spec.provider_name, fallback_used=fb, attempts=attempts,
                 tokens_in=tot_in, tokens_out=tot_out, cost_rub=tot_cost, cached=False, trace_id=trace_id,
+                base=last_base, provider_cost=tot_pcost,  # type: ignore[arg-type]
             )
 
         # основная модель

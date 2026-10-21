@@ -12,6 +12,12 @@ class LLMSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     llm_api_base: str = ""
+    # запасной адрес для российских хостингов; пустая строка — отключить
+    llm_api_base_fallback: str = "https://api.alfahack-gateway26.ru/v1"
+    # курс для стоимости от провайдера, пришедшей в долларах
+    llm_usd_rub: float = 83.5
+    # единицы поля cost/total_cost без пометки валюты (пока не выяснено — "unknown")
+    llm_cost_unit: Literal["usd", "rub", "unknown"] = "unknown"
     llm_api_key: SecretStr = SecretStr("")
     llm_mode: Literal["live", "fixture"] = "fixture"
     llm_daily_budget_rub: float = 300.0

@@ -22,6 +22,9 @@ class JournalEntry(BaseModel):
     tokens_in: int = 0
     tokens_out: int = 0
     cost_rub: float = 0.0
+    base: Literal["primary", "fallback"] | None = None  # какой адрес API отработал (сам URL не пишем)
+    provider_cost: float | None = None  # стоимость от провайдера, ₽
+    provider_cost_raw: float | None = None  # сырое число, если единицы неизвестны
     cached: bool = False
     prompt_version: str | None = None
     prompt_hash: str = ""

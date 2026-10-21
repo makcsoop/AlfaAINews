@@ -242,3 +242,156 @@ def test_singleton_client(monkeypatch):
     reset_client()
     assert get_client() is not a
     reset_client()
+
+
+# --- запасной адрес API и стоимость от провайдера ---
+
+import httpx  # noqa: E402
+
+from newsai.llm.client import CompletionRequest as _Req  # noqa: E402
+from newsai.llm.client import HttpTransport, parse_provider_cost  # noqa: E402
+from newsai.llm.models import default_models_config  # noqa: E402
+
+PRIMARY = "http://primary.invalid/v1"
+FALLBACK = "http://fallback.invalid/v1"
+
+
+def _ok_body(usage: dict | None = None) -> dict:
+    return {
+        "choices": [{"message": {"content": GOOD}}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 10, **(usage or {})},
+    }
+
+
+def _http(handler, fallback=FALLBACK) -> tuple[HttpTransport, list[str]]:
+    hosts: list[str] = []
+
+    def wrapped(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        return handler(request)
+
+    client = httpx.Client(transport=httpx.MockTransport(wrapped))
+    return HttpTransport(PRIMARY, SECRET, 5.0, fallback_base=fallback, http_client=client), hosts
+
+
+def _req() -> _Req:
+    cfg = default_models_config()
+    return _Req(step="card", model=cfg.model("qwen3.6-35b"), messages=MSG, temperature=0.0)
+
+
+def test_fallback_base_on_5xx():
+    def handler(request):
+        if request.url.host == "primary.invalid":
+            return httpx.Response(502, text="bad gateway")
+        return httpx.Response(200, json=_ok_body())
+
+    t, hosts = _http(handler)
+    resp = t.complete(_req())
+    assert hosts == ["primary.invalid", "fallback.invalid"]
+    assert resp.base == "fallback"
+
+
+def test_fallback_base_on_timeout():
+    def handler(request):
+        if request.url.host == "primary.invalid":
+            raise httpx.ConnectTimeout("t")
+        return httpx.Response(200, json=_ok_body())
+
+    t, hosts = _http(handler)
+    assert t.complete(_req()).base == "fallback"
+    assert hosts == ["primary.invalid", "fallback.invalid"]
+
+
+def test_primary_ok_no_fallback_call():
+    t, hosts = _http(lambda r: httpx.Response(200, json=_ok_body()))
+    assert t.complete(_req()).base == "primary"
+    assert hosts == ["primary.invalid"]
+
+
+def test_fallback_only_once():
+    t, hosts = _http(lambda r: httpx.Response(503, text="down"))
+    with pytest.raises(TransportError) as ei:
+        t.complete(_req())
+    assert hosts == ["primary.invalid", "fallback.invalid"]
+    assert not ei.value.budget
+    assert "primary.invalid" not in str(ei.value) and SECRET not in str(ei.value)
+
+
+def test_no_fallback_when_disabled():
+    t, hosts = _http(lambda r: httpx.Response(500, text="x"), fallback="")
+    with pytest.raises(TransportError):
+        t.complete(_req())
+    assert hosts == ["primary.invalid"]
+
+
+def test_no_fallback_on_4xx():
+    t, hosts = _http(lambda r: httpx.Response(401, text="unauthorized"))
+    with pytest.raises(TransportError):
+        t.complete(_req())
+    assert hosts == ["primary.invalid"]
+
+
+@pytest.mark.parametrize("status", [400, 429, 500])
+def test_no_fallback_on_budget_exceeded(status):
+    t, hosts = _http(lambda r: httpx.Response(status, text="Budget has been exceeded! Current cost: 500"))
+    with pytest.raises(TransportError) as ei:
+        t.complete(_req())
+    assert ei.value.budget
+    assert hosts == ["primary.invalid"]
+
+
+def test_client_journal_base_and_provider_cost(tmp_path):
+    def handler(request):
+        if request.url.host == "primary.invalid":
+            return httpx.Response(502, text="x")
+        return httpx.Response(200, json=_ok_body({"cost_rub": 0.42}))
+
+    t, _ = _http(handler)
+    c = make_client(tmp_path, t)
+    res = c.call(step="card", messages=MSG, schema=Answer, trace_id="t-base")
+    assert res.base == "fallback"
+    assert res.provider_cost == pytest.approx(0.42)
+    assert res.cost_rub == pytest.approx(0.42)  # вместо оценки по models.yaml
+    e = c.journal.entries()[-1]
+    assert e.base == "fallback" and e.provider_cost == pytest.approx(0.42)
+    assert c.budget.spent_rub() == pytest.approx(0.42)
+    assert SECRET not in e.model_dump_json()
+    for f in (tmp_path / "journal").glob("*.jsonl"):
+        text = f.read_text(encoding="utf-8")
+        assert SECRET not in text and ".invalid" not in text
+
+
+def test_parse_provider_cost_units():
+    assert parse_provider_cost({"cost_rub": 2}) == (2.0, None)
+    rub, raw = parse_provider_cost({"cost_usd": 0.01}, usd_rub=80)
+    assert rub == pytest.approx(0.8) and raw is None
+    # единицы неизвестны -> только сырое число
+    assert parse_provider_cost({"cost": 0.003}) == (None, 0.003)
+    # единицы известны из настройки или из usage
+    assert parse_provider_cost({"total_cost": 0.01}, usd_rub=100, unit="usd") == (pytest.approx(1.0), None)
+    assert parse_provider_cost({"cost": 5, "currency": "RUB"}) == (5.0, None)
+    # заголовок LiteLLM (доллары)
+    assert parse_provider_cost({}, {"x-litellm-response-cost": "0.02"}, usd_rub=50)[0] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("usage", [None, {}, [], "x", {"cost": None}, {"cost": "abc"}, {"cost": -1}, {"cost": True}])
+def test_parse_provider_cost_soft(usage):
+    assert parse_provider_cost(usage) == (None, None)
+
+
+def test_raw_cost_keeps_estimate(tmp_path):
+    t, _ = _http(lambda r: httpx.Response(200, json=_ok_body({"cost": 0.003})))
+    c = make_client(tmp_path, t)
+    res = c.call(step="card", messages=MSG, schema=Answer, trace_id="t-raw")
+    assert res.provider_cost is None
+    assert res.cost_rub > 0  # оценка по models.yaml осталась
+    e = c.journal.entries()[-1]
+    assert e.provider_cost is None and e.provider_cost_raw == pytest.approx(0.003)
+
+
+def test_model_override_only_for_probe(tmp_path):
+    c = make_client(tmp_path, StubTransport([GOOD]))
+    with pytest.raises(ValueError):
+        c.call(step="card", messages=MSG, schema=Answer, trace_id="t", model_override="gemma-4-26b")
+    with pytest.raises(ValueError):
+        c.call(step="probe", messages=MSG, schema=Answer, trace_id="t", model_override="gpt-4o")

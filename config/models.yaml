@@ -54,3 +54,5 @@ steps:
   qa:                {model: deepseek-v4.1-flash, fallback: qwen3.6-35b,         budget_group: qa}
   bank_registry:     {model: kimi-k2.6,           fallback: glm-5.3-flash,       budget_group: registry}
   vision:            {model: qwen3-vl-30b,        fallback: null,                budget_group: vision}
+  # проверка моделей на ключе (python -m newsai.llm.probe): модель задаётся model_override, запасной нет
+  probe:             {model: gemma-4-26b,         fallback: null,                budget_group: system}
