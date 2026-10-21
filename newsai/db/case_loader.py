@@ -19,22 +19,55 @@ KINDS = {
     "case_companies": {"SYNTHETIC_U", "MAINOKVED_CODE"},
 }
 
-# Представления с типами поверх сырых таблиц; числа в CSV могут быть с запятой
+
+def _num(col: str) -> str:
+    return f"NULLIF(replace({col}, ',', '.'), '')::numeric"
+
+
+def _flag(col: str) -> str:
+    # в CSV флаги записаны как '0.0' / '1.0'
+    return f"({_num(col)} = 1)"
+
+
+# Представления с типами поверх сырых таблиц
 VIEWS = {
-    "case_companies": """
+    "case_companies": f"""
         CREATE OR REPLACE VIEW companies AS
-        SELECT *,
-               NULLIF(replace(revenue_company, ',', '.'), '')::numeric AS revenue,
-               left(regexp_replace(mainokved_code, '[^0-9]', '', 'g'), 2) AS sector
+        SELECT synthetic_u AS company_id, group_id, okfs_name, company_age_years_gradation AS company_age,
+               NULLIF(eco_mark_label, '') AS eco_stage,
+               mainokved_code AS okved_code, mainokved_name AS okved_name,
+               left(regexp_replace(mainokved_code, '[^0-9]', '', 'g'), 2) AS sector,
+               amount_workers_fns_gradation AS workers_fns,
+               NULLIF(amount_workers_spark_gradation, '') AS workers_spark,
+               cl_type AS client_type, {_flag("negativemark")} AS negative_mark,
+               {_flag("cl_product_rko_mark")} AS rko, {_flag("cl_product_gar_mark")} AS guarantees,
+               {_flag("cl_product_loa_mark")} AS loans, {_flag("cl_product_lea_mark")} AS leasing,
+               {_flag("cl_product_dep_mark")} AS deposits, {_flag("cl_product_zpp_mark")} AS payroll,
+               {_flag("factoring_mark")} AS factoring, {_flag("fts_flag")} AS fts_flag,
+               string_to_array(NULLIF(fts_country_name, ''), ', ') AS fts_countries,
+               {_num("revenue_company")} AS revenue, city, region
         FROM case_companies
+        -- id, повторяющийся у разных компаний, неоднозначен: в профиль и граф не берём
+        WHERE synthetic_u NOT IN (SELECT synthetic_u FROM case_companies GROUP BY 1 HAVING count(*) > 1)
     """,
-    "case_payments": """
+    "case_payments": f"""
         CREATE OR REPLACE VIEW payments AS
-        SELECT payer, beneficiary,
-               NULLIF(replace(pay_amt, ',', '.'), '')::numeric AS pay_amt,
-               NULLIF(replace(pay_cnt, ',', '.'), '')::numeric::bigint AS pay_cnt
+        SELECT payer, beneficiary, {_num("pay_amt")} AS pay_amt, {_num("pay_cnt")}::bigint AS pay_cnt,
+               payer = beneficiary AS is_self
         FROM case_payments
     """,
+}
+
+INDEXES = {
+    "case_companies": [
+        "CREATE INDEX ON case_companies (synthetic_u)",
+        "CREATE INDEX ON case_companies (group_id)",
+    ],
+    "case_payments": ["CREATE INDEX ON case_payments (payer)", "CREATE INDEX ON case_payments (beneficiary)"],
+    "case_persons": [
+        "CREATE INDEX ON case_persons (synthetic_f)",
+        "CREATE INDEX ON case_persons (synthetic_u)",
+    ],
 }
 
 
@@ -78,8 +111,18 @@ def load_csv(conn: Connection, path: Path) -> tuple[str, int] | None:
             for row in reader:
                 copy.write_row([v if v != "" else None for v in row])
     n = conn.execute(text(f"SELECT count(*) FROM {kind}")).scalar_one()
+    for ddl in INDEXES.get(kind, []):
+        conn.execute(text(ddl))
     if kind in VIEWS:
         conn.execute(text(VIEWS[kind]))
+    if kind == "case_companies":
+        dups = conn.execute(
+            text("SELECT synthetic_u, count(*) FROM case_companies GROUP BY 1 HAVING count(*) > 1")
+        ).all()
+        for uid, cnt in dups:
+            log.warning(
+                "%s встречается %d раз у разных компаний — исключён из представления companies", uid, cnt
+            )
     log.info("%s → %s: %d строк", path.name, kind, n)
     return kind, n
 
