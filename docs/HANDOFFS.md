@@ -5,8 +5,8 @@
 | День, срок | Что | От | Кому | Статус | Комментарий |
 |---|---|---|---|---|---|
 | Д1 13:00 | Pydantic-схемы + фикстура rate_14 | Р1 | Р2, Р3 | ⬜ | |
-| Д1 вечер | LLM-клиент с бюджетом и журналом | Р3 | Р1 | ⬜ | |
-| Д1 вечер | API на заглушках /feed /card /trace /ask | Р3 | Р2 | ⬜ | |
+| Д1 вечер | LLM-клиент с бюджетом и журналом | Р3 | Р1 | ✅ | `newsai.llm.get_client().call(step=…, schema=…, trace_id=…, dev="r1")`; шаги и запасные — `config/models.yaml`; тексты новостей через `data_block()`; в тестах `LLM_MODE=fixture`, ответы в `newsai/llm/fixtures/<step>/` |
+| Д1 вечер | API на заглушках /feed /card /trace /ask | Р3 | Р2 | ✅ | вход `POST /session {company_id, role}` (демо: U_DEMO_BORROWER, U_DEMO_DEPOSITOR), дальше cookie; OpenAPI в `/docs`; ошибки `{error: {code, message, trace_id}}` |
 | Д2 15:00 | Граф платежей: контрагенты, HHI | Р1 | Р2 | ⬜ | |
 | Д2 15:00 | Профили и матрица каналов | Р2 | Р3 | ⬜ | |
 | Д2 вечер | Сюжеты и факты 100+ | Р1 | Р2, Р3 | ⬜ | |
@@ -24,3 +24,7 @@
 ## Запросы на правки чужой зоны
 | Кто просит | Чья зона | Что нужно | Зачем | Статус |
 |---|---|---|---|---|
+| Р3 | Р1 | Поле заголовка карточки (`headline: str`) в `InsightCard` + фикстура | модель пишет заголовок, сейчас он лежит рядом в `CardResult`, не в схеме | ⬜ |
+| Р3 | Р1 | `analyst_report` в фикстуре rate_14: `impact` ставки −0,6 — это знак «плохо для отрасли»; по инварианту 5 нужно направление фактора (ставка ↑ = +) | аналитики Р3 пишут направление фактора, фикстура противоречит; Р2 читает знак из разбора | ⬜ |
+| Р3 | Р1, Р2 | Реализация `ToolDataSource` из БД (`newsai/agents/tools/source.py`: profile, counterparties, raw_items, bank_positions, market_knowledge, stories, event_facts, sources) | сейчас инструменты агентов работают на `FixtureDataSource("rate_14")` | ⬜ |
+| Р3 | Р1 | Добавить `mypy` в dev-зависимости `pyproject.toml` | команда `uv run mypy newsai` из CLAUDE.md не запускается | ⬜ |
