@@ -160,10 +160,10 @@ def template_draft(
     if top_channel in CHANNEL_QUESTION:
         actions.append(DraftAction(type="analysis_question", text=CHANNEL_QUESTION[top_channel], refs=fact0))
 
-    bank = [
-        DraftItem(text=i.title or i.text, refs=[i.id], kind="bank_view")
-        for i in _bank_candidates(dossier, top_channel, dossier.story_published_at)
-    ]
+    bank_items = _bank_candidates(dossier, top_channel, dossier.story_published_at)
+    if not bank_items and top_channel:  # по главному каналу позиции нет: берём ближайшую по теме сюжета
+        bank_items = _bank_candidates(dossier, None, dossier.story_published_at)
+    bank = [DraftItem(text=i.title or i.text, refs=[i.id], kind="bank_view") for i in bank_items]
     for i in dossier.by_kind("market_knowledge")[:1]:
         text = i.title or i.text
         real = i.id.startswith("mk_") and text and not text.upper().startswith("ЗАГЛУШКА")

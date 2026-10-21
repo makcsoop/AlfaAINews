@@ -11,6 +11,7 @@ import copy
 import threading
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from newsai.agents.analysts import run_analysts_detailed
@@ -19,7 +20,9 @@ from newsai.agents.pipeline import Handlers, PipelineContext, State, run_pipelin
 from newsai.agents.planner import build_dossier, replan
 from newsai.agents.stub_steps import make_stub_handlers
 from newsai.agents.tools import FixtureDataSource, ToolContext, ToolDataSource
-from newsai.cards import CardResult, assemble_card, template_draft, write_card
+from newsai.cards import CardResult, assemble_card, template_draft, verify_card, write_card
+from newsai.cards.card import retry_feedback
+from newsai.cards.features import allowed_features
 from newsai.cards.prompt import prompt_version
 from newsai.llm import LLMClient, get_client
 from newsai.schemas import InsightCard, RunTrace, ToolCall
@@ -176,13 +179,45 @@ def card_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> Pip
                 prompt_version=prompt_version(),
             )
         else:
-            res = write_card(client=client, fixture_key=f"{ctx.company_id}_{ctx.role}", **common)
+            key = f"{ctx.company_id}_{ctx.role}"
+            feedback = None
+            if ctx.regen_count and ctx.verify_errors:  # перегенерация после провала проверки
+                feedback = retry_feedback(ctx.verify_errors)
+                key = f"{key}_retry" if _retry_fixture(client, key) else key
+            res = write_card(client=client, fixture_key=key, feedback=feedback, **common)
     finally:
         _llm_sync(ctx, client, before)
     ctx.card = res.card
     ctx.artifacts["card"] = _artifact(res)
     if res.source == "template":
         ctx.flags.append("template_card")
+    return ctx
+
+
+def _retry_fixture(client: LLMClient, key: str) -> bool:
+    root = getattr(getattr(client, "settings", None), "llm_fixtures_dir", None)
+    return bool(root) and (Path(root) / "card" / f"{key}_retry.json").exists()
+
+
+def card_verify_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> PipelineContext:
+    """CARD_VERIFIED: финальная проверка карточки кодом; что делать при провале, решает автомат."""
+    if ctx.card is None or ctx.company_id is None or not ctx.dossier:
+        raise ValueError("проверке нужны карточка, company_id из сессии и досье")
+    src = source or _get_source()
+    profile = src.profile(ctx.company_id)
+    if profile is None:
+        raise LookupError(f"нет профиля компании {ctx.company_id}")
+    graph = src.counterparties(ctx.company_id)
+    check = verify_card(
+        ctx.card,
+        Dossier.model_validate(ctx.dossier),
+        profile_features=allowed_features(profile, graph, ctx.card.relevance),
+        profile=profile,
+        analyses=list(ctx.reports),
+    )
+    ctx.verify_ok = check.ok
+    ctx.verify_errors = check.messages()
+    ctx.artifacts["card_verify"] = {"ok": check.ok, "failures": [f.model_dump() for f in check.failures]}
     return ctx
 
 
@@ -253,10 +288,14 @@ def make_handlers(
     def drafted(ctx: PipelineContext) -> PipelineContext:
         return card_step(ctx, src)
 
+    def verified(ctx: PipelineContext) -> PipelineContext:
+        return card_verify_step(ctx, src)
+
     handlers = dict(make_stub_handlers(bundle))
     handlers[State.PLANNED] = planned
     handlers[State.ANALYZED] = analyzed
     handlers[State.CARD_DRAFTED] = drafted
+    handlers[State.CARD_VERIFIED] = verified
     return handlers
 
 
@@ -341,6 +380,7 @@ __all__ = [
     "analysts_step",
     "arun_for_client",
     "card_step",
+    "card_verify_step",
     "make_handlers",
     "planner_step",
     "run_for_client",
