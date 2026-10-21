@@ -23,3 +23,17 @@ def test_raw_items_limit_validated():
     assert client.get("/raw_items?limit=0").status_code == 422
     assert client.get("/raw_items?limit=-5").status_code == 422
     assert client.get("/raw_items?limit=501").status_code == 422
+
+
+def test_no_api_keys_in_repo():
+    import re
+    import subprocess
+
+    files = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    pattern = re.compile(r"sk-[A-Za-z0-9_-]{16,}")
+    leaks = [
+        f
+        for f in files.splitlines()
+        if (ROOT / f).is_file() and pattern.search((ROOT / f).read_text(encoding="utf-8", errors="ignore"))
+    ]
+    assert not leaks, f"похоже на API-ключ в файлах: {leaks}"
