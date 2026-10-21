@@ -1,0 +1,56 @@
+# Разрешённые модели и шаги конвейера. Менять состав моделей нельзя (правило кейса);
+# менять можно только привязку шагов, и запасная модель обязана быть другого семейства.
+#
+# Цены — ₽ за 1 млн токенов: оценка по публичным агрегаторам 20.10.2026, 83,5 ₽/$;
+# TODO сверить на ключе организаторов. rpm_limit: null — TODO узнать лимит запросов в минуту.
+models:
+  gemma-4-26b:
+    provider_name: google/gemma-4-26b-a4b-it
+    family: gemma
+    price_in_rub_per_m: 7.0
+    price_out_rub_per_m: 30.0
+    rpm_limit: null
+  glm-5.3-flash:
+    provider_name: z-ai/glm-5.3-flash
+    family: glm
+    price_in_rub_per_m: 15.0
+    price_out_rub_per_m: 60.0
+    rpm_limit: null
+  qwen3.6-35b:
+    provider_name: qwen/qwen3.6-35b-a3b
+    family: qwen
+    price_in_rub_per_m: 20.0
+    price_out_rub_per_m: 100.0
+    rpm_limit: null
+  deepseek-v4.1-flash:
+    provider_name: deepseek/deepseek-v4.1-flash
+    family: deepseek
+    price_in_rub_per_m: 25.0
+    price_out_rub_per_m: 80.0
+    rpm_limit: null
+  qwen3-vl-30b:
+    provider_name: qwen/qwen3-vl-30b-a3b-instruct
+    family: qwen
+    price_in_rub_per_m: 15.0
+    price_out_rub_per_m: 60.0
+    rpm_limit: null
+  kimi-k2.6:
+    provider_name: moonshotai/kimi-k2.6
+    family: kimi
+    price_in_rub_per_m: 50.0
+    price_out_rub_per_m: 200.0
+    rpm_limit: null
+
+# шаг -> основная модель, запасная (null — запасной нет), группа бюджета
+steps:
+  extract:           {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: extract}
+  knowledge_stream:  {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: knowledge}
+  knowledge_archive: {model: gemma-4-26b,         fallback: qwen3.6-35b,         budget_group: archive}
+  planner:           {model: glm-5.3-flash,       fallback: deepseek-v4.1-flash, budget_group: deep}
+  analyst_business:  {model: qwen3.6-35b,         fallback: gemma-4-26b,         budget_group: deep}
+  analyst_finance:   {model: glm-5.3-flash,       fallback: deepseek-v4.1-flash, budget_group: deep}
+  critic_llm:        {model: deepseek-v4.1-flash, fallback: glm-5.3-flash,       budget_group: deep}
+  card:              {model: qwen3.6-35b,         fallback: deepseek-v4.1-flash, budget_group: card}
+  qa:                {model: deepseek-v4.1-flash, fallback: qwen3.6-35b,         budget_group: qa}
+  bank_registry:     {model: kimi-k2.6,           fallback: glm-5.3-flash,       budget_group: registry}
+  vision:            {model: qwen3-vl-30b,        fallback: null,                budget_group: vision}

@@ -14,3 +14,7 @@ node_modules/
 data/bank/pdf/
 data/bank/pages/
 CLAUDE.local.md
+.claude/worktrees/
+data/llm_journal/
+data/llm_cache/
+data/security_audit/
