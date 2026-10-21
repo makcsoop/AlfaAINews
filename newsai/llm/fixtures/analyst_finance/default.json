@@ -5,7 +5,7 @@
       "direction": "up",
       "strength": "high",
       "horizon": "quarter",
-      "refs": ["fact:keyrate_level", "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "cmi_keyrate_2026_09#p1#c1"],
+      "refs": ["fact:st_2026-09-11_keyrate:2", "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "cmi_keyrate_2026_09#p1#c1"],
       "rationale": "ЦБ сохранил ставку 14% годовых — первая пауза после десяти снижений; ЦМИ ждёт 14,0% до конца 2026 г. вместо 13,5%. Стоимость заёмных средств остаётся высокой дольше прежних ожиданий."
     },
     {
@@ -21,7 +21,7 @@
       "direction": "up",
       "strength": "low",
       "horizon": "days",
-      "refs": ["fact:pause_after_cuts", "mk_consensus_2026-09-11"],
+      "refs": ["fact:st_2026-09-11_keyrate:3", "mk_consensus_2026-09-11"],
       "rationale": "Сохранение высокой ставки поддерживает спрос на рублёвые активы; пауза была в консенсусе рынка (заглушка в досье), поэтому реакция курса ожидается слабой."
     },
     {

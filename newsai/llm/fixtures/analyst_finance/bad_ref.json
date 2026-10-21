@@ -5,7 +5,7 @@
       "direction": "up",
       "strength": "high",
       "horizon": "quarter",
-      "refs": ["fact:keyrate_level"],
+      "refs": ["fact:st_2026-09-11_keyrate:2"],
       "rationale": "Ставка сохранена на 14% годовых, стоимость заёмных средств остаётся высокой."
     },
     {
@@ -21,7 +21,7 @@
       "direction": "up",
       "strength": "low",
       "horizon": "days",
-      "refs": ["fact:keyrate_level"],
+      "refs": ["fact:st_2026-09-11_keyrate:2"],
       "rationale": "Канала нет в таксономии."
     }
   ],

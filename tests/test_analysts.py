@@ -59,11 +59,13 @@ def rate14_dossier() -> Dossier:
     )
     d.add(DossierItem(id=story.id, kind="story", title=story.title))
     d.add(
-        DossierItem(id="sector:46", kind="sector", title="ОКВЭД 46: оптовая торговля", data={"okved": "46"})
+        DossierItem(
+            id="fact:st_2026-09-11_keyrate:1", kind="fact", title="Суть события", text=facts.summary
+        )
     )
     d.add(
         DossierItem(
-            id="fact:keyrate_level",
+            id="fact:st_2026-09-11_keyrate:2",
             kind="fact",
             title="Ключевая ставка сохранена",
             data={"value": 14.0, "unit": "%"},
@@ -72,7 +74,7 @@ def rate14_dossier() -> Dossier:
     )
     d.add(
         DossierItem(
-            id="fact:pause_after_cuts",
+            id="fact:st_2026-09-11_keyrate:3",
             kind="fact",
             title="Первая пауза после снижений",
             data={"value": 10, "unit": "снижений"},
@@ -127,7 +129,7 @@ def test_conversion_to_analyst_report(tmp_path, dossier):
     rate = next(c for c in rep.channels if c.channel == "rate_cost")
     assert rate.horizon == "quarters"
     assert {e.source_id for e in rate.evidence} == {
-        "fact:keyrate_level",
+        "fact:st_2026-09-11_keyrate:2",
         "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
         "cmi_keyrate_2026_09#p1#c1",
     }
