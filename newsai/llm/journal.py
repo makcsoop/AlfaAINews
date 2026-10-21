@@ -72,9 +72,12 @@ class Journal:
             if e.trace_id == trace_id
         ]
 
-    def cost_by_step(self) -> dict[str, dict[str, float]]:
+    def cost_by_step(self, trace_id: str | None = None) -> dict[str, dict[str, float]]:
+        """Звонки, токены и ₽ по шагам; с trace_id — только по одному прогону."""
         out: dict[str, dict[str, float]] = {}
         for e in self.entries():
+            if trace_id is not None and e.trace_id != trace_id:
+                continue
             b = out.setdefault(e.step, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost_rub": 0.0})
             b["calls"] += 1
             b["tokens_in"] += e.tokens_in

@@ -33,13 +33,14 @@ def analysts_disagree(analyses: Sequence[AnalystReport], channel: str) -> bool:
 def rate_direction(analyses: Sequence[AnalystReport], relevance: RelevanceScore) -> int:
     """+1 — ставка выше/дольше (заёмные дороже, депозиты доходнее), −1 — ставка ниже, 0 — неясно.
 
-    Источник — аналитики: rate_cost < 0 и deposit_yield > 0 означают «ставка выше». Нет отчётов по этим
-    каналам — берём знак вкладов скоринга (rate_cost со знаком −1 или deposit_yield со знаком +1).
+    Источник — аналитики; они называют направление фактора: rate_cost ↑ (стоимость заёмных средств растёт)
+    и deposit_yield ↑ означают «ставка выше». Нет отчётов по этим каналам — берём знак вкладов
+    скоринга (rate_cost со знаком −1 или deposit_yield со знаком +1).
     """
     votes: list[int] = []
     m = channel_mean(analyses, "rate_cost")
     if m is not None and abs(m) >= MIN_STRENGTH:
-        votes.append(1 if m < 0 else -1)
+        votes.append(1 if m > 0 else -1)
     m = channel_mean(analyses, "deposit_yield")
     if m is not None and abs(m) >= MIN_STRENGTH:
         votes.append(1 if m > 0 else -1)

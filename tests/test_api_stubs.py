@@ -28,6 +28,7 @@ def audit(tmp_path):
 def client(audit, monkeypatch):
     monkeypatch.delenv("DEMO_COMPANIES", raising=False)
     monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("CARD_STORE", "fixture")  # заглушки API проверяются на статичных карточках фикстуры
     return TestClient(app, raise_server_exceptions=False)
 
 

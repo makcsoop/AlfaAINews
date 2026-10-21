@@ -129,6 +129,8 @@ class PipelineContext:
     reports: list[AnalystReport] = field(default_factory=list)
     critic_notes: list[str] = field(default_factory=list)
     card: InsightCard | None = None
+    # прочие результаты шагов для критика и трассы: отчёты аналитиков с проверками, источник карточки и т. п.
+    artifacts: dict[str, Any] = field(default_factory=dict)
 
     # сигналы обработчиков автомату
     critic_verdict: str = "ok"  # "ok" | "retry" (CRITIQUED)

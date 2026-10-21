@@ -19,8 +19,8 @@ from newsai.llm.settings import LLMSettings
 from newsai.schemas import InsightCard
 
 FIXTURES = Path("newsai/llm/fixtures/card")
-FACT = "fact:st_2026-09-11_keyrate:summary"
-NUM = "fact:st_2026-09-11_keyrate:num0"
+FACT = "fact:st_2026-09-11_keyrate:1"
+NUM = "fact:st_2026-09-11_keyrate:2"
 CBR = "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a"
 CASES = [("U_DEMO_BORROWER", "cfo"), ("U_DEMO_DEPOSITOR", "treasurer")]
 
@@ -87,6 +87,16 @@ def make_dossier(bundle, company_id: str) -> Dossier:
     return d
 
 
+def factor_direction(reports):
+    """Отчёты фикстуры хранят rate_cost со знаком для отрасли; аналитики отдают направление фактора."""
+    return [
+        r.model_copy(update={"channels": [
+            c.model_copy(update={"impact": -c.impact}) if c.channel == "rate_cost" else c for c in r.channels
+        ]})
+        for r in reports
+    ]
+
+
 def env(bundle, company_id: str, role: str) -> dict:
     return {
         "story": bundle["story"][0],
@@ -94,7 +104,7 @@ def env(bundle, company_id: str, role: str) -> dict:
         "relevance": next(r for r in bundle["relevance_score"] if r.company_id == company_id),
         "profile": next(p for p in bundle["company_profile"] if p.company_id == company_id),
         "graph": next((g for g in bundle["counterparty_graph"] if g.company_id == company_id), None),
-        "analyses": bundle["analyst_report"],
+        "analyses": factor_direction(bundle["analyst_report"]),
         "role": role,
         "trace_id": f"trace_{company_id}",
     }
@@ -344,7 +354,7 @@ def test_offer_only_with_trigger(bundle):
     assert not [a for a in card.actions if a.type == "bank_product"]
     assert not [c for c in card.claims if c.type == "bank_offer"]
     # направление обратное (ставка ниже): фиксация не предлагается
-    down = [r.model_copy(update={"channels": [c.model_copy(update={"impact": 0.6}) for c in r.channels]}) for r in an]
+    down = [r.model_copy(update={"channels": [c.model_copy(update={"impact": -0.6}) for c in r.channels]}) for r in an]
     rel_down = rel.model_copy(update={"contributions": [c.model_copy(update={"sign": 1}) for c in rel.contributions]})
     assert find_offer(profile=prof, relevance=rel_down, analyses=down) is None
     # слух: рекламы нет

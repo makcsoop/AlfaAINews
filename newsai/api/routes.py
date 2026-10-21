@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from newsai.api.store import CardStore, get_store
+from newsai.llm import get_client
 from newsai.schemas.common import UserRole
 from newsai.schemas.insight import InsightCard, RunTrace
 from newsai.security.audit import AuditLog, get_audit
@@ -155,6 +156,53 @@ def trace(trace_id: str, request: Request, session: SessionDep, store: StoreDep,
             audit_foreign(audit, request, session, found.company_id)
         raise HTTPException(status_code=404, detail="Трассировка не найдена")
     return found
+
+
+class StepCost(BaseModel):
+    calls: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost_rub: float = 0.0
+
+
+class TraceCost(BaseModel):
+    """Деньги по прогону: ₽ по шагам из журнала вызовов и состояние дневного бюджета (для экрана метрик)."""
+
+    trace_id: str
+    cost_rub: float
+    cost_by_step: dict[str, StepCost]
+    budget: dict
+
+
+def _cost_by_step(found: RunTrace) -> dict[str, StepCost]:
+    out: dict[str, StepCost] = {}
+    for c in found.llm_calls:
+        b = out.setdefault(c.purpose, StepCost())
+        b.calls += 1
+        b.tokens_in += c.tokens_in
+        b.tokens_out += c.tokens_out
+        b.cost_rub = round(b.cost_rub + c.cost_rub, 6)
+    return out
+
+
+@router.get(
+    "/trace/{trace_id}/cost",
+    response_model=TraceCost,
+    tags=["cards"],
+    summary="Стоимость разбора по шагам",
+    responses={**ERRORS, 404: {"description": "Трассировки нет или она не принадлежит компании"}},
+)
+def trace_cost(
+    trace_id: str, request: Request, session: SessionDep, store: StoreDep, audit: AuditDep
+) -> TraceCost:
+    found = trace(trace_id, request, session, store, audit)
+    steps = _cost_by_step(found)
+    return TraceCost(
+        trace_id=found.run_id,
+        cost_rub=round(sum(s.cost_rub for s in steps.values()), 6),
+        cost_by_step=steps,
+        budget=get_client().budget.summary(),
+    )
 
 
 @router.post(

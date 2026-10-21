@@ -171,7 +171,12 @@ def _cut(text: str | None, n: int = TEXT_LEN) -> str:
 
 
 def story_and_fact_items(story: Story, facts: EventFacts) -> list[DossierItem]:
-    """Элементы story и fact. Числа — с цитатами; id фактов `fact:<story_id>:<n>`, n с 1."""
+    """Элементы story и fact. Числа — с цитатами; id фактов `fact:<story_id>:<n>`, n с 1.
+
+    В data фактов лежат `source_id` и `quote` (первая цитата-основание): по ним карточка строит evidence.
+    """
+    ev0 = facts.summary_evidence[0] if facts.summary_evidence else None
+    src = ev0.source_id if ev0 else None
     items = [
         DossierItem(
             id=story.id,
@@ -196,6 +201,8 @@ def story_and_fact_items(story: Story, facts: EventFacts) -> list[DossierItem]:
                 "event_type": facts.event_type,
                 "status": facts.status,
                 "quotes": [_cut(e.quote, 300) for e in facts.summary_evidence],
+                "source_id": src,
+                "quote": _cut(ev0.quote, 300) if ev0 and ev0.quote else None,
                 "channels": [c.channel for c in facts.channels],
                 "sectors_okved": facts.sectors_okved,
                 "is_rumor": facts.is_rumor,
@@ -218,6 +225,8 @@ def story_and_fact_items(story: Story, facts: EventFacts) -> list[DossierItem]:
                     "direction": num.direction,
                     "period": num.period,
                     "verified": num.verified,
+                    "source_id": src,
+                    "quote": _cut(num.quote, 300),
                 },
                 published_at=story.last_seen,
             )

@@ -99,6 +99,12 @@ def _as_datetime(value: Any) -> datetime | None:
     return None
 
 
+# Позиции ЦМИ (stance) хранят знак «для заёмщика»: по каналам-издержкам рост фактора даёт минус
+# (ставка выше → rate_cost < 0). Аналитики называют направление самого фактора, поэтому для сравнения
+# с ними знак позиции по таким каналам переворачивается.
+COST_CHANNELS = frozenset({"rate_cost"})
+
+
 def _sign(x: float | None) -> int:
     return 0 if x is None else (x > 0) - (x < 0)
 
@@ -266,7 +272,7 @@ def compute_confidence(
     bank_same = False
     if factor and mean is not None:
         stances = [
-            _sign(i.data.get("stance"))
+            _sign(i.data.get("stance")) * (-1 if factor in COST_CHANNELS else 1)
             for i in bank_items
             if i.data.get("channel") == factor and i.data.get("stance") is not None
         ]
