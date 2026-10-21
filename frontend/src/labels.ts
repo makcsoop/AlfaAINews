@@ -1,0 +1,121 @@
+// Подписи для интерфейса: метки утверждений, роли, каналы влияния, признаки компании.
+import type { ClaimType, Confidence, Polarity, UserRole } from "./types";
+
+export const CLAIM_LABELS: Record<ClaimType, string> = {
+  fact: "Факт",
+  bank_view: "Позиция банка",
+  market_view: "Мнение рынка",
+  model_inference: "Вывод AI",
+  bank_offer: "Предложение банка",
+};
+
+export const ROLE_LABELS: Partial<Record<UserRole, string>> = {
+  cfo: "Финансовый директор",
+  treasurer: "Казначей",
+  chief_accountant: "Главный бухгалтер",
+};
+
+export const DEMO_ROLES: UserRole[] = ["cfo", "treasurer", "chief_accountant"];
+
+export const POLARITY_LABELS: Record<Polarity, string> = {
+  risk: "Риск",
+  opportunity: "Возможность",
+  neutral: "К сведению",
+  mixed: "Риск и возможность",
+};
+
+export const CONFIDENCE_LABELS: Record<Confidence, string> = {
+  high: "Уверенность высокая",
+  medium: "Уверенность средняя",
+  low: "Уверенность низкая",
+};
+
+export const STORY_STATUS_LABELS: Record<string, string> = {
+  confirmed: "подтверждено",
+  single: "один источник",
+  rumor: "слух",
+  unconfirmed: "не подтверждено",
+  contradictory: "источники расходятся",
+};
+
+// Каналы влияния — config/taxonomy.yaml
+export const CHANNEL_LABELS: Record<string, string> = {
+  rate_cost: "стоимость кредитов",
+  deposit_yield: "доходность размещений",
+  fx_rub: "курс рубля",
+  oil_gas: "нефть и газ",
+  metals: "металлы",
+  agro: "агросырьё",
+  gold: "золото",
+  consumer_demand: "потребительский спрос",
+  labor_market: "рынок труда",
+  construction: "стройка и ипотека",
+  tariffs_sanctions: "пошлины и санкции",
+  logistics: "логистика и платежи ВЭД",
+  taxes_regulation: "налоги и регулирование",
+  public_procurement: "госзаказ и господдержка",
+  inflation: "инфляция и издержки",
+};
+
+// Поля CSV кейса → что это значит для клиента
+const FEATURE_LABELS: Record<string, string> = {
+  "CL_PRODUCT_LOA_MARK=1": "кредиты в банке",
+  "CL_PRODUCT_LOA_MARK=0": "нет кредитов",
+  "CL_PRODUCT_LEA_MARK=1": "лизинг",
+  "CL_PRODUCT_DEP_MARK=1": "депозиты в банке",
+  "CL_PRODUCT_GAR_MARK=1": "банковские гарантии",
+  "CL_PRODUCT_ZPP_MARK=1": "зарплатный проект",
+  "CL_PRODUCT_RKO_MARK=1": "расчётный счёт",
+  "FACTORING_MARK=1": "факторинг",
+  "FTS_FLAG=1": "внешнеэкономическая деятельность",
+};
+
+export function featureLabel(f: string): string {
+  if (FEATURE_LABELS[f]) return FEATURE_LABELS[f];
+  const country = f.match(/^FTS_COUNTRY_NAME=(.+)$/);
+  if (country) return `ВЭД: ${country[1]}`;
+  const okved = f.match(/^MAINOKVED_CODE=(.+)$/);
+  if (okved) return `ОКВЭД ${okved[1]}`;
+  return f;
+}
+
+export function channelLabel(c: string): string {
+  // вклад через контрагентов: «counterparty:41» — покупатели или поставщики из сектора ОКВЭД 41
+  const cp = c.match(/^counterparty:(.+)$/);
+  if (cp) return `контрагенты из ОКВЭД ${cp[1]}`;
+  return CHANNEL_LABELS[c] ?? c;
+}
+
+// Ссылка на материал: позиция ЦМИ «cmi_doc#p3#c2» → «ЦМИ Альфа-Банка, с. 3»
+export function sourceLabel(sourceId: string): string {
+  const cmi = sourceId.match(/^cmi_[^#]+(?:#p(\d+))?/);
+  if (cmi) return cmi[1] ? `ЦМИ Альфа-Банка, с. ${cmi[1]}` : "ЦМИ Альфа-Банка";
+  if (sourceId.startsWith("mk_")) return "консенсус аналитиков";
+  return "первоисточник";
+}
+
+// Названия лент из config/sources.yaml (пока в StorySource не приходит title)
+const SOURCE_NAMES: Record<string, string> = {
+  prime: "ПРАЙМ",
+  interfax: "Интерфакс",
+  rbc: "РБК",
+  tass: "ТАСС",
+  kommersant: "Коммерсантъ",
+  vedomosti: "Ведомости",
+  cbr_press: "Банк России",
+  cbr_events: "Банк России",
+  cbr_fx: "Банк России, курсы",
+  cbr_dailyinfo: "Банк России, ставки",
+  moex_iss: "Московская биржа",
+  agroinvestor: "Агроинвестор",
+};
+
+export function sourceName(sourceId: string, title?: string | null): string {
+  if (title) return title;
+  if (SOURCE_NAMES[sourceId]) return SOURCE_NAMES[sourceId];
+  return sourceId.startsWith("tg_") ? `@${sourceId.slice(3)}` : sourceId;
+}
+
+export function formatNum(v: number): string {
+  return v.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}

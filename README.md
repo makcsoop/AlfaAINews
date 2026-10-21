@@ -14,7 +14,7 @@ docker compose up --build
 - `init` создаёт таблицы и расширение `vector`, загружает CSV кейса из `data/case/` (если они там лежат) и фикстуру «ставка 14%».
 - `ingest` опрашивает RSS из `config/sources.yaml` и пишет материалы в `raw_items`.
 - `backend` (FastAPI) работает на http://localhost:8000: `/health`, `/raw_items`, `/stats/ingest`, документация в `/docs`.
-- `frontend` работает на http://localhost:3000 (пока это заглушка со свежими материалами).
+- `frontend` работает на http://localhost:3000: макет главного экрана Альфа-Бизнеса, виджет «Важно для вашего бизнеса», лента и карточка. API доступен под `/api` (nginx проксирует на `backend`).
 
 CSV кейса (`df_Uid_data_hack.csv` и остальные) в репозиторий не коммитятся: положите их в `data/case/`. Повторный `up` не перезаливает CSV, если файлы не менялись; принудительно — `docker compose run --rm init python -m newsai.db.init --load-case --force-case`.
 
@@ -27,6 +27,16 @@ uv sync
 uv run pytest
 uv run ruff check .
 uv run python -m newsai.ingest.run --once   # один проход сбора (нужен Postgres)
+uv run python -m newsai.profile.archetypes  # какие компании CSV выбраны под архетипы демо
+```
+
+Интерфейс (React + Vite, `frontend/`):
+
+```bash
+cd frontend && npm ci
+npm run dev        # http://localhost:5173, /api проксируется на http://localhost:8000 (BACKEND_URL)
+npm run dev:mock   # без бэкенда: моки на фикстуре rate_14 (frontend/src/mocks)
+npm run build
 ```
 
 ## Структура
@@ -40,7 +50,8 @@ uv run python -m newsai.ingest.run --once   # один проход сбора (
 | `newsai/extract/` | извлечение фактов с цитатами | Р1 |
 | `newsai/knowledge/` | знания аналитиков рынка | Р1 |
 | `newsai/bank/` | реестр позиций ЦМИ и поиск по нему | Р1 |
-| `newsai/profile/` | профиль клиента, граф платежей | Р1 и Р2 |
+| `newsai/profile/` | профиль клиента (`build.py`, `load.py`), архетипы демо, граф платежей | Р1 и Р2 |
+| `frontend/` | интерфейс: главный экран, лента, карточка | Р2 |
 | `newsai/agents/` | агенты разбора | Р3 (Р1: `bank_market.py`, `statistician.py`) |
 | `config/` | `sources.yaml`, `taxonomy.yaml` | Р1 |
 | `fixtures/` | сквозные фикстуры («ставка 14%») | Р1 |
