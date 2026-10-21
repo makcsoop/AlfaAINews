@@ -11,3 +11,5 @@ data/telegram/
 data/raw/
 node_modules/
 .DS_Store
+data/bank/pdf/
+data/bank/pages/

@@ -46,3 +46,23 @@ def test_unknown_claim_type_rejected():
 def test_json_schema_export():
     for model in ALL_SCHEMAS.values():
         assert model.model_json_schema()["type"] == "object"
+
+
+def test_bank_refs_resolve_to_registry():
+    from pathlib import Path
+
+    import yaml
+
+    registry = yaml.safe_load(Path("config/bank_docs.yaml").read_text(encoding="utf-8"))
+    docs = {d["id"] for d in registry["docs"]}
+    b = load_bundle("rate_14")
+    positions = {p.id: p for p in b["bank_position"]}
+    assert all(p.doc_id in docs for p in positions.values())
+    for card in b["insight_card"]:
+        for c in card.claims:
+            if c.type == "bank_view":
+                assert all(e.source_id in positions for e in c.evidence)
+        if card.surprise and card.surprise.bank_ref:
+            assert card.surprise.bank_ref in positions
+    # устаревшая позиция помечена сюжетом, который её перекрыл
+    assert positions["cmi_macro_1h26#p1#c1"].superseded_by == "st_2026-09-11_keyrate"

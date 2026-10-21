@@ -1,8 +1,35 @@
 {
-  "_note": "Сквозная фикстура «ЦБ сохранил ставку 14% (11.09.2026)». Формулировка решения взята из брифа (с. 11). Цитаты ЦМИ и консенсуса — заглушки до разбора настоящих PDF и Telegram-архива; компании — синтетические архетипы, не из CSV.",
+  "_note": "Сквозная фикстура «ЦБ сохранил ставку 14% (11.09.2026)». Формулировка решения — из брифа (с. 11). Позиции ЦМИ — дословные цитаты из обзоров банка (сканы, страница указана). Консенсус рынка — заглушка до разбора Telegram-архива; компании — синтетические архетипы, не из CSV.",
   "source": [
-    {"id": "cbr_press", "name": "ЦБ — пресс-релизы", "kind": "rss", "url": "http://www.cbr.ru/rss/RssPress", "tier": 0, "weight": 1.0, "value": 5, "poll_seconds": 300, "full_text": "fetch", "official": true, "tags": ["regulator"]},
-    {"id": "prime", "name": "ПРАЙМ", "kind": "rss", "url": "https://1prime.ru/export/rss2/index.xml", "tier": 1, "weight": 0.85, "value": 4, "poll_seconds": 180, "full_text": "fetch", "tags": ["agency"]}
+    {
+      "id": "cbr_press",
+      "name": "ЦБ — пресс-релизы",
+      "kind": "rss",
+      "url": "http://www.cbr.ru/rss/RssPress",
+      "tier": 0,
+      "weight": 1.0,
+      "value": 5,
+      "poll_seconds": 300,
+      "full_text": "fetch",
+      "official": true,
+      "tags": [
+        "regulator"
+      ]
+    },
+    {
+      "id": "prime",
+      "name": "ПРАЙМ",
+      "kind": "rss",
+      "url": "https://1prime.ru/export/rss2/index.xml",
+      "tier": 1,
+      "weight": 0.85,
+      "value": 4,
+      "poll_seconds": 180,
+      "full_text": "fetch",
+      "tags": [
+        "agency"
+      ]
+    }
   ],
   "raw_item": [
     {
@@ -31,7 +58,10 @@
       "is_partial": false,
       "published_at": "2026-09-11T10:31:00Z",
       "fetched_at": "2026-09-11T10:33:40Z",
-      "source_tags": ["ЦБ", "ключевая ставка"],
+      "source_tags": [
+        "ЦБ",
+        "ключевая ставка"
+      ],
       "priority": 1,
       "attributed_to": "cbr_press",
       "metrics": {},
@@ -44,13 +74,21 @@
       "title": "ЦБ сохранил ключевую ставку на уровне 14%",
       "event_type": "rate_decision",
       "status": "confirmed",
-      "item_ids": ["6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "0f9e8d7c6b5a49382716a5b4c3d2e1f0a9b8c7d6"],
+      "item_ids": [
+        "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+        "0f9e8d7c6b5a49382716a5b4c3d2e1f0a9b8c7d6"
+      ],
       "independent_sources": 1,
-      "source_ids": ["cbr_press", "prime"],
+      "source_ids": [
+        "cbr_press",
+        "prime"
+      ],
       "first_seen": "2026-09-11T10:30:00Z",
       "last_seen": "2026-09-11T10:31:00Z",
       "first_source_id": "cbr_press",
-      "entities": ["Банк России"],
+      "entities": [
+        "Банк России"
+      ],
       "quality": 0.93,
       "version": 1
     }
@@ -62,22 +100,63 @@
       "status": "fact",
       "summary": "Совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых; это первая пауза после десяти снижений подряд с июня 2025 года.",
       "summary_evidence": [
-        {"source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "quote": "совет директоров Банка России принял решение сохранить ключевую ставку на уровне 14% годовых", "span": [24, 117], "verified": true}
+        {
+          "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+          "quote": "совет директоров Банка России принял решение сохранить ключевую ставку на уровне 14% годовых",
+          "span": [
+            24,
+            117
+          ],
+          "verified": true
+        }
       ],
       "participants": [
-        {"name": "Банк России", "role": "regulator", "entity_type": "GOV", "entity_id": "cbr", "quote": "совет директоров Банка России"}
+        {
+          "name": "Банк России",
+          "role": "regulator",
+          "entity_type": "GOV",
+          "entity_id": "cbr",
+          "quote": "совет директоров Банка России"
+        }
       ],
       "numbers": [
-        {"value": 14.0, "unit": "%", "direction": "flat", "period": "ключевая ставка", "quote": "на уровне 14% годовых", "verified": true},
-        {"value": 10, "unit": "снижений", "period": "с июня 2025", "quote": "после десяти последовательных снижений ставки", "verified": true}
+        {
+          "value": 14.0,
+          "unit": "%",
+          "direction": "flat",
+          "period": "ключевая ставка",
+          "quote": "на уровне 14% годовых",
+          "verified": true
+        },
+        {
+          "value": 10,
+          "unit": "снижений",
+          "period": "с июня 2025",
+          "quote": "после десяти последовательных снижений ставки",
+          "verified": true
+        }
       ],
       "event_date": "2026-09-11T10:30:00Z",
-      "geography": ["Россия"],
+      "geography": [
+        "Россия"
+      ],
       "sectors_okved": [],
-      "currencies": ["RUB"],
+      "currencies": [
+        "RUB"
+      ],
       "channels": [
-        {"channel": "rate_cost", "impact": -0.6, "horizon": "quarters", "rationale": "Цикл удешевления кредитов приостановлен: стоимость заёмных средств не снизится в ближайшие кварталы."},
-        {"channel": "deposit_yield", "impact": 0.4, "horizon": "quarters", "rationale": "Доходность размещения ликвидности остаётся высокой дольше ожиданий."}
+        {
+          "channel": "rate_cost",
+          "impact": -0.6,
+          "horizon": "quarters",
+          "rationale": "Цикл удешевления кредитов приостановлен: стоимость заёмных средств не снизится в ближайшие кварталы."
+        },
+        {
+          "channel": "deposit_yield",
+          "impact": 0.4,
+          "horizon": "quarters",
+          "rationale": "Доходность размещения ликвидности остаётся высокой дольше ожиданий."
+        }
       ],
       "is_rumor": false,
       "is_intent": false,
@@ -100,10 +179,34 @@
       "fts_flag": true,
       "fts_country": "Китай",
       "client_type": "действующий клиент",
-      "products": {"rko": true, "guarantees": false, "loans": true, "leasing": true, "deposits": false, "payroll": true, "factoring": false},
+      "products": {
+        "rko": true,
+        "guarantees": false,
+        "loans": true,
+        "leasing": true,
+        "deposits": false,
+        "payroll": true,
+        "factoring": false
+      },
       "exposures": [
-        {"channel": "rate_cost", "exposure": 0.9, "drivers": ["CL_PRODUCT_LOA_MARK=1", "CL_PRODUCT_LEA_MARK=1"]},
-        {"channel": "fx_rub", "exposure": -0.7, "drivers": ["FTS_FLAG=1", "FTS_COUNTRY_NAME=Китай", "ОКВЭД 46: скорее импортёр"], "is_assumption": true}
+        {
+          "channel": "rate_cost",
+          "exposure": 0.9,
+          "drivers": [
+            "CL_PRODUCT_LOA_MARK=1",
+            "CL_PRODUCT_LEA_MARK=1"
+          ]
+        },
+        {
+          "channel": "fx_rub",
+          "exposure": -0.7,
+          "drivers": [
+            "FTS_FLAG=1",
+            "FTS_COUNTRY_NAME=Китай",
+            "ОКВЭД 46: скорее импортёр"
+          ],
+          "is_assumption": true
+        }
       ],
       "completeness": 0.9
     },
@@ -121,11 +224,40 @@
       "fts_flag": true,
       "fts_country": "Турция",
       "client_type": "действующий клиент",
-      "products": {"rko": true, "guarantees": true, "loans": false, "leasing": false, "deposits": true, "payroll": true, "factoring": false},
+      "products": {
+        "rko": true,
+        "guarantees": true,
+        "loans": false,
+        "leasing": false,
+        "deposits": true,
+        "payroll": true,
+        "factoring": false
+      },
       "exposures": [
-        {"channel": "deposit_yield", "exposure": 0.8, "drivers": ["CL_PRODUCT_DEP_MARK=1", "CL_PRODUCT_LOA_MARK=0"]},
-        {"channel": "fx_rub", "exposure": 0.6, "drivers": ["FTS_FLAG=1", "ОКВЭД 24: скорее экспортёр"], "is_assumption": true},
-        {"channel": "metals", "exposure": 0.9, "drivers": ["MAINOKVED_CODE=24.10"]}
+        {
+          "channel": "deposit_yield",
+          "exposure": 0.8,
+          "drivers": [
+            "CL_PRODUCT_DEP_MARK=1",
+            "CL_PRODUCT_LOA_MARK=0"
+          ]
+        },
+        {
+          "channel": "fx_rub",
+          "exposure": 0.6,
+          "drivers": [
+            "FTS_FLAG=1",
+            "ОКВЭД 24: скорее экспортёр"
+          ],
+          "is_assumption": true
+        },
+        {
+          "channel": "metals",
+          "exposure": 0.9,
+          "drivers": [
+            "MAINOKVED_CODE=24.10"
+          ]
+        }
       ],
       "completeness": 0.8
     }
@@ -134,36 +266,128 @@
     {
       "company_id": "U_DEMO_BORROWER",
       "suppliers": [
-        {"company_id": "U_DEMO_S1", "direction": "supplier", "share": 0.35, "pay_amt": 5200000000, "pay_cnt": 412, "okved_code": "24.10", "sector": "24"},
-        {"company_id": "U_DEMO_S2", "direction": "supplier", "share": 0.12, "pay_amt": 1800000000, "pay_cnt": 95, "okved_code": "49.41", "sector": "49"}
+        {
+          "company_id": "U_DEMO_S1",
+          "direction": "supplier",
+          "share": 0.35,
+          "pay_amt": 5200000000,
+          "pay_cnt": 412,
+          "okved_code": "24.10",
+          "sector": "24"
+        },
+        {
+          "company_id": "U_DEMO_S2",
+          "direction": "supplier",
+          "share": 0.12,
+          "pay_amt": 1800000000,
+          "pay_cnt": 95,
+          "okved_code": "49.41",
+          "sector": "49"
+        }
       ],
       "buyers": [
-        {"company_id": "U_DEMO_B1", "direction": "buyer", "share": 0.40, "pay_amt": 7100000000, "pay_cnt": 230, "okved_code": "41.20", "sector": "41"}
+        {
+          "company_id": "U_DEMO_B1",
+          "direction": "buyer",
+          "share": 0.4,
+          "pay_amt": 7100000000,
+          "pay_cnt": 230,
+          "okved_code": "41.20",
+          "sector": "41"
+        }
       ],
       "hhi_suppliers": 0.16,
       "hhi_buyers": 0.21,
       "top_supplier_share": 0.35,
-      "top_buyer_share": 0.40,
-      "sector_shares_suppliers": {"24": 0.35, "49": 0.12},
-      "sector_shares_buyers": {"41": 0.40},
-      "group_members": ["U_DEMO_BORROWER_SUB"],
+      "top_buyer_share": 0.4,
+      "sector_shares_suppliers": {
+        "24": 0.35,
+        "49": 0.12
+      },
+      "sector_shares_buyers": {
+        "41": 0.4
+      },
+      "group_members": [
+        "U_DEMO_BORROWER_SUB"
+      ],
       "linked_via_persons": [],
       "high_dependency": true
     }
   ],
   "bank_position": [
     {
+      "id": "cmi_macro_1h26#p1#c1",
+      "doc_id": "cmi_macro_1h26",
+      "doc_title": "Макростатистика 1П26: Слабый рост 1П26 смещает наш прогноз роста ВВП на 0,1% за год",
+      "doc_date": "2026-07-31",
+      "page": 1,
+      "thesis": "ЦМИ ждёт ключевую ставку 13,5% на конец 2026 г.",
+      "channel": "rate_cost",
+      "stance": -0.3,
+      "forecast_value": 13.5,
+      "forecast_unit": "%",
+      "forecast_horizon": "конец 2026",
+      "quote": "Мы смещаем наши ожидания по ставке на конец 2026 г. на уровень 13,5%.",
+      "quote_verified": false,
+      "superseded_by": "st_2026-09-11_keyrate"
+    },
+    {
       "id": "cmi_keyrate_2026_09#p1#c1",
       "doc_id": "cmi_keyrate_2026_09",
-      "doc_title": "Ключевая ставка ЦБ РФ: ставка без изменения на 14,0%, риторика стала жестче",
+      "doc_title": "Ключевая ставка ЦБ РФ: Ставка без изменения на 14,0%, риторика стала жестче",
       "doc_date": "2026-09-11",
       "page": 1,
-      "thesis": "ЦМИ оценивает риторику ЦБ после решения 11.09 как более жёсткую.",
+      "thesis": "ЦМИ ждёт сохранения ставки 14,0% до конца 2026 г. (раньше ждал 13,5%).",
       "channel": "rate_cost",
       "stance": -0.5,
-      "quote": "ЗАГЛУШКА: заменить дословной цитатой из PDF",
+      "forecast_value": 14.0,
+      "forecast_unit": "%",
+      "forecast_horizon": "конец 2026",
+      "quote": "теперь мы ожидаем ее сохранения на текущем значении 14,0% до конца года",
       "quote_verified": false,
       "valid_until": "2026-10-23"
+    },
+    {
+      "id": "cmi_keyrate_2026_09#p1#c2",
+      "doc_id": "cmi_keyrate_2026_09",
+      "doc_title": "Ключевая ставка ЦБ РФ: Ставка без изменения на 14,0%, риторика стала жестче",
+      "doc_date": "2026-09-11",
+      "page": 1,
+      "thesis": "Прогноз ЦМИ по ставке на конец 2027 г. — 12,0%.",
+      "channel": "rate_cost",
+      "stance": 0.3,
+      "forecast_value": 12.0,
+      "forecast_unit": "%",
+      "forecast_horizon": "конец 2027",
+      "quote": "При этом наш прогноз по ставке на конец 2027 г. остается на уровне 12,0%.",
+      "quote_verified": false
+    },
+    {
+      "id": "cmi_keyrate_2026_09#p1#c3",
+      "doc_id": "cmi_keyrate_2026_09",
+      "doc_title": "Ключевая ставка ЦБ РФ: Ставка без изменения на 14,0%, риторика стала жестче",
+      "doc_date": "2026-09-11",
+      "page": 1,
+      "thesis": "ЦМИ оценивает коммуникацию ЦБ после решения 11.09 как более жёсткую.",
+      "channel": "rate_cost",
+      "stance": -0.5,
+      "quote": "пресс-релиз содержит несколько важных корректировок в коммуникации, также свидетельствующих об ужесточении позиции",
+      "quote_verified": false,
+      "valid_until": "2026-10-23"
+    },
+    {
+      "id": "cmi_keyrate_2026_09#p1#c4",
+      "doc_id": "cmi_keyrate_2026_09",
+      "doc_title": "Ключевая ставка ЦБ РФ: Ставка без изменения на 14,0%, риторика стала жестче",
+      "doc_date": "2026-09-11",
+      "page": 1,
+      "thesis": "Перед заседанием ЦМИ ждал паузы на 14,0% (публикация от 4 сентября 2026 г.).",
+      "channel": "rate_cost",
+      "forecast_value": 14.0,
+      "forecast_unit": "%",
+      "forecast_horizon": "заседание 11.09.2026",
+      "quote": "Ждем паузу на 14,0% в сентябре",
+      "quote_verified": false
     }
   ],
   "market_knowledge": [
@@ -176,7 +400,7 @@
       "event_type": "rate_decision",
       "channel": "rate_cost",
       "statement": "ЗАГЛУШКА: консенсус каналов перед заседанием 11.09 — посчитать по архиву Telegram.",
-      "expected_value": 13.5,
+      "expected_value": null,
       "expected_unit": "%",
       "target_event_date": "2026-09-11",
       "origin": "telegram",
@@ -186,44 +410,119 @@
   ],
   "relevance_score": [
     {
-      "story_id": "st_2026-09-11_keyrate", "company_id": "U_DEMO_BORROWER", "role": "cfo",
-      "score": 0.82, "quality": 0.93, "freshness": 1.0,
+      "story_id": "st_2026-09-11_keyrate",
+      "company_id": "U_DEMO_BORROWER",
+      "role": "cfo",
+      "score": 0.82,
+      "quality": 0.93,
+      "freshness": 1.0,
       "contributions": [
-        {"factor": "rate_cost", "value": 0.54, "client_features": ["CL_PRODUCT_LOA_MARK=1", "CL_PRODUCT_LEA_MARK=1"], "sign": -1},
-        {"factor": "counterparty:41", "value": 0.12, "client_features": ["payments: 40% входящих от ОКВЭД 41"], "sign": -1}
+        {
+          "factor": "rate_cost",
+          "value": 0.54,
+          "client_features": [
+            "CL_PRODUCT_LOA_MARK=1",
+            "CL_PRODUCT_LEA_MARK=1"
+          ],
+          "sign": -1
+        },
+        {
+          "factor": "counterparty:41",
+          "value": 0.12,
+          "client_features": [
+            "payments: 40% входящих от ОКВЭД 41"
+          ],
+          "sign": -1
+        }
       ],
-      "polarity": "risk", "deep_analysis": true
+      "polarity": "risk",
+      "deep_analysis": true
     },
     {
-      "story_id": "st_2026-09-11_keyrate", "company_id": "U_DEMO_DEPOSITOR", "role": "treasurer",
-      "score": 0.61, "quality": 0.93, "freshness": 1.0,
+      "story_id": "st_2026-09-11_keyrate",
+      "company_id": "U_DEMO_DEPOSITOR",
+      "role": "treasurer",
+      "score": 0.61,
+      "quality": 0.93,
+      "freshness": 1.0,
       "contributions": [
-        {"factor": "deposit_yield", "value": 0.32, "client_features": ["CL_PRODUCT_DEP_MARK=1"], "sign": 1},
-        {"factor": "fx_rub", "value": 0.14, "client_features": ["FTS_FLAG=1", "ОКВЭД 24: скорее экспортёр"], "sign": -1}
+        {
+          "factor": "deposit_yield",
+          "value": 0.32,
+          "client_features": [
+            "CL_PRODUCT_DEP_MARK=1"
+          ],
+          "sign": 1
+        },
+        {
+          "factor": "fx_rub",
+          "value": 0.14,
+          "client_features": [
+            "FTS_FLAG=1",
+            "ОКВЭД 24: скорее экспортёр"
+          ],
+          "sign": -1
+        }
       ],
-      "polarity": "opportunity", "deep_analysis": false
+      "polarity": "opportunity",
+      "deep_analysis": false
     }
   ],
   "analyst_report": [
     {
-      "story_id": "st_2026-09-11_keyrate", "sector": "46", "analyst": "finance", "model": "glm-5.3-flash",
-      "channels": [{"channel": "rate_cost", "impact": -0.6, "horizon": "quarters"}],
+      "story_id": "st_2026-09-11_keyrate",
+      "sector": "46",
+      "analyst": "finance",
+      "model": "glm-5.3-flash",
+      "channels": [
+        {
+          "channel": "rate_cost",
+          "impact": -0.6,
+          "horizon": "quarters"
+        }
+      ],
       "summary": "Для оптовиков с заёмным финансированием стоимость обслуживания долга не снизится в ближайшие кварталы.",
-      "open_questions": ["Доля долга с плавающей ставкой?"]
+      "open_questions": [
+        "Доля долга с плавающей ставкой?"
+      ]
     },
     {
-      "story_id": "st_2026-09-11_keyrate", "sector": "46", "analyst": "business", "model": "qwen3.6-35b-a3b",
-      "channels": [{"channel": "rate_cost", "impact": -0.5, "horizon": "quarters"}, {"channel": "consumer_demand", "impact": -0.2, "horizon": "quarters"}],
+      "story_id": "st_2026-09-11_keyrate",
+      "sector": "46",
+      "analyst": "business",
+      "model": "qwen3.6-35b-a3b",
+      "channels": [
+        {
+          "channel": "rate_cost",
+          "impact": -0.5,
+          "horizon": "quarters"
+        },
+        {
+          "channel": "consumer_demand",
+          "impact": -0.2,
+          "horizon": "quarters"
+        }
+      ],
       "summary": "Дорогие деньги сдерживают инвестиционный спрос покупателей оборудования.",
       "open_questions": []
     }
   ],
   "claim": [
     {
-      "claim_id": "F1", "type": "fact",
+      "claim_id": "F1",
+      "type": "fact",
       "text": "Совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых.",
-      "evidence": [{"source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "quote": "сохранить ключевую ставку на уровне 14% годовых", "verified": true}],
-      "verified": {"numbers": true, "entailment": "yes"}
+      "evidence": [
+        {
+          "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+          "quote": "сохранить ключевую ставку на уровне 14% годовых",
+          "verified": true
+        }
+      ],
+      "verified": {
+        "numbers": true,
+        "entailment": "yes"
+      }
     }
   ],
   "insight_card": [
@@ -232,60 +531,140 @@
       "company_id": "U_DEMO_BORROWER",
       "user_role": "cfo",
       "event": {
-        "story_id": "st_2026-09-11_keyrate", "event_type": "rate_decision", "status": "confirmed",
-        "title": "ЦБ сохранил ключевую ставку на уровне 14%", "first_seen": "2026-09-11T10:30:00Z",
+        "story_id": "st_2026-09-11_keyrate",
+        "event_type": "rate_decision",
+        "status": "confirmed",
+        "title": "ЦБ сохранил ключевую ставку на уровне 14%",
+        "first_seen": "2026-09-11T10:30:00Z",
         "sources": [
-          {"source_id": "cbr_press", "tier": 0, "url": "https://www.cbr.ru/press/pr/?file=11092026_133000key.htm"},
-          {"source_id": "prime", "tier": 1, "url": "https://1prime.ru/20260911/stavka-873900001.html"}
+          {
+            "source_id": "cbr_press",
+            "tier": 0,
+            "url": "https://www.cbr.ru/press/pr/?file=11092026_133000key.htm"
+          },
+          {
+            "source_id": "prime",
+            "tier": 1,
+            "url": "https://1prime.ru/20260911/stavka-873900001.html"
+          }
         ],
         "independent_sources": 1
       },
       "relevance": {
-        "story_id": "st_2026-09-11_keyrate", "company_id": "U_DEMO_BORROWER", "role": "cfo",
-        "score": 0.82, "quality": 0.93, "freshness": 1.0,
-        "contributions": [{"factor": "rate_cost", "value": 0.54, "client_features": ["CL_PRODUCT_LOA_MARK=1", "CL_PRODUCT_LEA_MARK=1"], "sign": -1}],
-        "polarity": "risk", "deep_analysis": true
+        "story_id": "st_2026-09-11_keyrate",
+        "company_id": "U_DEMO_BORROWER",
+        "role": "cfo",
+        "score": 0.82,
+        "quality": 0.93,
+        "freshness": 1.0,
+        "contributions": [
+          {
+            "factor": "rate_cost",
+            "value": 0.54,
+            "client_features": [
+              "CL_PRODUCT_LOA_MARK=1",
+              "CL_PRODUCT_LEA_MARK=1"
+            ],
+            "sign": -1
+          }
+        ],
+        "polarity": "risk",
+        "deep_analysis": true
       },
-      "what_happened": ["F1"],
-      "why_it_matters": ["I1"],
-      "consequences": ["I1"],
-      "actions": [
-        {"type": "analysis_question", "text": "Какая доля долга и лизинга компании привязана к плавающей ставке?"},
-        {"type": "bank_product", "text": "Обсудить фиксацию ставки по кредитному портфелю", "is_advertising": true}
+      "what_happened": [
+        "F1"
       ],
-      "bank_and_market": ["B1", "M1"],
-      "what_would_change": ["Снижение ставки на заседании 23.10 вернёт сценарий удешевления рефинансирования."],
+      "why_it_matters": [
+        "I1"
+      ],
+      "consequences": [
+        "I1"
+      ],
+      "actions": [
+        {
+          "type": "analysis_question",
+          "text": "Какая доля долга и лизинга компании привязана к плавающей ставке?"
+        },
+        {
+          "type": "bank_product",
+          "text": "Обсудить фиксацию ставки по кредитному портфелю",
+          "is_advertising": true
+        }
+      ],
+      "bank_and_market": [
+        "B1"
+      ],
+      "what_would_change": [
+        "Снижение ставки 23.10 вернёт удешевление рефинансирования; ЦМИ сейчас ждёт паузы до конца года."
+      ],
       "surprise": {
-        "metric": "ключевая ставка", "unit": "%", "actual": 14.0,
-        "market_expected": 13.5, "market_ref": "mk_consensus_2026-09-11",
-        "direction": "above"
+        "metric": "ключевая ставка",
+        "unit": "%",
+        "actual": 14.0,
+        "bank_expected": 14.0,
+        "bank_ref": "cmi_keyrate_2026_09#p1#c4",
+        "direction": "in_line"
       },
       "claims": [
         {
-          "claim_id": "F1", "type": "fact",
+          "claim_id": "F1",
+          "type": "fact",
           "text": "Совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых.",
-          "evidence": [{"source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "quote": "сохранить ключевую ставку на уровне 14% годовых", "verified": true}],
-          "verified": {"numbers": true, "entailment": "yes"}
+          "evidence": [
+            {
+              "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+              "quote": "сохранить ключевую ставку на уровне 14% годовых",
+              "verified": true
+            }
+          ],
+          "verified": {
+            "numbers": true,
+            "entailment": "yes"
+          }
         },
         {
-          "claim_id": "B1", "type": "bank_view",
-          "text": "ЦМИ Альфа-Банка оценивает риторику ЦБ как более жёсткую.",
-          "evidence": [{"source_id": "cmi_keyrate_2026_09#p1#c1", "quote": "ЗАГЛУШКА: заменить дословной цитатой из PDF", "doc_date": "2026-09-11T00:00:00Z"}]
+          "claim_id": "B1",
+          "type": "bank_view",
+          "text": "ЦМИ Альфа-Банка ждёт сохранения ставки 14,0% до конца 2026 г.; раньше ориентировался на 13,5%.",
+          "evidence": [
+            {
+              "source_id": "cmi_keyrate_2026_09#p1#c1",
+              "quote": "теперь мы ожидаем ее сохранения на текущем значении 14,0% до конца года",
+              "doc_date": "2026-09-11T00:00:00Z"
+            },
+            {
+              "source_id": "cmi_keyrate_2026_09#p1#c3",
+              "quote": "пресс-релиз содержит несколько важных корректировок в коммуникации, также свидетельствующих об ужесточении позиции",
+              "doc_date": "2026-09-11T00:00:00Z"
+            }
+          ]
         },
         {
-          "claim_id": "M1", "type": "market_view",
-          "text": "Аналитики рынка перед заседанием в среднем ждали снижения ставки до 13,5%.",
-          "evidence": [{"source_id": "mk_consensus_2026-09-11"}]
-        },
-        {
-          "claim_id": "I1", "type": "model_inference",
+          "claim_id": "I1",
+          "type": "model_inference",
           "text": "Стоимость обслуживания кредитов и лизинга компании в ближайшие кварталы не снизится; рефинансирование под более низкую ставку откладывается.",
-          "based_on": {"facts": ["F1"], "bank_views": ["B1"], "client_features": ["CL_PRODUCT_LOA_MARK=1", "CL_PRODUCT_LEA_MARK=1"]},
-          "polarity": "risk", "horizon": "3–6 мес."
+          "based_on": {
+            "facts": [
+              "F1"
+            ],
+            "bank_views": [
+              "B1"
+            ],
+            "client_features": [
+              "CL_PRODUCT_LOA_MARK=1",
+              "CL_PRODUCT_LEA_MARK=1"
+            ]
+          },
+          "polarity": "risk",
+          "horizon": "3–6 мес."
         }
       ],
       "confidence": "high",
-      "confidence_reasons": ["первоисточник — ЦБ", "позиция ЦМИ совпадает по знаку", "прямой канал через кредиты и лизинг"],
+      "confidence_reasons": [
+        "первоисточник — ЦБ",
+        "позиция ЦМИ совпадает по знаку",
+        "прямой канал через кредиты и лизинг"
+      ],
       "review_status": "published",
       "trace_id": "run_fixture_rate14"
     },
@@ -294,76 +673,214 @@
       "company_id": "U_DEMO_DEPOSITOR",
       "user_role": "treasurer",
       "event": {
-        "story_id": "st_2026-09-11_keyrate", "event_type": "rate_decision", "status": "confirmed",
-        "title": "ЦБ сохранил ключевую ставку на уровне 14%", "first_seen": "2026-09-11T10:30:00Z",
-        "sources": [{"source_id": "cbr_press", "tier": 0, "url": "https://www.cbr.ru/press/pr/?file=11092026_133000key.htm"}],
+        "story_id": "st_2026-09-11_keyrate",
+        "event_type": "rate_decision",
+        "status": "confirmed",
+        "title": "ЦБ сохранил ключевую ставку на уровне 14%",
+        "first_seen": "2026-09-11T10:30:00Z",
+        "sources": [
+          {
+            "source_id": "cbr_press",
+            "tier": 0,
+            "url": "https://www.cbr.ru/press/pr/?file=11092026_133000key.htm"
+          }
+        ],
         "independent_sources": 1
       },
       "relevance": {
-        "story_id": "st_2026-09-11_keyrate", "company_id": "U_DEMO_DEPOSITOR", "role": "treasurer",
-        "score": 0.61, "quality": 0.93, "freshness": 1.0,
+        "story_id": "st_2026-09-11_keyrate",
+        "company_id": "U_DEMO_DEPOSITOR",
+        "role": "treasurer",
+        "score": 0.61,
+        "quality": 0.93,
+        "freshness": 1.0,
         "contributions": [
-          {"factor": "deposit_yield", "value": 0.32, "client_features": ["CL_PRODUCT_DEP_MARK=1"], "sign": 1},
-          {"factor": "fx_rub", "value": 0.14, "client_features": ["FTS_FLAG=1", "ОКВЭД 24: скорее экспортёр"], "sign": -1}
+          {
+            "factor": "deposit_yield",
+            "value": 0.32,
+            "client_features": [
+              "CL_PRODUCT_DEP_MARK=1"
+            ],
+            "sign": 1
+          },
+          {
+            "factor": "fx_rub",
+            "value": 0.14,
+            "client_features": [
+              "FTS_FLAG=1",
+              "ОКВЭД 24: скорее экспортёр"
+            ],
+            "sign": -1
+          }
         ],
-        "polarity": "opportunity", "deep_analysis": false
+        "polarity": "opportunity",
+        "deep_analysis": false
       },
-      "what_happened": ["F1"],
-      "why_it_matters": ["I1", "I2"],
-      "consequences": ["I1", "I2"],
-      "actions": [
-        {"type": "analysis_question", "text": "Не сокращать сроки размещения в расчёте на скорое снижение ставки?"},
-        {"type": "scenario", "text": "Проверить план продажи валютной выручки при крепком рубле."},
-        {"type": "bank_product", "text": "Депозит на более длинный срок по текущей ставке", "is_advertising": true}
+      "what_happened": [
+        "F1"
       ],
-      "bank_and_market": ["B1"],
-      "what_would_change": ["Данные о валюте выручки клиента уточнят эффект курса."],
+      "why_it_matters": [
+        "I1",
+        "I2"
+      ],
+      "consequences": [
+        "I1",
+        "I2"
+      ],
+      "actions": [
+        {
+          "type": "analysis_question",
+          "text": "Не сокращать сроки размещения в расчёте на скорое снижение ставки?"
+        },
+        {
+          "type": "scenario",
+          "text": "Проверить план продажи валютной выручки при крепком рубле."
+        },
+        {
+          "type": "bank_product",
+          "text": "Депозит на более длинный срок по текущей ставке",
+          "is_advertising": true
+        }
+      ],
+      "bank_and_market": [
+        "B1"
+      ],
+      "what_would_change": [
+        "Данные о валюте выручки клиента уточнят эффект курса."
+      ],
       "claims": [
         {
-          "claim_id": "F1", "type": "fact",
+          "claim_id": "F1",
+          "type": "fact",
           "text": "Совет директоров Банка России сохранил ключевую ставку на уровне 14% годовых.",
-          "evidence": [{"source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a", "quote": "сохранить ключевую ставку на уровне 14% годовых", "verified": true}],
-          "verified": {"numbers": true, "entailment": "yes"}
+          "evidence": [
+            {
+              "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+              "quote": "сохранить ключевую ставку на уровне 14% годовых",
+              "verified": true
+            }
+          ],
+          "verified": {
+            "numbers": true,
+            "entailment": "yes"
+          }
         },
         {
-          "claim_id": "B1", "type": "bank_view",
-          "text": "ЦМИ Альфа-Банка оценивает риторику ЦБ как более жёсткую.",
-          "evidence": [{"source_id": "cmi_keyrate_2026_09#p1#c1", "quote": "ЗАГЛУШКА: заменить дословной цитатой из PDF", "doc_date": "2026-09-11T00:00:00Z"}]
+          "claim_id": "B1",
+          "type": "bank_view",
+          "text": "ЦМИ Альфа-Банка ждёт сохранения ставки 14,0% до конца 2026 г.; раньше ориентировался на 13,5%.",
+          "evidence": [
+            {
+              "source_id": "cmi_keyrate_2026_09#p1#c1",
+              "quote": "теперь мы ожидаем ее сохранения на текущем значении 14,0% до конца года",
+              "doc_date": "2026-09-11T00:00:00Z"
+            },
+            {
+              "source_id": "cmi_keyrate_2026_09#p1#c3",
+              "quote": "пресс-релиз содержит несколько важных корректировок в коммуникации, также свидетельствующих об ужесточении позиции",
+              "doc_date": "2026-09-11T00:00:00Z"
+            }
+          ]
         },
         {
-          "claim_id": "I1", "type": "model_inference",
+          "claim_id": "I1",
+          "type": "model_inference",
           "text": "Доходность депозитов и остатков компании держится на уровне ставки дольше, чем шло по тренду.",
-          "based_on": {"facts": ["F1"], "bank_views": ["B1"], "client_features": ["CL_PRODUCT_DEP_MARK=1", "CL_PRODUCT_LOA_MARK=0"]},
-          "polarity": "opportunity", "horizon": "3–6 мес."
+          "based_on": {
+            "facts": [
+              "F1"
+            ],
+            "bank_views": [
+              "B1"
+            ],
+            "client_features": [
+              "CL_PRODUCT_DEP_MARK=1",
+              "CL_PRODUCT_LOA_MARK=0"
+            ]
+          },
+          "polarity": "opportunity",
+          "horizon": "3–6 мес."
         },
         {
-          "claim_id": "I2", "type": "model_inference",
+          "claim_id": "I2",
+          "type": "model_inference",
           "text": "Высокая ставка обычно поддерживает рубль — для валютной выручки это минус в рублях.",
-          "based_on": {"facts": ["F1"], "client_features": ["FTS_FLAG=1"]},
-          "polarity": "risk", "horizon": "1–3 мес."
+          "based_on": {
+            "facts": [
+              "F1"
+            ],
+            "client_features": [
+              "FTS_FLAG=1"
+            ]
+          },
+          "polarity": "risk",
+          "horizon": "1–3 мес."
         }
       ],
       "confidence": "medium",
-      "confidence_reasons": ["первоисточник — ЦБ", "эффект на курс — общий механизм, без данных о валюте выручки клиента"],
+      "confidence_reasons": [
+        "первоисточник — ЦБ",
+        "эффект на курс — общий механизм, без данных о валюте выручки клиента"
+      ],
       "review_status": "published"
     }
   ],
   "run_trace": [
     {
-      "run_id": "run_fixture_rate14", "story_id": "st_2026-09-11_keyrate", "company_id": "U_DEMO_BORROWER",
-      "steps": ["plan:template:rate_decision", "tools:4", "analysts:2", "arbiter:agree", "critic:pass", "card"],
+      "run_id": "run_fixture_rate14",
+      "story_id": "st_2026-09-11_keyrate",
+      "company_id": "U_DEMO_BORROWER",
+      "steps": [
+        "plan:template:rate_decision",
+        "tools:4",
+        "analysts:2",
+        "arbiter:agree",
+        "critic:pass",
+        "card"
+      ],
       "tool_calls": [
-        {"tool": "get_client_profile", "args": {"company_id": "U_DEMO_BORROWER"}, "ok": true, "at": "2026-09-11T10:35:00Z"},
-        {"tool": "search_bank_positions", "args": {"query": "ключевая ставка 14%"}, "ok": true, "at": "2026-09-11T10:35:01Z"}
+        {
+          "tool": "get_client_profile",
+          "args": {
+            "company_id": "U_DEMO_BORROWER"
+          },
+          "ok": true,
+          "at": "2026-09-11T10:35:00Z"
+        },
+        {
+          "tool": "search_bank_positions",
+          "args": {
+            "query": "ключевая ставка 14%",
+            "channel": "rate_cost"
+          },
+          "ok": true,
+          "at": "2026-09-11T10:35:01Z"
+        }
       ],
       "llm_calls": [
-        {"model": "glm-5.3-flash", "purpose": "analyst:finance", "prompt_hash": "fixture", "tokens_in": 12000, "tokens_out": 1500, "cost_rub": 0.4, "at": "2026-09-11T10:35:05Z"}
+        {
+          "model": "glm-5.3-flash",
+          "purpose": "analyst:finance",
+          "prompt_hash": "fixture",
+          "tokens_in": 12000,
+          "tokens_out": 1500,
+          "cost_rub": 0.4,
+          "at": "2026-09-11T10:35:05Z"
+        }
       ],
-      "verify_rounds": 1, "verify_failures": [], "cost_rub": 0.71,
-      "started_at": "2026-09-11T10:35:00Z", "finished_at": "2026-09-11T10:35:40Z"
+      "verify_rounds": 1,
+      "verify_failures": [],
+      "cost_rub": 0.71,
+      "started_at": "2026-09-11T10:35:00Z",
+      "finished_at": "2026-09-11T10:35:40Z"
     }
   ],
   "feedback": [
-    {"card_id": "card_st_2026-09-11_keyrate_U_DEMO_BORROWER_cfo", "user_role": "cfo", "kind": "useful", "at": "2026-09-11T12:00:00Z"}
+    {
+      "card_id": "card_st_2026-09-11_keyrate_U_DEMO_BORROWER_cfo",
+      "user_role": "cfo",
+      "kind": "useful",
+      "at": "2026-09-11T12:00:00Z"
+    }
   ]
 }
