@@ -1,0 +1,264 @@
+{
+  "$defs": {
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Ссылка на фрагмент первоисточника. quote — дословная цитата, span — позиции в тексте.",
+      "properties": {
+        "source_id": {
+          "description": "raw_item id, bank chunk id 'doc#p3#c2' или 'csv:FIELD'",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Date"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Знание аналитиков рынка: механизм, ожидание (консенсус) или разбор после события.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "mechanism",
+        "expectation",
+        "post_event_review"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "item_id": {
+      "description": "raw_item, из которого извлечено",
+      "title": "Item Id",
+      "type": "string"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "event_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Event Type"
+    },
+    "channel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Channel"
+    },
+    "sectors_okved": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Sectors Okved",
+      "type": "array"
+    },
+    "statement": {
+      "title": "Statement",
+      "type": "string"
+    },
+    "direction": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Direction"
+    },
+    "expected_value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Value"
+    },
+    "expected_unit": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Unit"
+    },
+    "target_event_date": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "для ожиданий: дата планового события",
+      "title": "Target Event Date"
+    },
+    "origin": {
+      "default": "before_event",
+      "enum": [
+        "before_event",
+        "after_event"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "channel_weight": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Channel Weight"
+    },
+    "outcome_hit": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "сбылся ли прогноз",
+      "title": "Outcome Hit"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "source_id",
+    "item_id",
+    "published_at",
+    "statement"
+  ],
+  "title": "MarketKnowledge",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

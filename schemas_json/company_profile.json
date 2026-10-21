@@ -1,0 +1,316 @@
+{
+  "$defs": {
+    "ChannelExposure": {
+      "additionalProperties": false,
+      "description": "Чувствительность компании к каналу со знаком и причиной (поле CSV или контрагенты).",
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "exposure": {
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Exposure",
+          "type": "number"
+        },
+        "drivers": {
+          "description": "'CL_PRODUCT_LOA_MARK=1', 'payments: 35% исходящих → ОКВЭД 24'",
+          "items": {
+            "type": "string"
+          },
+          "title": "Drivers",
+          "type": "array"
+        },
+        "is_assumption": {
+          "default": false,
+          "description": "предположение AI (например, импорт/экспорт по ОКВЭД)",
+          "title": "Is Assumption",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "channel",
+        "exposure",
+        "drivers"
+      ],
+      "title": "ChannelExposure",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "5. Профиль компании. Поля 1:1 с df_Uid_data_hack.csv плюс производные признаки.",
+  "properties": {
+    "company_id": {
+      "description": "SYNTHETIC_U",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "group_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Group Id"
+    },
+    "org_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Org Type"
+    },
+    "okfs_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Okfs Name"
+    },
+    "okved_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Okved Code"
+    },
+    "okved_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Okved Name"
+    },
+    "sector": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "сектор по первым 2 цифрам ОКВЭД",
+      "title": "Sector"
+    },
+    "company_age": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company Age"
+    },
+    "eco_stage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Eco Stage"
+    },
+    "workers_fns": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workers Fns"
+    },
+    "workers_spark": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workers Spark"
+    },
+    "client_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Client Type"
+    },
+    "negative_mark": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Negative Mark"
+    },
+    "revenue": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revenue"
+    },
+    "revenue_rank_in_okved": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "положение в отрасли — оценка по датасету",
+      "title": "Revenue Rank In Okved"
+    },
+    "revenue_peers_in_okved": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revenue Peers In Okved"
+    },
+    "city": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "City"
+    },
+    "region": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Region"
+    },
+    "fts_flag": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fts Flag"
+    },
+    "fts_country": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fts Country"
+    },
+    "products": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "description": "rko, guarantees, loans, leasing, deposits, payroll, factoring",
+      "title": "Products",
+      "type": "object"
+    },
+    "exposures": {
+      "items": {
+        "$ref": "#/$defs/ChannelExposure"
+      },
+      "title": "Exposures",
+      "type": "array"
+    },
+    "completeness": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "доля заполненных ключевых полей",
+      "title": "Completeness"
+    }
+  },
+  "required": [
+    "company_id"
+  ],
+  "title": "CompanyProfile",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

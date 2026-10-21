@@ -1,0 +1,131 @@
+{
+  "additionalProperties": false,
+  "description": "1. Запись реестра источников (config/sources.yaml).",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "rss",
+        "telegram",
+        "api",
+        "html",
+        "bank_pdf",
+        "manual"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    },
+    "tier": {
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "title": "Tier",
+      "type": "integer"
+    },
+    "weight": {
+      "description": "стартовый вес достоверности, задаётся вручную",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Weight",
+      "type": "number"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "ценность для бизнеса из sources.md",
+      "title": "Value"
+    },
+    "poll_seconds": {
+      "default": 180,
+      "title": "Poll Seconds",
+      "type": "integer"
+    },
+    "full_text": {
+      "default": "fetch",
+      "enum": [
+        "feed",
+        "fetch",
+        "none"
+      ],
+      "title": "Full Text",
+      "type": "string"
+    },
+    "is_partial": {
+      "default": false,
+      "description": "пейволл: храним только заголовок и лид",
+      "title": "Is Partial",
+      "type": "boolean"
+    },
+    "official": {
+      "default": false,
+      "description": "официальный источник: одного достаточно для «подтверждено»",
+      "title": "Official",
+      "type": "boolean"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "audience": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Audience"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "kind",
+    "tier",
+    "weight"
+  ],
+  "title": "Source",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

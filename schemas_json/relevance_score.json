@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "Contribution": {
+      "additionalProperties": false,
+      "properties": {
+        "factor": {
+          "title": "Factor",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "client_features": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Client Features",
+          "type": "array"
+        },
+        "sign": {
+          "default": 0,
+          "enum": [
+            -1,
+            0,
+            1
+          ],
+          "title": "Sign",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "factor",
+        "value"
+      ],
+      "title": "Contribution",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "8. Значимость пары «сюжет × клиент (× роль)» с вкладами — основа «почему вы это видите».",
+  "properties": {
+    "story_id": {
+      "title": "Story Id",
+      "type": "string"
+    },
+    "company_id": {
+      "title": "Company Id",
+      "type": "string"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "enum": [
+            "owner",
+            "ceo",
+            "cfo",
+            "chief_accountant",
+            "treasurer",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
+    },
+    "score": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Score",
+      "type": "number"
+    },
+    "quality": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Quality",
+      "type": "number"
+    },
+    "freshness": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Freshness"
+    },
+    "contributions": {
+      "items": {
+        "$ref": "#/$defs/Contribution"
+      },
+      "title": "Contributions",
+      "type": "array"
+    },
+    "polarity": {
+      "default": "neutral",
+      "enum": [
+        "risk",
+        "opportunity",
+        "neutral",
+        "mixed"
+      ],
+      "title": "Polarity",
+      "type": "string"
+    },
+    "deep_analysis": {
+      "default": false,
+      "title": "Deep Analysis",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "story_id",
+    "company_id",
+    "score",
+    "quality"
+  ],
+  "title": "RelevanceScore",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

@@ -1,0 +1,35 @@
+import pytest
+from pydantic import ValidationError
+
+from newsai.fixtures import load_bundle
+from newsai.schemas import ALL_SCHEMAS, Claim, InsightCard
+
+
+def test_fixture_covers_every_schema():
+    bundle = load_bundle("rate_14")
+    assert set(bundle) == set(ALL_SCHEMAS)
+    assert all(bundle.values())
+
+
+def test_card_claim_refs_resolve():
+    card: InsightCard = load_bundle("rate_14")["insight_card"][0]
+    ids = {c.claim_id for c in card.claims}
+    for section in (card.what_happened, card.why_it_matters, card.consequences, card.bank_and_market):
+        assert set(section) <= ids
+    assert all(c.type == "fact" for c in card.claims if c.claim_id in card.what_happened)
+    assert all(c.type == "bank_view" for c in card.claims if c.claim_id in card.bank_and_market)
+
+
+def test_extra_fields_rejected():
+    with pytest.raises(ValidationError):
+        Claim.model_validate({"claim_id": "X", "type": "fact", "text": "t", "made_up": 1})
+
+
+def test_unknown_claim_type_rejected():
+    with pytest.raises(ValidationError):
+        Claim.model_validate({"claim_id": "X", "type": "opinion", "text": "t"})
+
+
+def test_json_schema_export():
+    for model in ALL_SCHEMAS.values():
+        assert model.model_json_schema()["type"] == "object"

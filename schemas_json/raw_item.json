@@ -1,0 +1,182 @@
+{
+  "additionalProperties": false,
+  "description": "2. Нормализованный материал из любой ленты. id = sha1(source_id:native_id).",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "native_id": {
+      "title": "Native Id",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "lead": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lead"
+    },
+    "text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Text"
+    },
+    "is_partial": {
+      "default": false,
+      "title": "Is Partial",
+      "type": "boolean"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "fetched_at": {
+      "format": "date-time",
+      "title": "Fetched At",
+      "type": "string"
+    },
+    "lang": {
+      "default": "ru",
+      "title": "Lang",
+      "type": "string"
+    },
+    "source_tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Tags",
+      "type": "array"
+    },
+    "priority": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Priority"
+    },
+    "fwd_from": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fwd From"
+    },
+    "attributed_to": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Attributed To"
+    },
+    "metrics": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "simhash": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Simhash"
+    },
+    "dropped_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "почему отсеяно: реклама, дайджест, служебное",
+      "title": "Dropped Reason"
+    }
+  },
+  "required": [
+    "id",
+    "source_id",
+    "native_id",
+    "title",
+    "published_at",
+    "fetched_at",
+    "content_hash"
+  ],
+  "title": "RawItem",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

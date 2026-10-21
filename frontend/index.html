@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AlfaAINews</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 860px; padding: 24px 16px; background: #fff; color: #111; }
+    li { margin: 8px 0; }
+    small { color: #666; }
+  </style>
+</head>
+<body>
+  <!-- Заглушка до интерфейса Разработчика 2: показывает, что сбор работает -->
+  <h1>Последние материалы</h1>
+  <ul id="items"><li>Загрузка…</li></ul>
+  <script>
+    fetch("http://localhost:8000/raw_items?limit=30")
+      .then(r => r.json())
+      .then(items => {
+        document.getElementById("items").innerHTML = items.map(i =>
+          `<li><a href="${i.url}" target="_blank" rel="noopener">${i.title}</a><br><small>${i.source_id} · ${i.published_at}</small></li>`
+        ).join("");
+      })
+      .catch(e => { document.getElementById("items").textContent = "Бэкенд недоступен: " + e; });
+  </script>
+</body>
+</html>

@@ -1,0 +1,453 @@
+{
+  "$defs": {
+    "ChannelImpact": {
+      "additionalProperties": false,
+      "description": "Воздействие на канал влияния (ставка, курс, нефть…). Знак — для отрасли, не для клиента.",
+      "properties": {
+        "channel": {
+          "description": "id канала из config/taxonomy.yaml",
+          "title": "Channel",
+          "type": "string"
+        },
+        "impact": {
+          "description": "−1…1: направление и сила воздействия",
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Impact",
+          "type": "number"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "enum": [
+                "days",
+                "weeks",
+                "months",
+                "quarters",
+                "years"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "channel",
+        "impact"
+      ],
+      "title": "ChannelImpact",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Ссылка на фрагмент первоисточника. quote — дословная цитата, span — позиции в тексте.",
+      "properties": {
+        "source_id": {
+          "description": "raw_item id, bank chunk id 'doc#p3#c2' или 'csv:FIELD'",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Date"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "NumberFact": {
+      "additionalProperties": false,
+      "description": "Число из текста. Проверяется кодом: значение должно быть в цитате.",
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "'%', 'руб', 'млрд руб', 'USD/т', 'б.п.'",
+          "title": "Unit"
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "up",
+                "down",
+                "flat",
+                "level"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Direction"
+        },
+        "period": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Period"
+        },
+        "quote": {
+          "title": "Quote",
+          "type": "string"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "value",
+        "quote"
+      ],
+      "title": "NumberFact",
+      "type": "object"
+    },
+    "Participant": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "default": "other",
+          "enum": [
+            "actor",
+            "target",
+            "regulator",
+            "counterparty",
+            "other"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "entity_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "ORG",
+                "PER",
+                "LOC",
+                "GOV"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity Type"
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity Id"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Participant",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "4. Структурированное событие сюжета. Каждое поле подкреплено цитатой.",
+  "properties": {
+    "story_id": {
+      "title": "Story Id",
+      "type": "string"
+    },
+    "event_type": {
+      "description": "тип из config/taxonomy.yaml",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "fact",
+        "announced",
+        "planned",
+        "rumor",
+        "forecast"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "summary_evidence": {
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "title": "Summary Evidence",
+      "type": "array"
+    },
+    "participants": {
+      "items": {
+        "$ref": "#/$defs/Participant"
+      },
+      "title": "Participants",
+      "type": "array"
+    },
+    "numbers": {
+      "items": {
+        "$ref": "#/$defs/NumberFact"
+      },
+      "title": "Numbers",
+      "type": "array"
+    },
+    "event_date": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Event Date"
+    },
+    "effective_date": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective Date"
+    },
+    "geography": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Geography",
+      "type": "array"
+    },
+    "sectors_okved": {
+      "description": "2-значные коды ОКВЭД",
+      "items": {
+        "type": "string"
+      },
+      "title": "Sectors Okved",
+      "type": "array"
+    },
+    "commodities": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Commodities",
+      "type": "array"
+    },
+    "currencies": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Currencies",
+      "type": "array"
+    },
+    "channels": {
+      "items": {
+        "$ref": "#/$defs/ChannelImpact"
+      },
+      "title": "Channels",
+      "type": "array"
+    },
+    "is_rumor": {
+      "default": false,
+      "title": "Is Rumor",
+      "type": "boolean"
+    },
+    "is_intent": {
+      "default": false,
+      "title": "Is Intent",
+      "type": "boolean"
+    },
+    "contradictions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Contradictions",
+      "type": "array"
+    },
+    "extractor_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Extractor Model"
+    },
+    "unverified_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Unverified Fields",
+      "type": "array"
+    }
+  },
+  "required": [
+    "story_id",
+    "event_type",
+    "status",
+    "summary"
+  ],
+  "title": "EventFacts",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

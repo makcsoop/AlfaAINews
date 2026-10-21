@@ -1,0 +1,118 @@
+{
+  "additionalProperties": false,
+  "description": "3. Сюжет: склейка материалов об одном событии (окно 72 ч).",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "event_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Event Type"
+    },
+    "status": {
+      "default": "single",
+      "enum": [
+        "single",
+        "rumor",
+        "unconfirmed",
+        "confirmed",
+        "contradictory"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "item_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Item Ids",
+      "type": "array"
+    },
+    "independent_sources": {
+      "description": "без перепечаток (SimHash) и пересылок",
+      "minimum": 0,
+      "title": "Independent Sources",
+      "type": "integer"
+    },
+    "source_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Ids",
+      "type": "array"
+    },
+    "first_seen": {
+      "format": "date-time",
+      "title": "First Seen",
+      "type": "string"
+    },
+    "last_seen": {
+      "format": "date-time",
+      "title": "Last Seen",
+      "type": "string"
+    },
+    "first_source_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Source Id"
+    },
+    "entities": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "quality": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "пре-ранжирование: вес источника, подтверждения, новизна",
+      "title": "Quality"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "item_ids",
+    "independent_sources",
+    "first_seen",
+    "last_seen"
+  ],
+  "title": "Story",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

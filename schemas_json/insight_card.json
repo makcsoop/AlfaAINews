@@ -1,0 +1,577 @@
+{
+  "$defs": {
+    "Action": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "analysis_question",
+            "scenario",
+            "bank_product"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "is_advertising": {
+          "default": false,
+          "title": "Is Advertising",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "title": "Action",
+      "type": "object"
+    },
+    "CardEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "story_id": {
+          "title": "Story Id",
+          "type": "string"
+        },
+        "event_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Type"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "first_seen": {
+          "format": "date-time",
+          "title": "First Seen",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/StorySource"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "independent_sources": {
+          "title": "Independent Sources",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "story_id",
+        "event_type",
+        "status",
+        "title",
+        "first_seen",
+        "sources",
+        "independent_sources"
+      ],
+      "title": "CardEvent",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "description": "10. Утверждение карточки с меткой и обоснованием.",
+      "properties": {
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "fact",
+            "bank_view",
+            "model_inference",
+            "bank_offer"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "based_on": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "facts / bank_views / client_features, на которые опирается вывод",
+          "title": "Based On",
+          "type": "object"
+        },
+        "polarity": {
+          "anyOf": [
+            {
+              "enum": [
+                "risk",
+                "opportunity",
+                "neutral",
+                "mixed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Polarity"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "verified": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "title": "Verified",
+          "type": "object"
+        },
+        "is_advertising": {
+          "default": false,
+          "title": "Is Advertising",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "claim_id",
+        "type",
+        "text"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "Contribution": {
+      "additionalProperties": false,
+      "properties": {
+        "factor": {
+          "title": "Factor",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "client_features": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Client Features",
+          "type": "array"
+        },
+        "sign": {
+          "default": 0,
+          "enum": [
+            -1,
+            0,
+            1
+          ],
+          "title": "Sign",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "factor",
+        "value"
+      ],
+      "title": "Contribution",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Ссылка на фрагмент первоисточника. quote — дословная цитата, span — позиции в тексте.",
+      "properties": {
+        "source_id": {
+          "description": "raw_item id, bank chunk id 'doc#p3#c2' или 'csv:FIELD'",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Date"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "RelevanceScore": {
+      "additionalProperties": false,
+      "description": "8. Значимость пары «сюжет × клиент (× роль)» с вкладами — основа «почему вы это видите».",
+      "properties": {
+        "story_id": {
+          "title": "Story Id",
+          "type": "string"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "enum": [
+                "owner",
+                "ceo",
+                "cfo",
+                "chief_accountant",
+                "treasurer",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "quality": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Quality",
+          "type": "number"
+        },
+        "freshness": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness"
+        },
+        "contributions": {
+          "items": {
+            "$ref": "#/$defs/Contribution"
+          },
+          "title": "Contributions",
+          "type": "array"
+        },
+        "polarity": {
+          "default": "neutral",
+          "enum": [
+            "risk",
+            "opportunity",
+            "neutral",
+            "mixed"
+          ],
+          "title": "Polarity",
+          "type": "string"
+        },
+        "deep_analysis": {
+          "default": false,
+          "title": "Deep Analysis",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "story_id",
+        "company_id",
+        "score",
+        "quality"
+      ],
+      "title": "RelevanceScore",
+      "type": "object"
+    },
+    "StorySource": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "tier": {
+          "title": "Tier",
+          "type": "integer"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "source_id",
+        "tier"
+      ],
+      "title": "StorySource",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "11. Персональная карточка: 6 вопросов ТЗ + что изменит вывод.",
+  "properties": {
+    "card_id": {
+      "title": "Card Id",
+      "type": "string"
+    },
+    "company_id": {
+      "title": "Company Id",
+      "type": "string"
+    },
+    "user_role": {
+      "enum": [
+        "owner",
+        "ceo",
+        "cfo",
+        "chief_accountant",
+        "treasurer",
+        "other"
+      ],
+      "title": "User Role",
+      "type": "string"
+    },
+    "event": {
+      "$ref": "#/$defs/CardEvent"
+    },
+    "relevance": {
+      "$ref": "#/$defs/RelevanceScore"
+    },
+    "what_happened": {
+      "description": "claim_id типа fact",
+      "items": {
+        "type": "string"
+      },
+      "title": "What Happened",
+      "type": "array"
+    },
+    "why_it_matters": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Why It Matters",
+      "type": "array"
+    },
+    "consequences": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Consequences",
+      "type": "array"
+    },
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/Action"
+      },
+      "title": "Actions",
+      "type": "array"
+    },
+    "bank_and_market": {
+      "description": "claim_id bank_view и консенсус рынка",
+      "items": {
+        "type": "string"
+      },
+      "title": "Bank And Market",
+      "type": "array"
+    },
+    "what_would_change": {
+      "items": {
+        "type": "string"
+      },
+      "title": "What Would Change",
+      "type": "array"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "confidence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "Confidence",
+      "type": "string"
+    },
+    "confidence_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Confidence Reasons",
+      "type": "array"
+    },
+    "review_status": {
+      "default": "published",
+      "enum": [
+        "published",
+        "on_review"
+      ],
+      "title": "Review Status",
+      "type": "string"
+    },
+    "trace_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Id"
+    }
+  },
+  "required": [
+    "card_id",
+    "company_id",
+    "user_role",
+    "event",
+    "relevance",
+    "what_happened",
+    "why_it_matters",
+    "consequences",
+    "claims",
+    "confidence"
+  ],
+  "title": "InsightCard",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

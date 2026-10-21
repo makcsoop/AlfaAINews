@@ -1,0 +1,73 @@
+name: alfa-ai-news
+
+x-app: &app
+  build: .
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-newsai}:${POSTGRES_PASSWORD:-newsai}@db:5432/${POSTGRES_DB:-newsai}
+    REDIS_URL: redis://redis:6379/0
+  volumes:
+    - ./data:/app/data
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-newsai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-newsai}
+      POSTGRES_DB: ${POSTGRES_DB:-newsai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-newsai} -d ${POSTGRES_DB:-newsai}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # Однократно: таблицы, расширение vector, CSV кейса и фикстура «ставка 14%»
+  init:
+    <<: *app
+    command: ["python", "-m", "newsai.db.init", "--load-case", "--load-fixtures"]
+    restart: "no"
+
+  backend:
+    <<: *app
+    ports:
+      - "8000:8000"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  ingest:
+    <<: *app
+    command: ["python", "-m", "newsai.ingest.run"]
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  frontend:
+    image: nginx:1.27-alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

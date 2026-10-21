@@ -1,0 +1,204 @@
+{
+  "$defs": {
+    "Counterparty": {
+      "additionalProperties": false,
+      "properties": {
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "supplier",
+            "buyer"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "share": {
+          "description": "доля в платежах клиента по этому направлению",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Share",
+          "type": "number"
+        },
+        "pay_amt": {
+          "title": "Pay Amt",
+          "type": "number"
+        },
+        "pay_cnt": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pay Cnt"
+        },
+        "okved_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Okved Code"
+        },
+        "sector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sector"
+        },
+        "same_group": {
+          "default": false,
+          "title": "Same Group",
+          "type": "boolean"
+        },
+        "via_person": {
+          "default": false,
+          "title": "Via Person",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "company_id",
+        "direction",
+        "share",
+        "pay_amt"
+      ],
+      "title": "Counterparty",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "6. Топ-контрагенты, их отрасли, доли и концентрация (HHI) по направлениям.",
+  "properties": {
+    "company_id": {
+      "title": "Company Id",
+      "type": "string"
+    },
+    "suppliers": {
+      "items": {
+        "$ref": "#/$defs/Counterparty"
+      },
+      "title": "Suppliers",
+      "type": "array"
+    },
+    "buyers": {
+      "items": {
+        "$ref": "#/$defs/Counterparty"
+      },
+      "title": "Buyers",
+      "type": "array"
+    },
+    "hhi_suppliers": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hhi Suppliers"
+    },
+    "hhi_buyers": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hhi Buyers"
+    },
+    "top_supplier_share": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Top Supplier Share"
+    },
+    "top_buyer_share": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Top Buyer Share"
+    },
+    "sector_shares_suppliers": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Sector Shares Suppliers",
+      "type": "object"
+    },
+    "sector_shares_buyers": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Sector Shares Buyers",
+      "type": "object"
+    },
+    "group_members": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Group Members",
+      "type": "array"
+    },
+    "linked_via_persons": {
+      "description": "гипотеза «скрытой группы»",
+      "items": {
+        "type": "string"
+      },
+      "title": "Linked Via Persons",
+      "type": "array"
+    },
+    "high_dependency": {
+      "default": false,
+      "title": "High Dependency",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "company_id"
+  ],
+  "title": "CounterpartyGraph",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

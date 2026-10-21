@@ -1,0 +1,150 @@
+{
+  "additionalProperties": false,
+  "description": "7. Атомарная позиция ЦМИ Альфа-Банка. Цитата сверяется с PDF кодом.",
+  "properties": {
+    "id": {
+      "description": "'{doc_id}#p{page}#c{n}'",
+      "title": "Id",
+      "type": "string"
+    },
+    "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+    },
+    "doc_title": {
+      "title": "Doc Title",
+      "type": "string"
+    },
+    "doc_date": {
+      "format": "date",
+      "title": "Doc Date",
+      "type": "string"
+    },
+    "page": {
+      "title": "Page",
+      "type": "integer"
+    },
+    "thesis": {
+      "title": "Thesis",
+      "type": "string"
+    },
+    "channel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Channel"
+    },
+    "stance": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "знак ожидания по каналу",
+      "title": "Stance"
+    },
+    "forecast_value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Forecast Value"
+    },
+    "forecast_unit": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Forecast Unit"
+    },
+    "forecast_horizon": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Forecast Horizon"
+    },
+    "quote": {
+      "title": "Quote",
+      "type": "string"
+    },
+    "quote_verified": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quote Verified"
+    },
+    "valid_until": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "срок актуальности позиции",
+      "title": "Valid Until"
+    },
+    "superseded_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "id сюжета, который сделал позицию устаревшей",
+      "title": "Superseded By"
+    }
+  },
+  "required": [
+    "id",
+    "doc_id",
+    "doc_title",
+    "doc_date",
+    "page",
+    "thesis",
+    "quote"
+  ],
+  "title": "BankPosition",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

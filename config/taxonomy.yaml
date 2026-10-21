@@ -1,0 +1,46 @@
+# Стартовая таксономия: каналы влияния и типы событий.
+# Полная версия (30 каналов, 40 типов) лежит в рабочей папке — заменить этим файлом без правки кода.
+
+channels:
+  rate_cost:        {name: "Стоимость заёмных средств (ключевая ставка, RUONIA)"}
+  deposit_yield:    {name: "Доходность размещения ликвидности"}
+  fx_rub:           {name: "Курс рубля (USD, EUR, CNY)"}
+  oil_gas:          {name: "Нефть и газ"}
+  metals:           {name: "Металлы"}
+  agro:             {name: "Агросырьё"}
+  gold:             {name: "Золото"}
+  consumer_demand:  {name: "Потребительский спрос"}
+  labor_market:     {name: "Рынок труда и зарплаты"}
+  construction:     {name: "Стройка и ипотека"}
+  tariffs_sanctions: {name: "Пошлины и санкции"}
+  logistics:        {name: "Логистика и платежи ВЭД"}
+  taxes_regulation: {name: "Налоги и регулирование"}
+  public_procurement: {name: "Госзаказ и господдержка"}
+  inflation:        {name: "Инфляция и издержки"}
+
+event_types:
+  rate_decision:        {channels: [rate_cost, deposit_yield, fx_rub]}
+  monetary_signal:      {channels: [rate_cost, deposit_yield]}
+  fx_move:              {channels: [fx_rub]}
+  fx_control:           {channels: [fx_rub, logistics]}
+  inflation_data:       {channels: [inflation, rate_cost, consumer_demand]}
+  macro_data:           {channels: [consumer_demand, labor_market]}
+  tax_change_adopted:   {channels: [taxes_regulation]}
+  tax_change_proposed:  {channels: [taxes_regulation]}
+  regulation_adopted:   {channels: [taxes_regulation]}
+  regulation_proposed:  {channels: [taxes_regulation]}
+  tariff_duty:          {channels: [tariffs_sanctions]}
+  sanctions:            {channels: [tariffs_sanctions, logistics, fx_rub]}
+  commodity_price:      {channels: [oil_gas, metals, agro, gold]}
+  supply_disruption:    {channels: [logistics]}
+  corporate_results:    {channels: []}
+  m_and_a:              {channels: []}
+  default_bankruptcy:   {channels: []}
+  rating_action:        {channels: []}
+  state_support:        {channels: [public_procurement]}
+  public_procurement:   {channels: [public_procurement]}
+  labor_policy:         {channels: [labor_market]}
+  budget_policy:        {channels: [taxes_regulation, public_procurement]}
+  ofz_auction:          {channels: [rate_cost, deposit_yield]}
+  energy_policy:        {channels: [oil_gas]}
+  other:                {channels: []}

@@ -1,0 +1,207 @@
+{
+  "$defs": {
+    "ChannelImpact": {
+      "additionalProperties": false,
+      "description": "Воздействие на канал влияния (ставка, курс, нефть…). Знак — для отрасли, не для клиента.",
+      "properties": {
+        "channel": {
+          "description": "id канала из config/taxonomy.yaml",
+          "title": "Channel",
+          "type": "string"
+        },
+        "impact": {
+          "description": "−1…1: направление и сила воздействия",
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Impact",
+          "type": "number"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "enum": [
+                "days",
+                "weeks",
+                "months",
+                "quarters",
+                "years"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "channel",
+        "impact"
+      ],
+      "title": "ChannelImpact",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Ссылка на фрагмент первоисточника. quote — дословная цитата, span — позиции в тексте.",
+      "properties": {
+        "source_id": {
+          "description": "raw_item id, bank chunk id 'doc#p3#c2' или 'csv:FIELD'",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Date"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "9. Отчёт независимого аналитика (бизнес / финансы) по паре «сюжет × отрасль».",
+  "properties": {
+    "story_id": {
+      "title": "Story Id",
+      "type": "string"
+    },
+    "sector": {
+      "title": "Sector",
+      "type": "string"
+    },
+    "analyst": {
+      "enum": [
+        "business",
+        "finance"
+      ],
+      "title": "Analyst",
+      "type": "string"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "channels": {
+      "items": {
+        "$ref": "#/$defs/ChannelImpact"
+      },
+      "title": "Channels",
+      "type": "array"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "open_questions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Open Questions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "story_id",
+    "sector",
+    "analyst",
+    "model",
+    "channels",
+    "summary"
+  ],
+  "title": "AnalystReport",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

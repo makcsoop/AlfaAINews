@@ -1,0 +1,184 @@
+{
+  "$defs": {
+    "LlmCall": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        },
+        "prompt_hash": {
+          "title": "Prompt Hash",
+          "type": "string"
+        },
+        "tokens_in": {
+          "title": "Tokens In",
+          "type": "integer"
+        },
+        "tokens_out": {
+          "title": "Tokens Out",
+          "type": "integer"
+        },
+        "cost_rub": {
+          "title": "Cost Rub",
+          "type": "number"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "cached": {
+          "default": false,
+          "title": "Cached",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "purpose",
+        "prompt_hash",
+        "tokens_in",
+        "tokens_out",
+        "cost_rub",
+        "at"
+      ],
+      "title": "LlmCall",
+      "type": "object"
+    },
+    "ToolCall": {
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "result_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Hash"
+        },
+        "ok": {
+          "default": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "at"
+      ],
+      "title": "ToolCall",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "12. Журнал разбора: шаги, инструменты, вызовы моделей, итог проверки и стоимость.",
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "story_id": {
+      "title": "Story Id",
+      "type": "string"
+    },
+    "company_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company Id"
+    },
+    "steps": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "tool_calls": {
+      "items": {
+        "$ref": "#/$defs/ToolCall"
+      },
+      "title": "Tool Calls",
+      "type": "array"
+    },
+    "llm_calls": {
+      "items": {
+        "$ref": "#/$defs/LlmCall"
+      },
+      "title": "Llm Calls",
+      "type": "array"
+    },
+    "verify_rounds": {
+      "default": 0,
+      "title": "Verify Rounds",
+      "type": "integer"
+    },
+    "verify_failures": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Verify Failures",
+      "type": "array"
+    },
+    "cost_rub": {
+      "default": 0.0,
+      "title": "Cost Rub",
+      "type": "number"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    }
+  },
+  "required": [
+    "run_id",
+    "story_id",
+    "started_at"
+  ],
+  "title": "RunTrace",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

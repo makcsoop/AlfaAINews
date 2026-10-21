@@ -1,0 +1,189 @@
+{
+  "$defs": {
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Ссылка на фрагмент первоисточника. quote — дословная цитата, span — позиции в тексте.",
+      "properties": {
+        "source_id": {
+          "description": "raw_item id, bank chunk id 'doc#p3#c2' или 'csv:FIELD'",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Date"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
+          "title": "Verified"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "10. Утверждение карточки с меткой и обоснованием.",
+  "properties": {
+    "claim_id": {
+      "title": "Claim Id",
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "fact",
+        "bank_view",
+        "model_inference",
+        "bank_offer"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "based_on": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "facts / bank_views / client_features, на которые опирается вывод",
+      "title": "Based On",
+      "type": "object"
+    },
+    "polarity": {
+      "anyOf": [
+        {
+          "enum": [
+            "risk",
+            "opportunity",
+            "neutral",
+            "mixed"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Polarity"
+    },
+    "horizon": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Horizon"
+    },
+    "verified": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "title": "Verified",
+      "type": "object"
+    },
+    "is_advertising": {
+      "default": false,
+      "title": "Is Advertising",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "claim_id",
+    "type",
+    "text"
+  ],
+  "title": "Claim",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}

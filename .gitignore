@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.env
+*.session
+*.session-journal
+data/case/*.csv
+data/telegram/
+data/raw/
+node_modules/
+.DS_Store

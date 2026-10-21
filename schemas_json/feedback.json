@@ -1,0 +1,78 @@
+{
+  "additionalProperties": false,
+  "description": "13. Обратная связь пользователя или эксперта.",
+  "properties": {
+    "card_id": {
+      "title": "Card Id",
+      "type": "string"
+    },
+    "user_role": {
+      "anyOf": [
+        {
+          "enum": [
+            "owner",
+            "ceo",
+            "cfo",
+            "chief_accountant",
+            "treasurer",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "User Role"
+    },
+    "kind": {
+      "enum": [
+        "useful",
+        "not_relevant",
+        "wrong",
+        "expert_edit",
+        "click_source"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "comment": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Comment"
+    },
+    "claim_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Claim Id"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "card_id",
+    "kind",
+    "at"
+  ],
+  "title": "Feedback",
+  "type": "object",
+  "$comment": "newsai schema 0.1.0"
+}
