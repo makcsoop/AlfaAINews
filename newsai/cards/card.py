@@ -13,8 +13,8 @@ from newsai.cards.features import allowed_features
 from newsai.cards.llm_schema import CardDraft
 from newsai.cards.prompt import build_messages, prompt_version
 from newsai.cards.template import template_draft
-from newsai.cards.verify import CardCheck, verify_card
-from newsai.llm import BudgetExceeded, LLMClient, LLMUnavailable, get_client
+from newsai.cards.verify import CardCheck, CardFailure, verify_card
+from newsai.llm import BudgetExceeded, LLMClient, LLMUnavailable, data_block, get_client
 from newsai.schemas import (
     AnalystReport,
     CompanyProfile,
@@ -124,13 +124,21 @@ def write_card(
     )
 
 
-def retry_feedback(failures: Sequence[str]) -> str:
-    """Сообщение модели при перегенерации: что именно не прошло проверку кодом."""
-    lines = "\n".join(f"- {f}" for f in failures[:12])
+def retry_feedback(failures: Sequence[CardFailure | str]) -> str:
+    """Сообщение модели при перегенерации: только коды провалов и claim_id, без фрагментов текста.
+
+    Перечень идёт в блоке данных: идентификаторы пришли из ответа модели и инструкцией не считаются.
+    """
+    def short(f: CardFailure | str) -> str:
+        if isinstance(f, str):  # «код [claim_id]: подробности» -> «код [claim_id]»
+            return f.partition(": ")[0][:80]
+        return f.code + (f" [{f.claim_id}]" if f.claim_id else "")
+
+    lines = "\n".join(f"- {short(f)}" for f in failures[:12])
     return (
         "Предыдущий черновик не прошёл проверку кодом. Исправь только перечисленное, остальные правила "
-        "прежние: числа и даты бери дословно из цитат досье, позицию банка пиши только в bank_and_market.\n"
-        + lines
+        "прежние: числа и даты бери дословно из цитат досье, позицию банка пиши только в bank_and_market. "
+        "Коды провалов:\n" + data_block(lines)
     )
 
 
@@ -185,7 +193,7 @@ def write_verified_card(
         failures = check.messages()
         regens = 1
         retry_key = f"{key}_retry" if _fixture_exists(cl, f"{key}_retry") else key
-        second = write_card(fixture_key=retry_key, feedback=retry_feedback(failures), **kw)
+        second = write_card(fixture_key=retry_key, feedback=retry_feedback(check.failures), **kw)
         cost, tin, tout = cost + second.cost_rub, tin + second.tokens_in, tout + second.tokens_out
         if second.source == "llm":
             check2 = check_result(second, **chk)

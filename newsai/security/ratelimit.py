@@ -16,11 +16,13 @@ class RateLimiter:
 
     @staticmethod
     def key_of(session: Session) -> str:
-        return f"{session.company_id}|{session.user_id}|{session.expires_at}"
+        return f"{session.company_id}|{session.user_id}"
 
     def allow(self, key: str, now: float | None = None) -> bool:
         t = time.monotonic() if now is None else now
         with self._lock:
+            for k in [k for k, q in self._hits.items() if not q or q[-1] <= t - self.window_s]:
+                del self._hits[k]  # окно прошло целиком: очередь больше не нужна
             hits = self._hits[key]
             while hits and hits[0] <= t - self.window_s:
                 hits.popleft()

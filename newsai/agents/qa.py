@@ -6,9 +6,9 @@
 числа из цитат, отсутствие чужих идентификаторов и сумм платежей.
 """
 
-import json
 import logging
 import re
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from newsai.agents.dossier import Dossier, DossierItem
 from newsai.agents.planner import items_from_result, story_and_fact_items
 from newsai.agents.tools import FixtureDataSource, ToolContext, ToolDataSource, ToolError, run_tool
+from newsai.cards.verify import _norm_number, _Pool, extract_dates, extract_numbers
 from newsai.llm import BudgetExceeded, LLMClient, LLMUnavailable, data_block
 from newsai.schemas.common import BANK_SOURCE_PREFIX
 from newsai.schemas.insight import InsightCard
@@ -100,7 +101,7 @@ def build_messages(question: str, dossier: Dossier, role: str) -> list[dict[str,
 # --- отказ на чужую компанию ---------------------------------------------------------------------
 
 _COMPANY_ID = re.compile(r"(?<![\w])(U_[A-Za-z0-9_]+|SYNTHETIC_[A-Za-z0-9_]+)", re.IGNORECASE)
-_NUMERIC_UID = re.compile(r"(?<!\d)(\d{8,})(?!\d)")
+# длинное число — идентификатор, только если рядом маркер id; сумма или ИНН-подобное число без маркера — нет
 _UID_WITH_WORD = re.compile(r"(?:uid|\bid\b|инн|клиент\w*|компани\w*)\W{0,4}(\d{5,})", re.IGNORECASE)
 _OTHER_COMPANY = re.compile(
     r"(?:друг\w+|чуж\w+|иной|иных|остальн\w+|конкурент\w*)\s+(?:\S+\s+){0,2}?"
@@ -122,7 +123,7 @@ def foreign_company_mentions(question: str, own_company_id: str) -> list[str]:
     for m in _COMPANY_ID.finditer(question):
         if m.group(1).upper() != own:
             found.append(m.group(1))
-    for rx in (_NUMERIC_UID, _UID_WITH_WORD):
+    for rx in (_UID_WITH_WORD,):
         for m in rx.finditer(question):
             if m.group(1) != own_company_id:
                 found.append(m.group(1))
@@ -291,62 +292,88 @@ def build_context(
 
 # --- проверка ответа -----------------------------------------------------------------------------
 
-_NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _MONEY = re.compile(r"\d[\d\s.,]*\s*(?:млн|млрд|трлн|тыс)?\.?\s*(?:₽|руб)", re.IGNORECASE)
 _PAY_WORDS = re.compile(r"pay_amt|pay_cnt|company_id", re.IGNORECASE)
 
 
-def _numbers(text: str) -> set[float]:
-    out: set[float] = set()
-    for m in _NUM.findall(text):
+def _cited_pool(refs: list[str], dossier: Dossier, *, with_profile: bool) -> _Pool:
+    """Числа и даты из элементов, на которые ссылается утверждение, и из их доказательств.
+
+    Для вывода модели (`with_profile`) опорой служат ещё признаки компании. Доли 0.35 и проценты 35%
+    считаются одним числом.
+    """
+    pool = _Pool()
+    seen: set[str] = set()
+
+    def add(item_id: str) -> None:
+        item = dossier.get(item_id)
+        if item is None or item_id in seen:
+            return
+        seen.add(item_id)
+        pool.add_item(item)
+        for ev in item.data.get("evidence", []) if item.data.get("claim_type") else []:
+            add(ev)
+
+    for r in refs:
+        add(r)
+    if with_profile:
+        add("profile:self")
+    for n in list(pool.numbers):
         try:
-            v = float(m.replace(",", "."))
-        except ValueError:
+            v = Decimal(n)
+        except InvalidOperation:
             continue
-        out.add(v)
-        if 0 < v <= 1:
-            out.add(round(v * 100, 6))  # доли в данных (0.35) и проценты в тексте (35%)
-    return out
+        if 0 < v <= 1 and (pct := _norm_number(str(v * 100))) is not None:
+            pool.numbers.add(pct)
+    return pool
 
 
-def _item_text(item: DossierItem) -> str:
-    return f"{item.title} {item.text} {json.dumps(item.data, ensure_ascii=False, default=str)}"
-
-
-def _forbidden_content(text: str, session: Session, dossier_text: str) -> bool:
-    """Чужие идентификаторы, служебные имена полей и суммы платежей, которых нет в досье."""
+def _forbidden_content(text: str, session: Session, pool: _Pool) -> bool:
+    """Чужие идентификаторы, служебные имена полей и суммы платежей без подтверждения в ссылках."""
     if foreign_company_mentions(text, session.company_id) or _PAY_WORDS.search(text):
         return True
-    known = _numbers(dossier_text)
-    for m in _MONEY.finditer(text):
-        glued = re.sub(r"(?<=\d)[\s ](?=\d)", "", m.group(0))  # «5 200 000» -> «5200000»
-        if not _numbers(glued) <= known:
-            return True
-    return False
+    return any(not extract_numbers(m.group(0)) <= pool.numbers for m in _MONEY.finditer(text))
+
+
+def _claim_type(item: DossierItem) -> str | None:
+    t = item.data.get("claim_type")
+    return t if isinstance(t, str) else None
+
+
+def _backs_opinion(item: DossierItem, prefix: str, claim_type: str) -> bool:
+    """Ссылка годится для мнения: сам материал с нужным префиксом или утверждение карточки того же типа
+    с доказательствами только такого префикса."""
+    if item.id.startswith(prefix):
+        return True
+    evidence = item.data.get("evidence") or []
+    return _claim_type(item) == claim_type and bool(evidence) and all(e.startswith(prefix) for e in evidence)
 
 
 def verify_statements(
     statements: list[QAStatement], dossier: Dossier, session: Session
 ) -> list[QAStatement]:
-    """Оставляет только утверждения со ссылками из досье, правильной меткой и числами из досье."""
+    """Оставляет утверждения со ссылками из досье, правильной меткой и числами/датами из этих ссылок."""
     kept: list[QAStatement] = []
-    all_text = " ".join(_item_text(i) for i in dossier.items)
     for st in statements[:MAX_STATEMENTS]:
         refs = list(dict.fromkeys(st.refs))
-        if not refs or any(dossier.get(r) is None for r in refs):
+        items = [dossier.get(r) for r in refs]
+        if not refs or any(i is None for i in items):
             continue
-        if st.kind == "bank_view" and not all(r.startswith(BANK_SOURCE_PREFIX) for r in refs):
+        cited = [i for i in items if i is not None]
+        opinion = {"bank_view": BANK_SOURCE_PREFIX, "market_view": MARKET_PREFIX}.get(st.kind)
+        if opinion and not all(_backs_opinion(i, opinion, st.kind) for i in cited):
             continue
-        if st.kind == "market_view" and not all(r.startswith(MARKET_PREFIX) for r in refs):
+        if st.kind == "fact" and any(
+            r.startswith((BANK_SOURCE_PREFIX, MARKET_PREFIX)) or _claim_type(i) not in (None, "fact")
+            for r, i in zip(refs, cited, strict=True)
+        ):
+            continue  # факт, опирающийся на мнение банка, рынка или вывод модели, — это не факт
+        pool = _cited_pool(refs, dossier, with_profile=st.kind == "model_inference")
+        if _forbidden_content(st.text, session, pool):
             continue
-        if st.kind == "fact" and any(r.startswith((BANK_SOURCE_PREFIX, MARKET_PREFIX)) for r in refs):
-            continue  # факт, опирающийся на мнение банка или рынка, — это не факт
-        if _forbidden_content(st.text, session, all_text):
+        dates, rest = extract_dates(st.text)
+        if not all(pool.has_date(d) for d in dates) or not extract_numbers(rest) <= pool.numbers:
             continue
-        if st.kind != "model_inference":
-            cited = " ".join(_item_text(dossier.get(r)) for r in refs if dossier.get(r))  # type: ignore[arg-type]
-            if not _numbers(st.text) <= _numbers(cited):
-                continue
         kept.append(st.model_copy(update={"refs": refs}))
     return kept
 

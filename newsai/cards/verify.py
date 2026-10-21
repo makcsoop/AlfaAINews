@@ -231,13 +231,17 @@ def verify_card(
                 elif ref not in by_id:
                     fail("unknown_claim", f"based_on[{key}]: нет утверждения {ref!r}", c.claim_id)
 
-        # (b) метка и источник
+        # (b) метка и источник: мнение банка и рынка — только с собственными доказательствами
         if c.type == "bank_view":
+            if not c.evidence:
+                fail("bank_view_source", "позиция банка без evidence на материал ЦМИ", c.claim_id)
             for ev in c.evidence:
                 item = dossier.get(ev.source_id)
                 if not ev.source_id.startswith(BANK_SOURCE_PREFIX) or (item and item.kind != "bank_position"):
                     fail("bank_view_source", f"позиция банка ссылается на {ev.source_id!r}", c.claim_id)
         elif c.type == "market_view":
+            if not c.evidence:
+                fail("market_view_source", "мнение рынка без evidence на знание рынка", c.claim_id)
             for ev in c.evidence:
                 item = dossier.get(ev.source_id)
                 if (
@@ -246,18 +250,21 @@ def verify_card(
                     or item.kind != "market_knowledge"
                 ):
                     fail("market_view_source", f"мнение рынка ссылается на {ev.source_id!r}", c.claim_id)
+        elif c.type == "fact":
+            for ev in c.evidence:
+                if ev.source_id.startswith((BANK_SOURCE_PREFIX, MARKET_SOURCE_PREFIX)):
+                    fail("fact_opinion_source", f"факт ссылается на мнение {ev.source_id!r}", c.claim_id)
 
-        # (c) числа и даты
-        if c.type != "bank_offer":
-            pool = _claim_pool(c, by_id, dossier)
-            dates, rest = extract_dates(c.text)
-            for key in sorted(dates, key=str):
-                if not pool.has_date(key):
-                    d, m, y = key
-                    fail("date_not_in_source", f"дата {d:02d}.{m:02d}{f'.{y}' if y else ''}", c.claim_id)
-            for n in sorted(extract_numbers(rest)):
-                if n not in pool.numbers:
-                    fail("number_not_in_source", f"число {n} не найдено в цитатах и данных", c.claim_id)
+        # (c) числа и даты (и в тексте предложения банка тоже)
+        pool = _claim_pool(c, by_id, dossier)
+        dates, rest = extract_dates(c.text)
+        for key in sorted(dates, key=str):
+            if not pool.has_date(key):
+                d, m, y = key
+                fail("date_not_in_source", f"дата {d:02d}.{m:02d}{f'.{y}' if y else ''}", c.claim_id)
+        for n in sorted(extract_numbers(rest)):
+            if n not in pool.numbers:
+                fail("number_not_in_source", f"число {n} не найдено в цитатах и данных", c.claim_id)
 
         # (d) голос банка вне bank_view
         if c.type != "bank_view" and _BANK_VOICE.search(c.text):
@@ -299,9 +306,13 @@ def verify_card(
     offers = [c for c in card.claims if c.type == "bank_offer"]
     if len(offers) > 1:
         fail("offer_many", "в карточке больше одного предложения банка")
-    if offers and profile is not None:
-        trigger = find_offer(
-            profile=profile, relevance=card.relevance, analyses=analyses, story_status=card.event.status
+    if offers:
+        trigger = (
+            None
+            if profile is None  # без признаков компании триггер не сверить: предложение не подтверждено
+            else find_offer(
+                profile=profile, relevance=card.relevance, analyses=analyses, story_status=card.event.status
+            )
         )
         if trigger is None or trigger.text != offers[0].text:
             fail("offer_no_trigger", "предложение банка без сработавшего триггера", offers[0].claim_id)

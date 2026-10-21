@@ -131,8 +131,9 @@ class _Source:
             self.dates |= d
             self.values += [v for _, v, _ in n]
 
-    def has_number(self, value: float, decimals: int) -> bool:
-        return any(abs(v - value) < 1e-9 or round(v, decimals) == value for v in self.values)
+    def has_number(self, value: float, decimals: int = 0) -> bool:
+        """Точное совпадение после нормализации: «14,0» = «14» = «14%», но 14 ≠ 14,2."""
+        return any(abs(v - value) < 1e-9 for v in self.values)
 
     def has_date(self, d: tuple[int, int, int | None]) -> bool:
         return any(s[:2] == d[:2] and (s[2] is None or d[2] is None or s[2] == d[2]) for s in self.dates)
@@ -276,11 +277,12 @@ def critique(
                 )
 
         summary = res.report.summary
-        for tok in unsupported_numbers(summary, list(visible.values())):
+        own_refs = list(dict.fromkeys(r for v in views for r in v.refs if r in visible))
+        for tok in unsupported_numbers(summary, [visible[r] for r in own_refs]):
             fail(
                 NUMBER_UNVERIFIED,
                 analyst,
-                f"число или дата {tok} из сводки нет в досье",
+                f"число или дата {tok} из сводки нет в цитатах ссылок этого аналитика",
                 None,
                 f"найти материал с числом {tok}",
             )
