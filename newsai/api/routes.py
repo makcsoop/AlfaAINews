@@ -5,12 +5,14 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from newsai.agents.qa import answer_question
 from newsai.api.store import CardStore, get_store
 from newsai.llm import get_client
 from newsai.schemas.common import UserRole
 from newsai.schemas.insight import InsightCard, RunTrace
 from newsai.security.audit import AuditLog, get_audit
 from newsai.security.guard import audit_foreign, enforce_company, trace_id_of
+from newsai.security.ratelimit import ask_limiter
 from newsai.security.session import (
     COOKIE_NAME,
     Session,
@@ -63,8 +65,9 @@ class AskRequest(BaseModel):
 class AskResponse(BaseModel):
     answer: str
     refs: list[str] = Field(default_factory=list)
+    tools_used: list[str] = Field(default_factory=list)
     trace_id: str
-    status: Literal["stub"] = "stub"
+    status: Literal["ok", "refused", "degraded"] = "ok"
 
 
 @router.post("/session", response_model=LoginResponse, tags=["session"], summary="Демо-вход")
@@ -214,23 +217,31 @@ def trace_cost(
     "/ask",
     response_model=AskResponse,
     tags=["ask"],
-    summary="Вопрос по карточке (заглушка)",
-    responses={**ERRORS, 404: {"description": "Карточка не найдена"}},
+    summary="Вопрос по карточке и своей компании",
+    responses={
+        **ERRORS,
+        404: {"description": "Карточка не найдена"},
+        429: {"description": "Слишком много вопросов за минуту"},
+    },
 )
 def ask(
     body: AskRequest, request: Request, session: SessionDep, store: StoreDep, audit: AuditDep
 ) -> AskResponse:
-    """Заглушка до дня 4 (вопрос-ответ на DeepSeek). Компания берётся только из сессии."""
-    refs: list[str] = []
-    if body.card_id:
-        if store.get_card(body.card_id, session.company_id) is None:
-            owner = store.card_owner(body.card_id)
-            if owner is not None and owner != session.company_id:
-                audit_foreign(audit, request, session, owner)
-            raise HTTPException(status_code=404, detail="Карточка не найдена")
-        refs.append(body.card_id)
-    return AskResponse(
-        answer="Ответы на вопросы пока не подключены: это заглушка.",
-        refs=refs,
+    """Ответ по досье карточки и инструментам своей компании. Компания берётся только из сессии."""
+    if not ask_limiter.allow(ask_limiter.key_of(session)):
+        raise HTTPException(status_code=429, detail="Слишком много вопросов, попробуйте через минуту")
+    if body.card_id and store.get_card(body.card_id, session.company_id) is None:
+        owner = store.card_owner(body.card_id)
+        if owner is not None and owner != session.company_id:
+            audit_foreign(audit, request, session, owner)
+        raise HTTPException(status_code=404, detail="Карточка не найдена")
+    result = answer_question(
+        body.question,
+        session=session,
+        card_id=body.card_id,
+        store=store,
+        client=get_client(),
         trace_id=trace_id_of(request) or "",
+        audit=audit,
     )
+    return AskResponse(**result.model_dump(include={"answer", "refs", "tools_used", "status", "trace_id"}))

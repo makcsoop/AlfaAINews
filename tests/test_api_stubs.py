@@ -126,7 +126,7 @@ def test_ask_stub(client, audit):
     r = client.post("/ask", json={"question": "Что делать?", "card_id": BORROWER_CARD})
     assert r.status_code == 200
     body = r.json()
-    assert body["status"] == "stub" and body["refs"] == [BORROWER_CARD]
+    assert body["status"] == "ok" and "F1" in body["refs"]
     assert body["trace_id"] == r.headers["X-Trace-Id"]
     assert client.post("/ask", json={"question": "?"}).status_code == 200
     assert not audit.records

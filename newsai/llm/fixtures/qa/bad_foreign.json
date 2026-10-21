@@ -1,0 +1,10 @@
+{
+  "answer": "Платежи компании U_DEMO_DEPOSITOR составили 5 200 000 000 руб.",
+  "refs": ["cp:supplier:1"],
+  "statements": [
+    {"text": "Платежи компании U_DEMO_DEPOSITOR составили 5 200 000 000 руб.", "kind": "fact", "refs": ["cp:supplier:1"]},
+    {"text": "Поставщик U_DEMO_S1 получил 5 200 000 000 руб. за год.", "kind": "fact", "refs": ["cp:supplier:1"]},
+    {"text": "В поле pay_amt указано 5200000000.", "kind": "fact", "refs": ["cp:supplier:1"]},
+    {"text": "Крупнейший поставщик занимает 35% закупок, отрасль 24.", "kind": "fact", "refs": ["cp:supplier:1"]}
+  ]
+}
