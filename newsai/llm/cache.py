@@ -12,9 +12,25 @@ def sha256_json(obj: object) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def cache_key(model: str, messages: list[dict[str, str]], schema_name: str, temperature: float) -> str:
+def cache_key(
+    model: str,
+    messages: list[dict[str, str]],
+    schema_name: str,
+    temperature: float,
+    *,
+    reasoning_effort: str | None = None,
+    max_tokens: int | None = None,
+) -> str:
+    """Ключ ответа: всё, что меняет ответ модели, включая рассуждение и потолок токенов."""
     return sha256_json(
-        {"model": model, "messages": messages, "schema": schema_name, "temperature": temperature}
+        {
+            "model": model,
+            "messages": messages,
+            "schema": schema_name,
+            "temperature": temperature,
+            "reasoning_effort": reasoning_effort,
+            "max_tokens": max_tokens,
+        }
     )
 
 

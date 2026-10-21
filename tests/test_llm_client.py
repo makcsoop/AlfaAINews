@@ -425,3 +425,11 @@ def test_step_reasoning_and_token_cap_reach_provider(tmp_path):
     spec = c.config.step("card")
     assert bodies[0]["reasoning_effort"] == "none" == spec.reasoning_effort
     assert bodies[0]["max_tokens"] == spec.max_tokens
+
+
+def test_cache_key_depends_on_reasoning_and_token_cap():
+    from newsai.llm.cache import cache_key
+
+    base = cache_key("m", MSG, "S", 0.2)
+    assert cache_key("m", MSG, "S", 0.2, reasoning_effort="none") != base
+    assert cache_key("m", MSG, "S", 0.2, max_tokens=100) != base

@@ -403,7 +403,10 @@ class LLMClient:
             )
 
         # кеш
-        ckey = cache_key(primary.provider_name, messages, schema.__name__, temperature)
+        ckey = cache_key(
+            primary.provider_name, messages, schema.__name__, temperature,
+            reasoning_effort=step_spec.reasoning_effort, max_tokens=max_tokens or step_spec.max_tokens,
+        )
         use_cache = self._cache_active and step != "probe"  # probe всегда ходит к модели
         if use_cache:
             hit = self.cache.get(ckey)
