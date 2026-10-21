@@ -5,6 +5,7 @@
 """
 
 import csv
+import hashlib
 import logging
 import re
 from pathlib import Path
@@ -72,7 +73,12 @@ INDEXES = {
 
 
 def _read_head(path: Path) -> tuple[str, str]:
-    raw = path.open("rb").read(64 * 1024)
+    with path.open("rb") as f:
+        raw = f.read(64 * 1024)
+    # Обрезаем по последнему переводу строки: иначе граница чтения может разрезать
+    # русскую букву пополам, UTF-8 упадёт и файл молча прочитается как cp1251
+    if len(raw) == 64 * 1024 and b"\n" in raw:
+        raw = raw[: raw.rindex(b"\n")]
     for enc in ("utf-8-sig", "cp1251"):
         try:
             return raw.decode(enc), enc
@@ -127,10 +133,51 @@ def load_csv(conn: Connection, path: Path) -> tuple[str, int] | None:
     return kind, n
 
 
-def load_case_dir(conn: Connection, directory: Path) -> dict[str, int]:
+def _sha1(path: Path) -> str:
+    h = hashlib.sha1()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _ensure_state(conn: Connection) -> None:
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS case_load_state ("
+            "kind text PRIMARY KEY, file text NOT NULL, sha1 text NOT NULL, "
+            "rows bigint NOT NULL, loaded_at timestamptz NOT NULL DEFAULT now())"
+        )
+    )
+
+
+def load_case_dir(conn: Connection, directory: Path, *, force: bool = False) -> dict[str, int]:
+    """Грузит CSV папки. Неизменившийся файл (тот же sha1) пропускается: повторный `docker compose up`
+    не перезаливает 1,4 млн строк и не сносит через CASCADE то, что построено поверх таблиц."""
+    _ensure_state(conn)
     loaded: dict[str, int] = {}
     for path in sorted(directory.glob("*.csv")):
+        kind = detect(path)[0]
+        if kind is None:
+            log.warning("%s: не распознан тип по заголовку — пропуск", path.name)
+            continue
+        digest = _sha1(path)
+        prev = conn.execute(
+            text("SELECT sha1, rows FROM case_load_state WHERE kind = :k"), {"k": kind}
+        ).first()
+        exists = conn.execute(text("SELECT to_regclass(:k)"), {"k": kind}).scalar() is not None
+        if not force and exists and prev and prev.sha1 == digest:
+            log.info("%s не изменился — пропускаю (%d строк уже в %s)", path.name, prev.rows, kind)
+            loaded[kind] = prev.rows
+            continue
         res = load_csv(conn, path)
         if res:
             loaded[res[0]] = res[1]
+            conn.execute(
+                text(
+                    "INSERT INTO case_load_state (kind, file, sha1, rows) VALUES (:k, :f, :s, :r) "
+                    "ON CONFLICT (kind) DO UPDATE SET file = :f, sha1 = :s, rows = :r, loaded_at = now()"
+                ),
+                {"k": kind, "f": path.name, "s": digest, "r": res[1]},
+            )
     return loaded

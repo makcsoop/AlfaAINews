@@ -24,7 +24,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-newsai}
       POSTGRES_DB: ${POSTGRES_DB:-newsai}
     ports:
-      - "5432:5432"
+      # только локально и не 5432: на машине может стоять свой PostgreSQL
+      - "127.0.0.1:${DB_HOST_PORT:-55432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -36,7 +37,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   # Однократно: таблицы, расширение vector, CSV кейса и фикстура «ставка 14%»
   init:

@@ -20,7 +20,7 @@ def health() -> dict:
 
 
 @app.get("/raw_items")
-def raw_items(limit: int = Query(50, le=500), source_id: str | None = None) -> list[dict]:
+def raw_items(limit: int = Query(50, ge=1, le=500), source_id: str | None = None) -> list[dict]:
     q = select(m.raw_items.c.data).order_by(m.raw_items.c.published_at.desc()).limit(limit)
     if source_id:
         q = q.where(m.raw_items.c.source_id == source_id)

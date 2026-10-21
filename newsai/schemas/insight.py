@@ -1,11 +1,12 @@
 """Сопоставление, разбор, карточка и трассировка."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from newsai.schemas.common import (
+    BANK_SOURCE_PREFIX,
     ChannelImpact,
     ClaimType,
     Confidence,
@@ -65,11 +66,32 @@ class Claim(Schema):
     verified: dict[str, bool | str] = Field(default_factory=dict)
     is_advertising: bool = False
 
+    @model_validator(mode="after")
+    def _label_rules(self) -> Self:
+        bank_refs = [e.source_id.startswith(BANK_SOURCE_PREFIX) for e in self.evidence]
+        if self.type == "fact" and not self.evidence:
+            raise ValueError(f"{self.claim_id}: факт без источника")
+        if self.type == "bank_view" and not (bank_refs and all(bank_refs)):
+            raise ValueError(f"{self.claim_id}: позиция банка должна ссылаться только на материалы ЦМИ")
+        if self.type == "market_view" and any(bank_refs):
+            raise ValueError(f"{self.claim_id}: мнение рынка ссылается на ЦМИ — это позиция банка")
+        if self.type == "model_inference" and not any(self.based_on.values()):
+            raise ValueError(f"{self.claim_id}: вывод AI без based_on")
+        if self.type == "bank_offer" and not self.is_advertising:
+            raise ValueError(f"{self.claim_id}: предложение банка должно быть помечено как реклама")
+        return self
+
 
 class Action(Schema):
     type: Literal["analysis_question", "scenario", "bank_product"]
     text: str
     is_advertising: bool = False
+
+    @model_validator(mode="after")
+    def _ads_marked(self) -> Self:
+        if self.type == "bank_product" and not self.is_advertising:
+            raise ValueError("продукт банка в действиях должен быть помечен как реклама")
+        return self
 
 
 class StorySource(Schema):
@@ -124,6 +146,27 @@ class InsightCard(Schema):
     confidence_reasons: list[str] = Field(default_factory=list)
     review_status: Literal["published", "on_review"] = "published"
     trace_id: str | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        by_id = {c.claim_id: c for c in self.claims}
+        if len(by_id) != len(self.claims):
+            raise ValueError("повторяющиеся claim_id")
+        sections = {
+            "what_happened": ({"fact"}, self.what_happened),
+            "why_it_matters": (None, self.why_it_matters),
+            "consequences": (None, self.consequences),
+            "bank_and_market": ({"bank_view", "market_view"}, self.bank_and_market),
+        }
+        for name, (allowed, refs) in sections.items():
+            for ref in refs:
+                if ref not in by_id:
+                    raise ValueError(f"{name}: нет утверждения {ref}")
+                if allowed and by_id[ref].type not in allowed:
+                    raise ValueError(f"{name}: {ref} имеет метку {by_id[ref].type}, ожидается {allowed}")
+        if self.relevance.company_id != self.company_id or self.relevance.story_id != self.event.story_id:
+            raise ValueError("relevance относится к другой паре «сюжет × клиент»")
+        return self
 
 
 class ToolCall(Schema):

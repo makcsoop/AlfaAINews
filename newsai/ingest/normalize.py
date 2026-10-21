@@ -5,7 +5,9 @@ import html
 import re
 import unicodedata
 
-_WS = re.compile(r"[ \t   ]+")
+# пробел, таб, неразрывный (U+00A0), тонкий (U+2009) и узкий неразрывный (U+202F) пробелы
+_SPACES = " \t" + "".join(map(chr, (0x00A0, 0x2009, 0x202F)))
+_WS = re.compile(f"[{_SPACES}]+")
 _NL = re.compile(r"\n{3,}")
 _TAGS = re.compile(r"<[^>]+>")
 _TOKEN = re.compile(r"\w+", re.UNICODE)

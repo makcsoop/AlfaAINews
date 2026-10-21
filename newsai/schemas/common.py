@@ -15,6 +15,9 @@ SCHEMA_VERSION = "0.1.0"
 # Альфа-Инвестиции), вывод AI, предложение банка (реклама)
 ClaimType = Literal["fact", "bank_view", "market_view", "model_inference", "bank_offer"]
 
+# Позиция банка — только материалы ЦМИ: id позиции начинается с id документа из config/bank_docs.yaml
+BANK_SOURCE_PREFIX = "cmi_"
+
 # Статус утверждения внутри события: намерение и слух помечаются явно
 EventStatus = Literal["fact", "announced", "planned", "rumor", "forecast"]
 

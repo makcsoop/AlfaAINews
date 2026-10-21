@@ -15,14 +15,28 @@
   <h1>Последние материалы</h1>
   <ul id="items"><li>Загрузка…</li></ul>
   <script>
-    fetch("http://localhost:8000/raw_items?limit=30")
+    // Заголовки и ссылки приходят из чужих лент: только textContent и только http(s)-ссылки
+    const safeUrl = (u) => {
+      try { const x = new URL(u); return ["http:", "https:"].includes(x.protocol) ? x.href : null; }
+      catch { return null; }
+    };
+    const list = document.getElementById("items");
+    fetch(`${location.protocol}//${location.hostname}:8000/raw_items?limit=30`)
       .then(r => r.json())
       .then(items => {
-        document.getElementById("items").innerHTML = items.map(i =>
-          `<li><a href="${i.url}" target="_blank" rel="noopener">${i.title}</a><br><small>${i.source_id} · ${i.published_at}</small></li>`
-        ).join("");
+        list.replaceChildren(...items.map(i => {
+          const li = document.createElement("li");
+          const href = safeUrl(i.url);
+          const title = document.createElement(href ? "a" : "span");
+          title.textContent = i.title;
+          if (href) { title.href = href; title.target = "_blank"; title.rel = "noopener noreferrer"; }
+          const meta = document.createElement("small");
+          meta.textContent = `${i.source_id} · ${i.published_at}`;
+          li.append(title, document.createElement("br"), meta);
+          return li;
+        }));
       })
-      .catch(e => { document.getElementById("items").textContent = "Бэкенд недоступен: " + e; });
+      .catch(e => { list.textContent = "Бэкенд недоступен: " + e; });
   </script>
 </body>
 </html>

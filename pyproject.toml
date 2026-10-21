@@ -41,6 +41,9 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 ignore = ["RUF001", "RUF002", "RUF003"]  # кириллица в строках и комментариях
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]  # длинные строки тестовых CSV
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

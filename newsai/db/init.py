@@ -28,7 +28,9 @@ def _upsert(conn: Connection, table, rows: list[dict]) -> None:
         return
     stmt = insert(table).values(rows)
     pk = [c.name for c in table.primary_key.columns]
-    conn.execute(stmt.on_conflict_do_update(index_elements=pk, set_={"data": stmt.excluded.data}))
+    # обновляем все колонки, а не только data: иначе после правки фикстуры title/thesis остаются старыми
+    update = {k: stmt.excluded[k] for k in rows[0] if k not in pk}
+    conn.execute(stmt.on_conflict_do_update(index_elements=pk, set_=update))
 
 
 def load_fixtures(conn: Connection, name: str = "rate_14") -> None:
@@ -161,6 +163,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--load-case", action="store_true", help="загрузить CSV из CASE_DATA_DIR")
     ap.add_argument("--load-fixtures", action="store_true")
+    ap.add_argument("--force-case", action="store_true", help="перезалить CSV, даже если файлы не менялись")
     args = ap.parse_args()
 
     with get_engine().begin() as conn:
@@ -173,7 +176,7 @@ def main() -> None:
             if not any(case_dir.glob("*.csv")):
                 log.warning("в %s нет CSV кейса — загружаю синтетику из %s", case_dir, SYNTHETIC_DIR)
                 case_dir = SYNTHETIC_DIR
-            log.info("CSV кейса: %s", load_case_dir(conn, case_dir))
+            log.info("CSV кейса: %s", load_case_dir(conn, case_dir, force=args.force_case))
 
 
 if __name__ == "__main__":
