@@ -120,3 +120,20 @@ def test_fixture_reload_updates_columns(engine):
         load_fixtures(conn)
         theses = conn.execute(select(m.bank_positions.c.thesis)).scalars().all()
         assert theses and "старое" not in theses
+
+
+def test_graph_end_to_end(engine, case_dir):
+    from backend.profile.graph import build_graphs, get_graph, save_graphs
+
+    with engine.begin() as conn:
+        load_case_dir(conn, case_dir, force=True)
+    with engine.connect() as read, engine.begin() as write:
+        assert save_graphs(write, build_graphs(read)) >= 2
+    with engine.connect() as conn:
+        g = get_graph(conn, "U_1")
+        # U_1 платит U_2 (та же группа g1 — внутригрупповой) и U_9 (вне базы); самоплатёж исключён
+        assert g.total_out == pytest.approx(7.5) and g.intragroup_out == pytest.approx(1000)
+        assert [c.company_id for c in g.suppliers] == ["U_9"]
+        assert g.suppliers[0].in_dataset is False and g.sector_shares_suppliers == {"outside": 1.0}
+        assert g.group_id == "g1" and "U_2" in g.group_members and g.sparse is True
+        assert get_graph(conn, "U_NOPE") is None
