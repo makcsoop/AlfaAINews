@@ -76,6 +76,40 @@ async def run_source_forever(fetcher: Fetcher, src: Source) -> None:
 
 
 STORIES_EVERY = 300  # секунд между пересборками сюжетов
+TELEGRAM_EVERY = 180  # секунд между кругами по каналам
+
+
+async def telegram_round(client, channels: list[Source]) -> int:
+    from backend.ingest.telegram import ingest_channel
+
+    total = 0
+    for src in channels:  # по очереди: один клиент, без параллельных запросов к API
+        try:
+            total += await ingest_channel(client, src)
+        except Exception:
+            log.exception("%s: сбой Telegram", src.id)
+    return total
+
+
+async def telegram_forever(channels: list[Source], once: bool = False) -> None:
+    from backend.ingest.telegram import make_client
+
+    if not channels:
+        return
+    client = make_client()
+    if client is None:
+        log.warning("Telegram: нет TG_SESSION_STRING — каналы пропускаю (scripts/telegram_login.py)")
+        return
+    async with client:
+        while True:
+            log.info(
+                "Telegram: круг по %d каналам, записано %d",
+                len(channels),
+                await telegram_round(client, channels),
+            )
+            if once:
+                return
+            await asyncio.sleep(TELEGRAM_EVERY)
 
 
 def _rebuild_stories() -> dict:
@@ -101,16 +135,24 @@ async def stories_forever() -> None:
 
 
 async def main_async(once: bool, only: list[str] | None) -> None:
-    sources = [s for s in load_sources(enabled_only=not only) if s.kind == "rss"]
+    registry = load_sources(enabled_only=not only)
     if only:
-        sources = [s for s in sources if s.id in only]
+        registry = [s for s in registry if s.id in only]
+    sources = [s for s in registry if s.kind == "rss"]
+    channels = [s for s in registry if s.kind == "telegram"]
     log.info("ленты: %s", ", ".join(s.id for s in sources))
     fetcher = Fetcher()
     try:
         if once:
-            await asyncio.gather(*(ingest_rss(fetcher, s) for s in sources))
+            await asyncio.gather(
+                *(ingest_rss(fetcher, s) for s in sources), telegram_forever(channels, once=True)
+            )
         else:
-            await asyncio.gather(*(run_source_forever(fetcher, s) for s in sources), stories_forever())
+            await asyncio.gather(
+                *(run_source_forever(fetcher, s) for s in sources),
+                telegram_forever(channels),
+                stories_forever(),
+            )
     finally:
         await fetcher.aclose()
 
@@ -119,6 +161,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("trafilatura").setLevel(logging.WARNING)
+    logging.getLogger("telethon").setLevel(logging.WARNING)
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true", help="один проход и выход")
     ap.add_argument("--source", action="append", help="только эти id (можно выключенные)")

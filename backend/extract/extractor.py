@@ -256,7 +256,9 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
     return failures
 
 
-def extract(story: Story, items: list[RawItem], llm: JsonLLM | None = None) -> EventFacts:
+def extract(
+    story: Story, items: list[RawItem], llm: JsonLLM | None = None, model: str = EXTRACT_MODEL
+) -> EventFacts:
     facts = extract_rules(story, items)
     llm = llm or NoLLM()
     rep = representative(items)
@@ -265,11 +267,11 @@ def extract(story: Story, items: list[RawItem], llm: JsonLLM | None = None) -> E
     for _attempt in range(2):  # ответ + один повторный запрос по провалам
         system, user = _prompt(rep, text, failures)
         ans = llm.complete_json(
-            model=EXTRACT_MODEL, system=system, user=user, json_schema=RESPONSE_SCHEMA, purpose="extract"
+            model=model, system=system, user=user, json_schema=RESPONSE_SCHEMA, purpose="extract"
         )
         if not ans:
             break
-        facts.extractor_model = EXTRACT_MODEL
+        facts.extractor_model = model
         failures = _apply_llm(facts, ans, rep, text)
         if not failures:
             break
