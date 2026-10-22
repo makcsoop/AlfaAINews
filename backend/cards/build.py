@@ -109,7 +109,9 @@ class _Builder:
         self.features = features
         self.claims: list[Claim] = []
         self._count: dict[str, int] = {}
-        self.by_ref: dict[str, str] = {}  # id досье -> claim_id утверждения ровно с этим одним источником
+        # id досье -> claim_id утверждения, которое на него ссылается (сначала — с одним этим источником)
+        self.by_ref: dict[str, str] = {}
+        self._multi_ref: dict[str, str] = {}
         self.bank_items: list[DossierItem] = []  # позиции ЦМИ, попавшие в карточку
 
     def new_id(self, prefix: str) -> str:
@@ -151,12 +153,18 @@ class _Builder:
         self.claims.append(claim)
         if len(refs) == 1:
             self.by_ref.setdefault(refs[0], claim.claim_id)
+        elif claim.type in ("fact", "bank_view", "market_view"):
+            # утверждение по нескольким источникам тоже опора: иначе вывод породит дубль факта
+            for r in refs:
+                self._multi_ref.setdefault(r, claim.claim_id)
         return claim.claim_id
 
     def support(self, item: DossierItem) -> str:
         """claim_id утверждения, на которое опирается вывод; нет такого — создаём из элемента досье."""
         if item.id in self.by_ref:
             return self.by_ref[item.id]
+        if item.id in self._multi_ref:
+            return self._multi_ref[item.id]
         text = item.title or item.text
         if item.kind == "bank_position":
             self.bank_items.append(item)
