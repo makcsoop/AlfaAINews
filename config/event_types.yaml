@@ -1,29 +1,109 @@
 # Типы событий и факторы, которые они двигают. Стартовая версия: 25 типов; полная — 40 из рабочей папки (ПП).
 # Принятое и предлагаемое регулирование — разные типы (правило GDELT).
+#
+# patterns — регулярки предварительного типирования (без учёта регистра) по заголовку и лиду.
+# Порядок важен: побеждает первый тип, у которого сработал паттерн. Тип от LLM сверяется с этой разметкой,
+# а при исчерпании бюджета она остаётся единственной. direction — подсказки направления фактора
+# для правил: слово рядом с ключом фактора в одном предложении.
 
 event_types:
-  rate_decision:        {channels: [key_rate, fx_rub, inflation]}
-  monetary_signal:      {channels: [key_rate]}
-  fx_move:              {channels: [fx_rub]}
-  fx_control:           {channels: [fx_rub, logistics_costs]}
-  inflation_data:       {channels: [inflation, key_rate, consumer_demand]}
-  macro_data:           {channels: [consumer_demand, labor_costs]}
-  tax_change_adopted:   {channels: [tax_burden]}
-  tax_change_proposed:  {channels: [tax_burden]}
-  regulation_adopted:   {channels: [regulation]}
-  regulation_proposed:  {channels: [regulation]}
-  tariff_duty:          {channels: [trade_restrictions]}
-  sanctions:            {channels: [trade_restrictions, logistics_costs, fx_rub]}
-  commodity_price:      {channels: [oil_gas, metals, agro, gold]}
-  supply_disruption:    {channels: [logistics_costs]}
-  corporate_results:    {channels: []}
-  m_and_a:              {channels: []}
-  default_bankruptcy:   {channels: []}
-  rating_action:        {channels: []}
-  state_support:        {channels: [public_spending]}
-  public_procurement:   {channels: [public_spending]}
-  labor_policy:         {channels: [labor_costs]}
-  budget_policy:        {channels: [tax_burden, public_spending]}
-  ofz_auction:          {channels: [key_rate]}
-  energy_policy:        {channels: [oil_gas]}
-  other:                {channels: []}
+  rate_decision:
+    channels: [key_rate, fx_rub, inflation]
+    patterns: ['(сохранил|повысил|снизил|оставил)\w* ключев\w+ ставк', 'ключев\w+ ставк\w* (сохран|повыш|сниж|остав)', 'решени\w+ по ключевой ставке']
+  monetary_signal:
+    channels: [key_rate]
+    patterns: ['денежно-кредитн', '\bДКП\b', 'Набиуллин', 'жестк\w+ (политик|риторик)', 'процентн\w+ ставк\w* (по|кредитн)', 'максимальн\w+ процентн\w+ ставок', 'ставк\w+ по (вклад|депозит|кредит|ипотек)']
+  inflation_data:
+    channels: [inflation, key_rate, consumer_demand]
+    patterns: ['\bинфляци', 'рост цен', 'дефляци', 'инфляционн\w+ ожидани']
+  fx_control:
+    channels: [fx_rub, logistics_costs]
+    patterns: ['валютн\w+ контрол', 'репатриаци', 'обязательн\w+ продаж\w+ (валют|выручк)']
+  fx_move:
+    channels: [fx_rub]
+    patterns: ['курс\w* (доллар|евро|юан|рубл)', '(доллар|евро|юань|рубль)\w* (подорожал|подешевел|укрепил|ослаб|вырос|упал)', 'официальн\w+ курс', '(покупк|продаж)\w* (юан|валют)\w*.{0,40}(ЦБ|Минфин|бюджетн)', '(ЦБ|Минфин)\w*.{0,40}(покупк|продаж)\w* (юан|валют)']
+  sanctions:
+    channels: [trade_restrictions, logistics_costs, fx_rub]
+    patterns: ['санкци', 'ограничительн\w+ мер', '\bOFAC\b', 'черн\w+ спис']
+  tariff_duty:
+    channels: [trade_restrictions]
+    patterns: ['пошлин', 'тариф\w* на (импорт|экспорт|ввоз|вывоз)', 'квот\w+ на (экспорт|импорт)', 'запрет\w* на (экспорт|ввоз|вывоз)', 'ограничени\w+ на (импорт|ввоз|экспорт|вывоз)', 'таможенн\w+ (процедур|пошлин|оформлен)']
+  tax_change_proposed:
+    channels: [tax_burden]
+    patterns: ['(предлож|законопроект|рассматрива|планиру|может)\w*.{0,60}(налог|НДС|НДФЛ|НДПИ|акциз)', '(налог|НДС|НДФЛ|НДПИ|акциз)\w*.{0,60}(предлож|законопроект|рассматрива|планиру)']
+  tax_change_adopted:
+    channels: [tax_burden]
+    patterns: ['(повысил|снизил|отменил|ввел|утвердил|принял|подписал)\w*.{0,60}(налог|НДС|НДФЛ|НДПИ|акциз)', '(налог|НДС|НДФЛ|НДПИ|акциз)\w*.{0,40}(вырастет|повыс|сниз|отмен)']
+  ofz_auction:
+    channels: [key_rate]
+    patterns: ['\bОФЗ\b', 'аукцион\w* (Минфин|облигаци)', 'доходност\w+ (гособлигац|облигац|ОФЗ|казначейск)']
+  budget_policy:
+    channels: [tax_burden, public_spending]
+    patterns: ['федеральн\w+ бюджет', 'дефицит\w* бюджет', 'бюджетн\w+ правил', 'проект\w* бюджета']
+  energy_policy:
+    channels: [oil_gas]
+    patterns: ['демпфер', '(экспорт|вывоз)\w* (бензин|дизел|топлив|нефтепродукт)', 'ОПЕК', 'газопровод', 'поставк\w+ (газа|нефти|СПГ)', 'Сила (Сибири|Байкала)', '(поставил|экспортировал)\w*.{0,40}(газа|нефти)']
+  commodity_price:
+    channels: [oil_gas, metals, agro, gold]
+    patterns: ['цен\w* на (нефть|газ|золото|сталь|металл|пшениц|зерно|уголь|удобрени|дизел|бензин)', '(Brent|Urals|WTI)', '(нефть|золото|газ|пшеница)\w* (подорожал|подешевел|вырос|упал)']
+  macro_data:
+    channels: [consumer_demand, labor_costs]
+    patterns: ['\bВВП\b', 'безработиц', 'промпроизводств', 'промышленн\w+ производств', 'оборот\w* розничн', 'реальн\w+ (зарплат|доход)']
+  labor_policy:
+    channels: [labor_costs]
+    patterns: ['\bМРОТ\b', 'минимальн\w+ размер\w* оплаты', 'мигрант', 'рынок труда', 'дефицит\w* кадр']
+  state_support:
+    channels: [public_spending]
+    patterns: ['субсиди', 'господдержк', 'льготн\w+ (кредит|ипотек|ставк)', 'мер\w* поддержки']
+  public_procurement:
+    channels: [public_spending]
+    patterns: ['госзаказ', 'госконтракт', 'госзакуп', '44-ФЗ', '223-ФЗ']
+  regulation_proposed:
+    channels: [regulation]
+    patterns: ['законопроект', '(предлож|разработа|планиру|рассматрива)\w*.{0,40}(закон|правил|требовани|регулирован)', 'в первом чтении', 'проект\w* постановлени', '(предложил|предлагает|предлагают)\w* (разрешить|запретить|ввести|обязать|упростить|отменить|изменить)', 'призвал\w* (упростить|изменить|ввести|отменить)']
+  regulation_adopted:
+    channels: [regulation]
+    patterns: ['(подписал|принял|утвердил|вступ)\w*.{0,40}(закон|постановлени|приказ|правил)', 'закон вступает в силу', 'вступит в силу', 'тарифн\w+ коридор']
+  default_bankruptcy:
+    channels: []
+    patterns: ['банкротств', '\bдефолт', 'неплатежеспособн', 'ликвидаци']
+  rating_action:
+    channels: []
+    patterns: ['кредитн\w+ рейтинг', '(АКРА|Эксперт РА|НКР|НРА|Moody|Fitch|S&P)\b.{0,60}рейтинг', 'рейтинг\w*.{0,30}(повысил|понизил|подтвердил|отозвал)']
+  m_and_a:
+    channels: []
+    patterns: ['(покупк|приобрет|продаж)\w* (дол[иею]|акци|компани|актив)', 'слияни', 'поглощени', '\bIPO\b', '\bSPO\b']
+  corporate_results:
+    channels: []
+    patterns: ['чист\w+ прибыл', '\bвыручк', '\bEBITDA\b', '\bМСФО\b', '\bРСБУ\b', 'финансов\w+ результат', 'дивиденд', '(продаж|выпуск|производств)\w*.{0,40}(снизи|сократ|упа|выр)\w*.{0,20}\d+\s*%']
+  supply_disruption:
+    channels: [logistics_costs]
+    patterns: ['перебо\w+ (поставк|с поставк)', 'дефицит\w* (топлив|бензин|дизел|товар|сырь)', 'остановк\w+ (завод|производств|погрузк)', 'простой\w* (судов|вагон)', '(тариф|ставк)\w* (на|за) (перевоз|фрахт|доставк)', '\bфрахт']
+  other:
+    channels: []
+    patterns: []
+
+# Подсказки направления фактора для правил (слово в одном предложении с ключом фактора).
+# up / down — что происходит с фактором из config/channels_matrix.yaml.
+direction_hints:
+  key_rate:
+    key: 'ключев\w+ ставк'
+    up: 'повысил|повышен|увелич|подня'
+    down: 'снизил|снижен|понизил|уменьш'
+    flat: 'сохранил|оставил|сохранен|без изменени|пауз'
+  fx_rub:
+    key: '\bрубл\w*'
+    up: 'укрепил|укреплен|подорожал'
+    down: 'ослаб|подешевел|девальвац'
+  oil_gas:
+    key: '\bнефт\w*|\bBrent\b|\bUrals\b|\bгаз\b|\bдизел\w*|\bбензин\w*|\bтоплив\w*'
+    up: 'подорожал|вырос|повысил|подскочил'
+    down: 'подешевел|упал|снизил|обвал'
+  gold:
+    key: '\bзолот\w*'
+    up: 'подорожал|вырос|рекорд'
+    down: 'подешевел|упал|снизил'
+  inflation:
+    key: '\bинфляци\w*|\bрост цен'
+    up: 'ускорил|выросл|повысил'
+    down: 'замедлил|снизил|дефляци'

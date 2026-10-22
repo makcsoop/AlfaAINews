@@ -44,3 +44,52 @@ def counterparties(company_id: str) -> CounterpartyGraph:
     if graph is None:
         raise HTTPException(404, f"нет платежей по компании {company_id}")
     return graph
+
+
+@app.get("/stories")
+def stories(
+    limit: int = Query(50, ge=1, le=500),
+    event_type: str | None = None,
+    status: str | None = None,
+    business_only: bool = Query(False, description="только сюжеты с типом события, отличным от other"),
+) -> list[dict]:
+    """Свежие сюжеты: заголовок, тип события, статус подтверждения, число независимых источников."""
+    q = (
+        select(m.stories.c.data, m.event_facts.c.event_type)
+        .select_from(m.stories.outerjoin(m.event_facts, m.event_facts.c.story_id == m.stories.c.id))
+        .order_by(m.stories.c.last_seen.desc())
+        .limit(limit)
+    )
+    if event_type:
+        q = q.where(m.event_facts.c.event_type == event_type)
+    if status:
+        q = q.where(m.stories.c.status == status)
+    if business_only:
+        q = q.where(m.event_facts.c.event_type.notin_(["other"]))
+    with get_engine().connect() as conn:
+        return [{**data, "event_type": et} for data, et in conn.execute(q)]
+
+
+@app.get("/stories/{story_id}")
+def story(story_id: str) -> dict:
+    """Сюжет целиком: сюжет, факты с цитатами и материалы (заголовок, лид, ссылка — без полного текста)."""
+    with get_engine().connect() as conn:
+        data = conn.execute(select(m.stories.c.data).where(m.stories.c.id == story_id)).scalar()
+        if data is None:
+            raise HTTPException(404, f"нет сюжета {story_id}")
+        facts = conn.execute(
+            select(m.event_facts.c.data).where(m.event_facts.c.story_id == story_id)
+        ).scalar()
+        items = conn.execute(
+            select(
+                m.raw_items.c.id,
+                m.raw_items.c.source_id,
+                m.raw_items.c.title,
+                m.raw_items.c.lead,
+                m.raw_items.c.url,
+                m.raw_items.c.published_at,
+            )
+            .where(m.raw_items.c.id.in_(data["item_ids"]))
+            .order_by(m.raw_items.c.published_at)
+        ).mappings()
+        return {"story": data, "facts": facts, "items": [dict(i) for i in items]}

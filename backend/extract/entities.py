@@ -42,9 +42,10 @@ def _dicts():
     for canon, variants in cfg["aliases"].items():
         for v in [canon, *variants]:
             alias[_key(v)] = canon
+    skip = {_key(x) for x in cfg.get("media", []) + cfg.get("generic", [])}
     cur = {k: re.compile(v, re.IGNORECASE) for k, v in cfg["currencies"].items()}
     com = {k: re.compile(v, re.IGNORECASE) for k, v in cfg["commodities"].items()}
-    return alias, cur, com, set(cfg["regulators"])
+    return alias, cur, com, set(cfg["regulators"]), skip
 
 
 def _key(name: str) -> str:
@@ -68,8 +69,24 @@ def regulators() -> set[str]:
     return _dicts()[3]
 
 
+def _is_noise(name: str, kind: str) -> bool:
+    if _key(name) in _dicts()[4]:
+        return True
+    # город из датлайна капсом («ПЕТЕРБУРГ», «С.-ПЕТЕРБУРГ») — не организация
+    return kind == "ORG" and name.replace(".", "").replace("-", "").isupper() and len(name) >= 6
+
+
+def _dedupe_persons(persons: set[str]) -> set[str]:
+    """«Путин Путин» → «Путин»; фамилия отдельно от полного имени не нужна."""
+    cleaned = set()
+    for p in persons:
+        tokens = p.split()
+        cleaned.add(" ".join(dict.fromkeys(tokens)))
+    return {p for p in cleaned if not any(p != q and p in q.split() for q in cleaned)}
+
+
 def extract_entities(text: str, *, ner: bool = True) -> Entities:
-    alias, cur, com, _ = _dicts()
+    alias, cur, com, *_ = _dicts()
     ents = Entities(
         currencies={k for k, rx in cur.items() if rx.search(text)},
         commodities={k for k, rx in com.items() if rx.search(text)},
@@ -85,7 +102,7 @@ def extract_entities(text: str, *, ner: bool = True) -> Entities:
         span.normalize(morph_vocab)
         # сначала исходный текст: Natasha иногда портит устойчивые имена («Банк России» → «Банк Россия»)
         name = alias.get(_key(span.text)) or canonical(span.normal or span.text)
-        if len(name) < 2:
+        if len(name) < 2 or _is_noise(name, span.type):
             continue
         {"ORG": ents.orgs, "LOC": ents.locations, "PER": ents.persons}[span.type].add(name)
     # регулятор, записанный аббревиатурой, Natasha иногда пропускает — добираем по словарю синонимов
@@ -97,4 +114,5 @@ def extract_entities(text: str, *, ner: bool = True) -> Entities:
             and re.search(rf"(?<!\w){re.escape(variant)}(?!\w)", low)
         ):
             ents.orgs.add(canon)
+    ents.persons = _dedupe_persons(ents.persons)
     return ents

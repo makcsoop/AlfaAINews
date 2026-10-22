@@ -130,3 +130,7 @@ class EventFacts(Schema):
     contradictions: list[str] = Field(default_factory=list)
     extractor_model: str | None = None
     unverified_fields: list[str] = Field(default_factory=list)
+    source_item_ids: list[str] = Field(
+        default_factory=list,
+        description="материалы сюжета, по которым извлечены факты (для пересчёта и трассы)",
+    )

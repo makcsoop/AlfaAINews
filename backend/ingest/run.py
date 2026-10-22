@@ -79,14 +79,19 @@ STORIES_EVERY = 300  # секунд между пересборками сюже
 
 
 def _rebuild_stories() -> dict:
+    """Склейка, затем факты по новым и изменившимся сюжетам (LLM подключится через порт экстрактора)."""
+    from backend.extract.run import run as extract_facts
     from backend.stories.cluster import rebuild
 
     with get_engine().begin() as conn:
-        return rebuild(conn)
+        stats = rebuild(conn)
+    with get_engine().begin() as conn:
+        stats["facts"] = extract_facts(conn)["stories"]
+    return stats
 
 
 async def stories_forever() -> None:
-    """Склейка идёт в том же воркере, что и сбор: раз в 5 минут, в отдельном потоке."""
+    """Склейка и факты идут в том же воркере, что и сбор: раз в 5 минут, в отдельном потоке."""
     while True:
         await asyncio.sleep(STORIES_EVERY)
         try:
