@@ -54,10 +54,20 @@ class Hit:
 class BankIndex:
     def __init__(self, positions: list[BankPosition]):
         self.positions = positions
+        self._by_id = {p.id: p for p in positions}
         docs = [f"{p.doc_title}. {p.thesis} {p.quote}" for p in positions]
         self.bm25 = BM25Okapi([tokens(d) for d in docs]) if docs else None
         self.vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
         self.matrix = self.vec.fit_transform(docs) if docs else None
+
+    def _stale(self, p: BankPosition, as_of: date | None) -> bool:
+        """Устарела на дату события: перекрыта позицией, вышедшей не позже события, или истёк срок."""
+        if as_of and p.valid_until and p.valid_until < as_of:
+            return True
+        if not p.superseded_by:
+            return False
+        newer = self._by_id.get(p.superseded_by)
+        return as_of is None or newer is None or newer.doc_date <= as_of
 
     @classmethod
     def load(cls, conn: Connection) -> "BankIndex":
@@ -91,7 +101,7 @@ class BankIndex:
             if i not in bm_rank and i not in dn_rank:
                 continue
             score = sum(1 / (RRF_K + r + 1) for r in (bm_rank.get(i), dn_rank.get(i)) if r is not None)
-            stale = bool(p.superseded_by) or bool(as_of and p.valid_until and p.valid_until < as_of)
+            stale = self._stale(p, as_of)
             hits.append(Hit(p, score, bm_rank.get(i), dn_rank.get(i), stale))
         hits.sort(key=lambda h: (h.stale, -h.score))  # действующие позиции выше устаревших
         return hits[:k]

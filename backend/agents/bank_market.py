@@ -78,8 +78,13 @@ def _consensus(conn: Connection, day: date) -> MarketKnowledge | None:
 
 
 def _actual_rate(facts: EventFacts) -> float | None:
+    """Ставка после решения: для сюжета о решении — первое число в % из правдоподобного диапазона."""
     for n in facts.numbers:
-        if n.unit == "%" and 3 <= n.value <= 30 and "ставк" in n.quote.lower():
+        if (
+            n.unit == "%"
+            and 3 <= n.value <= 30
+            and (facts.event_type == "rate_decision" or "ставк" in n.quote.lower())
+        ):
             return n.value
     return None
 
@@ -115,7 +120,7 @@ def report(conn: Connection, story_id: str, index: BankIndex | None = None, k: i
                     channel=p.channel,
                     direction=p.direction,
                     forecast=p.forecast.model_dump() if p.forecast else None,
-                    before_event=p.doc_date <= as_of,
+                    before_event=p.doc_date < as_of,  # в день события банк уже реагирует на решение
                     stale=h.stale,
                     score=round(h.score, 4),
                 )
@@ -141,7 +146,10 @@ def report(conn: Connection, story_id: str, index: BankIndex | None = None, k: i
                 (
                     v
                     for v in views
-                    if v.forecast and str(v.forecast.get("metric", "")).startswith("key_rate") and not v.stale
+                    if v.forecast
+                    and "decision" in str(v.forecast.get("metric", ""))
+                    and v.before_event
+                    and not v.stale
                 ),
                 None,
             )

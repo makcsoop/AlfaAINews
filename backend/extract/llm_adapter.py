@@ -54,7 +54,7 @@ class OpenAIJsonLLM:
         self.usage = Usage()
 
     def complete_json(
-        self, *, model: str, system: str, user: str, json_schema: dict, purpose: str
+        self, *, model: str, system: str, user: str, json_schema: dict, purpose: str, max_tokens: int = 1500
     ) -> dict | None:
         if self.usage.calls >= self.max_calls:
             log.warning("потолок вызовов %d исчерпан — дальше только правила", self.max_calls)
@@ -62,7 +62,7 @@ class OpenAIJsonLLM:
         body = {
             "model": model,
             "temperature": 0,
-            "max_tokens": 1500,
+            "max_tokens": max_tokens,
             "messages": [
                 {
                     "role": "system",

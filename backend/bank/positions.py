@@ -70,6 +70,7 @@ def extract_positions(
         user=f'<document id="{doc["id"]}" title="{doc["title"]}" date="{doc["date"]}">\n{body}\n</document>',
         json_schema={"type": "object", "properties": {"positions": {"type": "array"}}},
         purpose="bank_positions",
+        max_tokens=8000,  # в обзоре до 20+ позиций с цитатами: 1500 токенов обрезали JSON
     )
     if not ans:
         return [], ["модель не вернула JSON"]
@@ -126,8 +127,13 @@ def mark_superseded(positions: list[BankPosition]) -> int:
     return sum(1 for p in positions if p.superseded_by)
 
 
-def save(conn: Connection, positions: list[BankPosition]) -> None:
-    conn.execute(delete(m.bank_positions).where(m.bank_positions.c.id.like("%#r%")))
+def save(conn: Connection, positions: list[BankPosition], docs: set[str]) -> None:
+    """Перезаписывает позиции реестра только у пересчитанных обзоров; у остальных обновляет superseded_by."""
+    conn.execute(
+        delete(m.bank_positions).where(
+            m.bank_positions.c.id.like("%#r%"), m.bank_positions.c.doc_id.in_(docs)
+        )
+    )
     for p in positions:
         row = {
             "id": p.id,
@@ -145,14 +151,14 @@ def save(conn: Connection, positions: list[BankPosition]) -> None:
         )
 
 
-def run(only: str | None = None) -> dict:
+def run(only: list[str] | None = None) -> dict:
     llm = OpenAIJsonLLM(max_calls=20, timeout=240)
     engine = get_engine()
     all_positions, stats = [], {"docs": 0, "positions": 0, "dropped": 0}
     with engine.connect() as conn:
         texts = {d["id"]: doc_text(conn, d["id"]) for d in bank_docs()}
     for doc in bank_docs():
-        if only and doc["id"] != only:
+        if only and doc["id"] not in only:
             continue
         pages = texts[doc["id"]]
         if not pages:
@@ -166,9 +172,21 @@ def run(only: str | None = None) -> dict:
         stats["docs"] += 1
         stats["positions"] += len(positions)
         stats["dropped"] += len(dropped)
-    stats["superseded"] = mark_superseded(all_positions)
+    processed = {p.doc_id for p in all_positions}
+    with engine.connect() as conn:  # позиции других обзоров нужны, чтобы правильно пометить устаревшие
+        others = [
+            BankPosition.model_validate(r)
+            for r in conn.execute(
+                select(m.bank_positions.c.data).where(
+                    m.bank_positions.c.id.like("%#r%"), m.bank_positions.c.doc_id.not_in(processed)
+                )
+            ).scalars()
+        ]
+    for p in others:
+        p.superseded_by = None
+    stats["superseded"] = mark_superseded(all_positions + others)
     with engine.begin() as conn:
-        save(conn, all_positions)
+        save(conn, all_positions + others, processed | {p.doc_id for p in others})
     stats["cost"] = round(llm.usage.cost, 3)
     return stats
 
@@ -177,7 +195,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     ap = argparse.ArgumentParser()
-    ap.add_argument("--doc")
+    ap.add_argument("--doc", action="append", help="только эти обзоры (можно несколько)")
     args = ap.parse_args()
     log.info("реестр позиций: %s", json.dumps(run(args.doc), ensure_ascii=False))
 

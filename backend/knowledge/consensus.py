@@ -46,7 +46,8 @@ EXPECT = re.compile(
 SYSTEM = """Ты размечаешь пост аналитика перед заседанием Банка России по ключевой ставке {meeting}.
 Отвечай только JSON: {{"about_meeting": bool, "expectation": "hold"|"cut"|"hike"|"unknown",
 "expected_rate": число или null, "quote": "дословная цитата из поста"}}.
-- about_meeting: пост про ожидания решения именно на этом заседании.
+- about_meeting: пост про ожидания решения именно на этом заседании; прогноз «до конца года» — false.
+  Текущая ставка до заседания: {rate_before}%.
 - expectation: чего ждёт автор (или рынок, если автор пересказывает консенсус): пауза, снижение, повышение.
 - expected_rate: ставка в % после решения, если названа (например, 13.5); иначе null.
 - quote: 5–30 слов из поста, на которых основана разметка; если есть expected_rate — число в цитате.
@@ -82,10 +83,14 @@ def candidate_posts(conn: Connection, meeting: date) -> list[dict]:
     return [dict(r) for r in rows if r["text"] and RATE.search(r["text"]) and EXPECT.search(r["text"])]
 
 
-def label_post(llm: OpenAIJsonLLM, post: dict, meeting: date) -> dict | None:
+def label_post(
+    llm: OpenAIJsonLLM, post: dict, meeting: date, rate_before: float | None = None
+) -> dict | None:
     ans = llm.complete_json(
         model=MODEL,
-        system=SYSTEM.format(meeting=meeting.isoformat()),
+        system=SYSTEM.format(
+            meeting=meeting.isoformat(), rate_before=rate_before if rate_before else "неизвестна"
+        ),
         user=f'<post id="{post["id"]}">\n{post["text"][:3000]}\n</post>',
         json_schema={"type": "object"},
         purpose="consensus",
@@ -98,10 +103,45 @@ def label_post(llm: OpenAIJsonLLM, post: dict, meeting: date) -> dict | None:
     rate = ans.get("expected_rate")
     if not isinstance(rate, (int, float)) or not number_in_quote(float(rate), quote):
         rate = None
-    return {"expectation": ans["expectation"], "expected_rate": rate, "quote": quote}
+    if rate is not None and rate_before:
+        if HORIZON.search(quote) and not MEETING.search(quote):
+            return None
+        # направление при названной ставке считает код, а не модель: «ждёт 14,25%» при ставке 14,25% — пауза
+        expectation = "hold" if abs(rate - rate_before) < 1e-9 else "cut" if rate < rate_before else "hike"
+    else:
+        expectation = check_direction(ans["expectation"], quote)
+        if expectation is None:
+            return None
+    return {"expectation": expectation, "expected_rate": rate, "quote": quote}
 
 
 DIRECTION = {"hold": 0.0, "cut": -1.0, "hike": 1.0}
+
+# Проверки кодом поверх разметки модели: направление должно быть в самой цитате
+LEX = {
+    "hike": re.compile(r"повыс|подним|подня|рост\w* (ключев\w* )?ставк|ужесточ", re.IGNORECASE),
+    "cut": re.compile(r"сниз|снижен|смягч|опуст", re.IGNORECASE),
+    "hold": re.compile(r"пауз|сохран|без изменени|не снизит|не будет снижать|остав", re.IGNORECASE),
+}
+HORIZON = re.compile(r"до конца года|в этом году|в следующем году|до конца 20\d\d|в 20\d\d", re.IGNORECASE)
+MEETING = re.compile(
+    r"завтра|сегодня|в пятницу|на заседании|по итогам заседания|в 13:30|ближайш\w+ заседани", re.IGNORECASE
+)
+
+
+def check_direction(expectation: str, quote: str) -> str | None:
+    """Ожидание, подтверждённое словами цитаты, или None (пост не используем)."""
+    if HORIZON.search(quote) and not MEETING.search(quote):
+        return None  # прогноз на горизонт, а не ожидание решения на этом заседании
+    if expectation in ("hike", "cut") and LEX[expectation].search(quote) and not LEX["hold"].search(quote):
+        return expectation
+    if expectation in ("hike", "cut") and LEX[expectation].search(quote):
+        return expectation  # «не снизит, а может и поднять» — модель видела контекст, слово направления есть
+    if LEX["hold"].search(quote):
+        return "hold"
+    return None
+
+
 RU = {"hold": "паузу", "cut": "снижения", "hike": "повышения"}
 
 
@@ -110,7 +150,7 @@ def build(conn: Connection, meeting: dict, llm: OpenAIJsonLLM) -> dict:
     posts = candidate_posts(conn, day)
     per_channel: dict[str, tuple[dict, dict]] = {}
     for post in posts:  # по возрастанию времени: у канала остаётся последнее ожидание до решения
-        lab = label_post(llm, post, day)
+        lab = label_post(llm, post, day, meeting.get("rate_before"))
         if lab:
             per_channel[post["source_id"]] = (post, lab)
     entries = []

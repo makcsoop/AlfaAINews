@@ -5,7 +5,7 @@ from datetime import date
 from backend.bank.positions import extract_positions, mark_superseded
 from backend.bank.search import BankIndex, tokens
 from backend.extract.llm_port import FixtureLLM
-from backend.knowledge.consensus import EXPECT, RATE, label_post
+from backend.knowledge.consensus import EXPECT, RATE, check_direction, label_post
 from backend.schemas import BankPosition
 
 PAGE1 = (
@@ -135,3 +135,35 @@ def test_consensus_prefilter_and_label():
     assert label_post(FixtureLLM({**good, "about_meeting": False}), post, date(2026, 10, 23)) is None
     fake_rate = label_post(FixtureLLM({**good, "expected_rate": 13.5}), post, date(2026, 10, 23))
     assert fake_rate["expected_rate"] is None  # ставки нет в цитате — не берём
+
+
+def test_direction_from_named_rate_is_computed_by_code():
+    post = {
+        "id": "tg:2",
+        "text": "В 13:30 мск станет известна ключевая ставка. Главный экономист ждёт 14,25%.",
+    }
+    ans = {
+        "about_meeting": True,
+        "expectation": "hike",
+        "expected_rate": 14.25,
+        "quote": "Главный экономист ждёт 14,25%",
+    }
+    # ставка до заседания 14,25% → ожидание паузы, хотя модель сказала «повышение»
+    assert label_post(FixtureLLM(ans), post, date(2026, 7, 24), rate_before=14.25)["expectation"] == "hold"
+    assert label_post(FixtureLLM(ans), post, date(2026, 7, 24), rate_before=14.5)["expectation"] == "cut"
+
+
+def test_direction_must_be_in_quote():
+    assert (
+        check_direction("hike", "ЦБ всё больше склоняется к варианту даже роста ставки до конца года.")
+        is None
+    )
+    assert (
+        check_direction("hike", "сомневаюсь, что он будет так щедр. Ставлю на то, что ЦБ завтра скажет")
+        is None
+    )
+    assert (
+        check_direction("hike", "ЦБ точно не снизит, а может и поднять ключевую ставку в сентябре") == "hike"
+    )
+    assert check_direction("cut", "КОНСЕНСУС: без изменений на уровне 14%") == "hold"
+    assert check_direction("hold", "Банк России сделает паузу и сохранит ставку на заседании") == "hold"

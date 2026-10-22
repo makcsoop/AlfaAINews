@@ -412,7 +412,7 @@
   ],
   "market_knowledge": [
     {
-      "id": "mk_consensus_2026-09-11",
+      "id": "mk_fixture_consensus_2026-09-11",
       "kind": "expectation",
       "source_id": "consensus",
       "item_id": "aggregate",
