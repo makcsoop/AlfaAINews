@@ -95,3 +95,25 @@ def story(story_id: str) -> dict:
             .order_by(m.raw_items.c.published_at)
         ).mappings()
         return {"story": data, "facts": facts, "items": [dict(i) for i in items]}
+
+
+@app.get("/stories/{story_id}/bank_market")
+def bank_market(story_id: str) -> dict:
+    """«Банк и рынок»: позиции ЦМИ до события, консенсус рынка, сюрприз. Без генерации."""
+    from backend.agents.bank_market import report
+
+    with get_engine().connect() as conn:
+        if not conn.execute(select(m.stories.c.id).where(m.stories.c.id == story_id)).first():
+            raise HTTPException(404, f"нет сюжета {story_id}")
+        return report(conn, story_id).model_dump(mode="json")
+
+
+@app.get("/stories/{story_id}/statistician")
+def statistician(story_id: str, sector: str = Query(min_length=2, max_length=2)) -> dict:
+    """«Статистик»: чувствительность отрасли (2 знака ОКВЭД) и похожие случаи из архива."""
+    from backend.agents.statistician import report
+
+    with get_engine().connect() as conn:
+        if not conn.execute(select(m.stories.c.id).where(m.stories.c.id == story_id)).first():
+            raise HTTPException(404, f"нет сюжета {story_id}")
+        return report(conn, story_id, sector).model_dump(mode="json")

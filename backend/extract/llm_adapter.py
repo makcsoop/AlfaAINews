@@ -5,6 +5,7 @@
 Ключ берётся из LLM_API_KEY (.env), в код и логи не попадает.
 """
 
+import base64
 import json
 import logging
 import os
@@ -130,3 +131,51 @@ class OpenAIJsonLLM:
             return None
         entry["json_ok"] = True
         return parsed
+
+    def transcribe_image(
+        self, *, model: str, image: bytes, prompt: str, purpose: str = "ocr", mime: str = "image/jpeg"
+    ) -> str | None:
+        """Текст со скана страницы (Qwen3-VL). Без рассуждений, температура 0."""
+        if self.usage.calls >= self.max_calls:
+            return None
+        b64 = base64.b64encode(image).decode()
+        body = {
+            "model": model,
+            "temperature": 0,
+            "max_tokens": 4000,
+            "reasoning": {"enabled": False},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                    ],
+                }
+            ],
+        }
+        self.usage.calls += 1
+        t0 = time.monotonic()
+        try:
+            r = self.client.post(
+                f"{self.base}/chat/completions", json=body, headers={"Authorization": f"Bearer {self._key}"}
+            )
+        except httpx.HTTPError as e:  # таймаут длинной страницы и т.п. — страница не распознана, не падаем
+            self.usage.failures += 1
+            log.warning("%s: %s %s", model, type(e).__name__, e)
+            return None
+        dt = time.monotonic() - t0
+        self.usage.seconds += dt
+        if r.status_code != 200:
+            self.usage.failures += 1
+            log.warning("%s: HTTP %s %s", model, r.status_code, r.text[:200])
+            return None
+        data = r.json()
+        u = data.get("usage") or {}
+        self.usage.tokens_in += u.get("prompt_tokens", 0)
+        self.usage.tokens_out += u.get("completion_tokens", 0)
+        self.usage.cost += float(u.get("cost") or 0)
+        self.usage.log.append(
+            {"model": model, "purpose": purpose, "seconds": round(dt, 2), "cost": u.get("cost")}
+        )
+        return (data["choices"][0]["message"].get("content") or "").strip()

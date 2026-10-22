@@ -122,3 +122,38 @@ async def ingest_channel_web(fetcher: Fetcher, src: Source) -> int:
         "%s (t.me/s/%s): постов %d, записано %d, последний id %d", src.id, channel, len(items), n, newest
     )
     return n
+
+
+async def backfill_channel(fetcher: Fetcher, src: Source, since: datetime, max_pages: int = 800) -> int:
+    """Архив канала назад до даты since: листаем ?before= от самого старого сохранённого поста.
+
+    last_native_id (точку дочитывания вперёд) не трогаем. Повторный запуск продолжает с места остановки.
+    """
+    from sqlalchemy import Integer, cast, func, select
+
+    from backend.db import models as m
+
+    channel = username(src)
+    engine = get_engine()
+    with engine.connect() as conn:
+        oldest = conn.execute(
+            select(func.min(cast(m.raw_items.c.native_id, Integer))).where(m.raw_items.c.source_id == src.id)
+        ).scalar()
+    before, total, fetched_at = oldest, 0, datetime.now(UTC)
+    for _page in range(max_pages):
+        resp = await fetcher.get(f"https://t.me/s/{channel}" + (f"?before={before}" if before else ""))
+        if resp.status_code != 200:
+            log.warning("%s: архив t.me/s HTTP %s", src.id, resp.status_code)
+            break
+        page = parse_page(resp.content, channel)
+        if not page:
+            break
+        items = [i for p in page if (i := message_to_item(src, channel, p, fetched_at))]
+        with engine.begin() as conn:
+            total += store.insert_items(conn, items)
+        oldest_post = min(page, key=lambda p: p.id)
+        if oldest_post.date < since or oldest_post.id == before:
+            break
+        before = oldest_post.id
+    log.info("%s: архив до %s — записано %d", src.id, since.date(), total)
+    return total

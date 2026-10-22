@@ -166,6 +166,18 @@ feedback = Table(
     Column("data", JSONB, nullable=False),
 )
 
+# Текст страниц обзоров ЦМИ (PDF — сканы, текст распознаёт Qwen3-VL). По нему сверяются цитаты позиций банка.
+bank_pages = Table(
+    "bank_pages",
+    metadata,
+    Column("doc_id", String, primary_key=True),
+    Column("page", Integer, primary_key=True),
+    Column("text", Text, nullable=False),
+    Column("model", String, nullable=False),
+    Column("cost", Float),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+)
+
 # Разметка пар «сюжет × клиент» (инструмент разметки, eval/labeling). В data — снимок сюжета и клиента
 # на момент создания пары, чтобы все разметчики видели одно и то же.
 label_pairs = Table(
