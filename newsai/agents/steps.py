@@ -18,6 +18,7 @@ from newsai.agents.analysts import AnalystResult, run_analysts_detailed
 from newsai.agents.arbiter import arbitrate
 from newsai.agents.cache import RedisJsonStore
 from newsai.agents.critic import critique
+from newsai.agents.critic_llm import LLM_UNSUPPORTED, run_critic_llm
 from newsai.agents.dossier import Dossier
 from newsai.agents.examples import select_examples
 from newsai.agents.pipeline import Handlers, PipelineContext, State, run_pipeline
@@ -150,6 +151,36 @@ def _analyst_results(ctx: PipelineContext) -> dict[str, AnalystResult]:
     return results
 
 
+def _critic_llm_pass(ctx: PipelineContext, final_round: bool) -> list[str]:
+    """LLM-критик на последнем круге: unsupported -> флаг и заметка, не новый круг; сбой -> пропуск."""
+    if not final_round:
+        return []
+    client = get_client()
+    before = _llm_mark(ctx, client)
+    try:
+        res = run_critic_llm(
+            Dossier.model_validate(ctx.dossier), _analyst_results(ctx),
+            trace_id=ctx.trace_id, priority=ctx.priority, client=client,
+        )
+    except Exception as e:  # необязательный шаг не должен ронять конвейер
+        ctx.artifacts["critic_llm"] = {"status": "error", "reason": type(e).__name__}
+        return []
+    finally:
+        _llm_sync(ctx, client, before)
+    ctx.artifacts["critic_llm"] = res.model_dump(mode="json")
+    notes: list[str] = []
+    for v in res.verdicts:
+        if v.verdict == "unsupported":
+            notes.append(f"{LLM_UNSUPPORTED} {v.claim_id}: {v.reason}")
+            if ctx.trace is not None:
+                ctx.trace.verify_failures.append(f"critic_llm {LLM_UNSUPPORTED}: {v.claim_id}: {v.reason}")
+        elif v.verdict == "weak":
+            notes.append(f"llm_weak {v.claim_id}: {v.reason}")
+    if any(v.verdict == "unsupported" for v in res.verdicts):
+        ctx.flags.append("critic_llm_flags")
+    return notes
+
+
 def critic_step(ctx: PipelineContext) -> PipelineContext:
     """CRITIQUED: проверка кодом; задача планировщику -> verdict "retry" (автомат вернётся в PLANNED)."""
     if not ctx.dossier:
@@ -173,12 +204,14 @@ def critic_step(ctx: PipelineContext) -> PipelineContext:
             f"{'/' + f.channel if f.channel else ''}: {f.detail}"
             for f in verdict.failures
         )
+    final_round = not verdict.planner_task or ctx.critic_rounds >= ctx.max_critic_rounds
+    llm_notes = _critic_llm_pass(ctx, final_round)
     if verdict.planner_task:
         ctx.critic_verdict = "retry"
         ctx.critic_notes = list(verdict.planner_tasks)  # автомат склеит их в planner_task
     else:
         ctx.critic_verdict = "ok"
-        ctx.critic_notes = list(verdict.notes)
+        ctx.critic_notes = list(verdict.notes) + llm_notes
         if not verdict.ok:
             ctx.flags.append("critic_notes")
     return ctx
