@@ -1,15 +1,26 @@
-"""API (заготовка). Эндпоинты карточек, ленты и Q&A добавляют Разработчики 2 и 3."""
+"""API: лента, карточка, журнал, вопрос-ответ (заглушки), сессия и защита company_id."""
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
+from backend.api.errors import install_error_handling
+from backend.api.routes import router
 from backend.db import models as m
 from backend.db.engine import get_engine
 from backend.ingest.store import ingest_stats
 
 app = FastAPI(title="AlfaAINews")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+    expose_headers=["X-Trace-Id"],
+)
+install_error_handling(app)
+app.include_router(router)
 
 
 @app.get("/health")

@@ -1,4 +1,4 @@
-// Типы ответов API. Повторяют newsai/schemas (InsightCard, RunTrace) в части, которую показывает интерфейс.
+// Типы ответов API. Повторяют backend/schemas (InsightCard, RunTrace) в части, которую показывает интерфейс.
 
 export type UserRole = "owner" | "ceo" | "cfo" | "chief_accountant" | "treasurer" | "other";
 export type ClaimType = "fact" | "bank_view" | "market_view" | "model_inference" | "bank_offer";

@@ -4,10 +4,10 @@ import csv
 from collections.abc import Iterator
 from pathlib import Path
 
-from newsai.config import get_settings
-from newsai.db.case_loader import detect
-from newsai.profile.build import build_profiles
-from newsai.schemas import CompanyProfile
+from backend.config import get_settings
+from backend.db.case_loader import detect
+from backend.profile.build import build_profiles
+from backend.schemas import CompanyProfile
 
 SYNTHETIC_DIR = Path("data/case_synthetic")
 

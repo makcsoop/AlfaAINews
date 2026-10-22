@@ -8,7 +8,7 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 
-from newsai.schemas import CompanyProfile
+from backend.schemas import CompanyProfile
 
 # Колонка CSV → ключ products в CompanyProfile
 PRODUCT_COLUMNS = {

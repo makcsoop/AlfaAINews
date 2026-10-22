@@ -1,0 +1,1 @@
+{"drivers": [{"channel": "rate_cost", "direction": "up", "strength": "high", "horizon": "quarter", "refs": ["fact:st_2026-09-11_keyrate:2"], "rationale": "Ставка сохранена на 14%

@@ -15,3 +15,9 @@ data/bank/pdf/
 data/bank/pages/
 frontend/dist/
 *.tsbuildinfo
+CLAUDE.local.md
+.claude/worktrees/
+data/llm_journal/
+data/llm_cache/
+data/security_audit/
+reports/

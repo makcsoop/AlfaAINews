@@ -1,0 +1,4 @@
+{"steps": [
+  {"tool": "get_bank_positions", "args": {"query": "ключевая ставка прогноз траектория"}, "why": "критик: нужна позиция ЦМИ по траектории ставки"},
+  {"tool": "get_market_knowledge", "args": {"channel": "deposit_yield"}, "why": "критик: знания рынка по каналу доходности размещения"}
+]}

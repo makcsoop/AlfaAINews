@@ -1,6 +1,6 @@
 """Архетипы клиентов из config/archetypes.yaml и их привязка к компаниям CSV.
 
-`python -m newsai.profile.archetypes [папка с CSV]` — печатает, какие компании выбраны.
+`python -m backend.profile.archetypes [папка с CSV]` — печатает, какие компании выбраны.
 """
 
 import sys
@@ -9,9 +9,9 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from newsai.profile.build import PRODUCT_COLUMNS
-from newsai.schemas import CompanyProfile
-from newsai.schemas.common import UserRole
+from backend.profile.build import PRODUCT_COLUMNS
+from backend.schemas import CompanyProfile
+from backend.schemas.common import UserRole
 
 ARCHETYPES_CONFIG = Path("config/archetypes.yaml")
 PRODUCT_KEYS = set(PRODUCT_COLUMNS.values())
@@ -100,7 +100,7 @@ def resolve(
 
 
 def main() -> None:
-    from newsai.profile.load import load_profiles
+    from backend.profile.load import load_profiles
 
     profiles = load_profiles(Path(sys.argv[1]) if len(sys.argv) > 1 else None)
     cfg = load_archetypes()

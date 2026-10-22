@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from newsai.profile.archetypes import load_archetypes, resolve
-from newsai.profile.build import build_profiles, profile_from_row, sector_of
-from newsai.profile.load import load_profiles
+from backend.profile.archetypes import load_archetypes, resolve
+from backend.profile.build import build_profiles, profile_from_row, sector_of
+from backend.profile.load import load_profiles
 
 # Строка в формате настоящего CSV: разделитель «;», флаги 0.0/1.0, десятичная запятая
 REAL_HEADER = (

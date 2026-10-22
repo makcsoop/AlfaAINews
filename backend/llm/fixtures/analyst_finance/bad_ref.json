@@ -1,0 +1,30 @@
+{
+  "drivers": [
+    {
+      "channel": "rate_cost",
+      "direction": "up",
+      "strength": "high",
+      "horizon": "quarter",
+      "refs": ["fact:st_2026-09-11_keyrate:2"],
+      "rationale": "Ставка сохранена на 14% годовых, стоимость заёмных средств остаётся высокой."
+    },
+    {
+      "channel": "deposit_yield",
+      "direction": "up",
+      "strength": "medium",
+      "horizon": "quarter",
+      "refs": ["cmi_nonexistent_doc#p9#c9"],
+      "rationale": "Доходность размещения ликвидности остаётся высокой дольше ожидавшегося."
+    },
+    {
+      "channel": "crypto_mining",
+      "direction": "up",
+      "strength": "low",
+      "horizon": "days",
+      "refs": ["fact:st_2026-09-11_keyrate:2"],
+      "rationale": "Канала нет в таксономии."
+    }
+  ],
+  "summary": "Ставка сохранена на 14%.",
+  "open_questions": []
+}

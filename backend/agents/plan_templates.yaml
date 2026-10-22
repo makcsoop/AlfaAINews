@@ -1,0 +1,98 @@
+# Шаблоны плана глубокого разбора «сюжет × отрасль» по типам событий из config/taxonomy.yaml.
+# Шаг = вызов инструмента из backend.agents.tools.TOOLS. Только инструменты разбора отрасли:
+# get_profile и get_counterparties сюда не входят — компания подставляется позже, кодом.
+#
+# Поля шага:
+#   tool, args, why      инструмент, аргументы, зачем (для трассы)
+#   each_channel: true   шаг повторяется для каждого канала типа события, в args работает {channel}
+#   max_channels         сколько каналов брать (по умолчанию 3; сначала каналы из фактов сюжета)
+#   requires_numbers: N  шаг пропускается, если в фактах меньше N чисел
+#   same_unit: true      ... или если у двух первых чисел разные единицы измерения
+# Подстановки в строках args: {title} {summary} {event_type} {sector} {channel} {num0} {num1}.
+# Всего не больше max_steps шагов (после раскрытия each_channel); лишние отбрасываются с конца.
+
+version: 1
+max_steps: 8
+
+templates:
+  rate_decision:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "материалы сюжета и контекст решения"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "что ЦМИ ожидал по каналу"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: expectation}, why: "консенсус рынка до решения"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм передачи ставки в отрасль"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "как было в прошлых решениях"}
+
+  monetary_signal:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "материалы сюжета и формулировки регулятора"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "прогноз ЦМИ по ставке и ликвидности"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: expectation}, why: "ожидания рынка до сигнала"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм влияния сигнала"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые сигналы"}
+
+  fx_move:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "причины движения курса"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "прогноз курса ЦМИ"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: expectation}, why: "ожидания рынка по курсу"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм влияния курса на отрасль"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые движения курса"}
+    - {tool: calculator, args: {expression: "round(({num0} - {num1}) / {num1} * 100, 2)"}, requires_numbers: 2, same_unit: true, why: "изменение курса в % между двумя числами из фактов"}
+
+  inflation_data:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "материалы сюжета и разбивка по компонентам"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "прогноз ЦМИ по инфляции, ставке и спросу"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: expectation}, why: "ожидания рынка по инфляции"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "как инфляция влияет на издержки отрасли"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые публикации"}
+    - {tool: calculator, args: {expression: "round({num0} - {num1}, 2)"}, requires_numbers: 2, same_unit: true, why: "разница двух значений из фактов (ожидание/факт, месяц к месяцу)"}
+
+  sanctions:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "состав и сроки ограничений"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по каналу"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизмы: логистика, платежи, курс"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "разборы прошлых пакетов санкций"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые пакеты в этой отрасли"}
+
+  tariff_duty:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "ставки, товарные группы, даты вступления"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по пошлинам"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм влияния пошлин на отрасль"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "итоги прошлых изменений пошлин"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые изменения пошлин"}
+    - {tool: calculator, args: {expression: "round({num0} - {num1}, 2)"}, requires_numbers: 2, same_unit: true, why: "изменение ставки пошлины в пунктах"}
+
+  tax_change_adopted:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "текст изменения, дата вступления в силу"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по налоговой нагрузке"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм влияния налога на отрасль"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: expectation}, why: "что рынок ждал до принятия"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые налоговые изменения"}
+    - {tool: calculator, args: {expression: "round({num0} - {num1}, 2)"}, requires_numbers: 2, same_unit: true, why: "изменение ставки налога в пунктах"}
+
+  commodity_price:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "уровень цены и причины движения"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "прогноз ЦМИ по товарному каналу"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: expectation}, why: "ожидания рынка по цене"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм влияния цены на отрасль"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые движения цены"}
+    - {tool: calculator, args: {expression: "round(({num0} - {num1}) / {num1} * 100, 2)"}, requires_numbers: 2, same_unit: true, why: "изменение цены в % между двумя числами из фактов"}
+
+  supply_disruption:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "масштаб и сроки сбоя"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по логистике"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм передачи сбоя в цены и сроки"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "итоги прошлых сбоев"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые сбои поставок"}
+
+  state_support:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "условия меры: кто получает, сроки, объём"}
+    - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по господдержке"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "как мера доходит до отрасли"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "итоги прошлых мер"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые меры поддержки"}
+
+  # типы без своего шаблона
+  default:
+    - {tool: search_news, args: {query: "{title}", limit: 5}, why: "материалы сюжета"}
+    - {tool: get_bank_positions, args: {query: "{title}"}, why: "позиции ЦМИ по теме сюжета"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}"}, why: "знания рынка по типу события"}
+    - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "похожие прошлые сюжеты"}
