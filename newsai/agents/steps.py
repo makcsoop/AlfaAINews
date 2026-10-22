@@ -16,6 +16,7 @@ from typing import Any
 
 from newsai.agents.analysts import AnalystResult, run_analysts_detailed
 from newsai.agents.arbiter import arbitrate
+from newsai.agents.cache import RedisJsonStore
 from newsai.agents.critic import critique
 from newsai.agents.dossier import Dossier
 from newsai.agents.examples import select_examples
@@ -299,10 +300,15 @@ class AnalysisCache:
     items: dict[str, dict[str, Any]] = field(default_factory=dict)
     hits: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
+    backend: RedisJsonStore | None = None  # общий кеш (Redis); память — первый уровень
 
     def get(self, key: str) -> dict[str, Any] | None:
         with self.lock:
             found = self.items.get(key)
+            if found is None and self.backend is not None:
+                found = self.backend.get_analysis(key)
+                if found is not None:
+                    self.items[key] = found
             if found is not None:
                 self.hits += 1
             return copy.deepcopy(found) if found is not None else None
@@ -310,6 +316,8 @@ class AnalysisCache:
     def put(self, key: str, value: dict[str, Any]) -> None:
         with self.lock:
             self.items[key] = copy.deepcopy(value)
+            if self.backend is not None:
+                self.backend.put_analysis(key, value)
 
 
 def make_handlers(

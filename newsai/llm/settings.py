@@ -29,3 +29,6 @@ class LLMSettings(BaseSettings):
     llm_timeout_s: float = 60.0
     llm_fixtures_dir: str = "newsai/llm/fixtures"
     redis_url: str = "redis://localhost:6379/0"
+    # кеш разбора и карточек: memory (по умолчанию) или redis; при недоступном Redis — память
+    cache_backend: Literal["memory", "redis"] = "memory"
+    cache_ttl_s: int = 24 * 3600

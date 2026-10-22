@@ -6,6 +6,7 @@ import threading
 from datetime import UTC, datetime
 from typing import Protocol
 
+from newsai.agents.cache import KV, RedisJsonStore, cache_ttl_s, make_kv
 from newsai.agents.steps import AnalysisCache, make_handlers, run_for_client
 from newsai.fixtures import load_bundle
 from newsai.schemas.common import UserRole
@@ -60,6 +61,10 @@ log = logging.getLogger(__name__)
 DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_DEPOSITOR", "treasurer"))
 
 
+def _is_degraded(trace: RunTrace) -> bool:
+    return any(step.startswith("pipeline_failed") for step in trace.steps)
+
+
 class PipelineCardStore:
     """Карточки из настоящего конвейера: считаются лениво и кешируются.
 
@@ -68,7 +73,10 @@ class PipelineCardStore:
     Ошибка конвейера не роняет запрос: отдаём фикстурную карточку со статусом «на проверке».
     """
 
-    def __init__(self, bundle_name: str = "rate_14") -> None:
+    def __init__(self, bundle_name: str = "rate_14", kv: KV | None = None) -> None:
+        # kv=None — взять из CACHE_BACKEND (redis -> клиент, иначе память)
+        kv = kv if kv is not None else make_kv()
+        self._redis = RedisJsonStore(kv, cache_ttl_s()) if kv is not None else None
         self._bundle_name = bundle_name
         bundle = load_bundle(bundle_name)
         self._story_id: str = bundle["story"][0].id  # type: ignore[attr-defined]
@@ -77,7 +85,7 @@ class PipelineCardStore:
         }
         self._fallback = FixtureCardStore(bundle_name)
         self._handlers = None
-        self.analysis_cache = AnalysisCache()
+        self.analysis_cache = AnalysisCache(backend=self._redis)
         self._cards: dict[str, InsightCard] = {}
         self._traces: dict[str, RunTrace] = {}
         self._by_pair: dict[tuple[str, str], str] = {}
@@ -90,6 +98,8 @@ class PipelineCardStore:
     def _ensure(self, company_id: str, role: str) -> None:
         with self._lock:
             if (company_id, role) in self._by_pair or company_id not in self._sectors:
+                return
+            if self._load_cached(company_id, role):
                 return
             sector = self._sectors[company_id] or ""
             if self._handlers is None:
@@ -108,6 +118,24 @@ class PipelineCardStore:
                 self._by_pair[(company_id, role)] = card.card_id
             if trace is not None:
                 self._traces[trace.run_id] = trace
+            # в общий кеш — только настоящие результаты, не деградацию
+            if self._redis is not None and card is not None and trace is not None and not _is_degraded(trace):
+                self._redis.put_card(self._story_id, company_id, role, card, trace.run_id)
+                self._redis.put_trace(trace)
+
+    def _load_cached(self, company_id: str, role: str) -> bool:
+        if self._redis is None:
+            return False
+        found = self._redis.get_card(self._story_id, company_id, role)
+        if found is None:
+            return False
+        card, run_id = found
+        self._cards[card.card_id] = card
+        self._by_pair[(company_id, role)] = card.card_id
+        trace = self._redis.get_trace(run_id) if run_id else None
+        if trace is not None:
+            self._traces[trace.run_id] = trace
+        return True
 
     def _degraded(
         self, company_id: str, role: str, exc: Exception
