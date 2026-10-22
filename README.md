@@ -14,7 +14,7 @@ docker compose up --build
 - `init` создаёт таблицы и расширение `vector`, загружает CSV кейса из `data/case/` (если они там лежат) и фикстуру «ставка 14%».
 - `ingest` опрашивает RSS из `config/sources.yaml` и пишет материалы в `raw_items`.
 - `backend` (FastAPI) работает на http://localhost:8000: `/health`, `/raw_items`, `/stats/ingest`, документация в `/docs`.
-- `frontend` работает на http://localhost:3000 (пока это заглушка со свежими материалами).
+- `frontend` работает на http://localhost:3000: макет главного экрана Альфа-Бизнеса, виджет «Важно для вашего бизнеса», лента и карточка. API доступен под `/api` (nginx проксирует на `backend`).
 
 CSV кейса (`df_Uid_data_hack.csv` и остальные) в репозиторий не коммитятся: положите их в `data/case/`. Повторный `up` не перезаливает CSV, если файлы не менялись; принудительно — `docker compose run --rm init python -m backend.db.init --load-case --force-case`.
 
@@ -27,6 +27,16 @@ uv sync
 uv run pytest
 uv run ruff check .
 uv run python -m backend.ingest.run --once   # один проход сбора (нужен Postgres)
+uv run python -m backend.profile.archetypes  # какие компании CSV выбраны под архетипы демо
+```
+
+Интерфейс (React + Vite, `frontend/`):
+
+```bash
+cd frontend && npm ci
+npm run dev        # http://localhost:5173, /api проксируется на http://localhost:8000 (BACKEND_URL)
+npm run dev:mock   # без бэкенда: моки на фикстуре rate_14 (frontend/src/mocks)
+npm run build
 ```
 
 ## Структура

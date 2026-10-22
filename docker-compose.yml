@@ -62,11 +62,11 @@ services:
         condition: service_completed_successfully
 
   frontend:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     ports:
       - "3000:80"
-    volumes:
-      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       - backend
 

@@ -1,0 +1,64 @@
+# Архетипы клиентов для демо, разметки и тестов.
+# Каждый архетип привязан к реальной компании из CSV кейса: правило match отбирает кандидатов,
+# из них берётся крупнейшая по выручке (сначала — с выручкой от min_revenue, затем по числу совпавших prefer).
+# Одна компания — один архетип. Подбор: `python -m newsai.profile.archetypes`.
+# company_id — закреплённая компания (null — подбирается по правилу из того CSV, что лежит в data/case
+# или data/case_synthetic). После загрузки настоящих CSV закрепить id, чтобы демо не менялось.
+# fixture_company — компания из фикстуры rate_14 с тем же смыслом (пока для неё есть карточки).
+
+min_revenue: 15.0e9  # целевая аудитория кейса — крупный бизнес от 15 млрд руб.
+
+archetypes:
+  - id: wholesale_borrower
+    title: Оптовик с кредитами и ВЭД
+    default_role: cfo
+    demo: ставка 14% — риск, кредиты и лизинг не подешевеют; курс юаня — закупки в Китае
+    match:
+      okved_prefixes: ["46"]
+      require: {loans: true, fts_flag: true}
+      prefer: {leasing: true, factoring: true}
+    fixture_company: U_DEMO_BORROWER
+    company_id: null
+
+  - id: exporter_depositor
+    title: Экспортёр с депозитами
+    default_role: treasurer
+    demo: ставка 14% — возможность, депозиты дольше приносят доход; крепкий рубль — минус к выручке
+    match:
+      okved_prefixes: ["24", "20", "19", "16", "17", "07", "08", "01", "10"]
+      require: {deposits: true, fts_flag: true}
+      prefer: {loans: false}
+    fixture_company: U_DEMO_DEPOSITOR
+    company_id: null
+
+  - id: oilfield_services
+    title: Нефтесервис
+    default_role: cfo
+    demo: санкции против нефтяных компаний — заказчики сокращают бурение, растут неплатежи
+    match:
+      okved_prefixes: ["09.1"]
+      # в синтетике нет ОКВЭД 09.1 — тогда берём добычу как ближайший аналог
+      fallback_okved_prefixes: ["06"]
+      prefer: {loans: true, leasing: true}
+    fixture_company: null
+    company_id: null
+
+  - id: construction
+    title: Строительная компания
+    default_role: cfo
+    demo: ставка и ипотека — спрос на жильё и проектное финансирование
+    match:
+      okved_prefixes: ["41", "42", "43"]
+      prefer: {loans: true, guarantees: true}
+    fixture_company: null
+    company_id: null
+
+  - id: logistics
+    title: Логистика
+    default_role: chief_accountant
+    demo: пошлины, платежи по ВЭД и тарифы перевозок
+    match:
+      okved_prefixes: ["49.4", "52.2", "52.1", "50", "51"]
+      prefer: {leasing: true, fts_flag: true}
+    fixture_company: null
+    company_id: null

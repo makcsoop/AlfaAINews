@@ -3,40 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AlfaAINews</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 860px; padding: 24px 16px; background: #fff; color: #111; }
-    li { margin: 8px 0; }
-    small { color: #666; }
-  </style>
+  <title>Альфа-Бизнес · Важно для вашего бизнеса</title>
 </head>
 <body>
-  <!-- Заглушка до интерфейса Разработчика 2: показывает, что сбор работает -->
-  <h1>Последние материалы</h1>
-  <ul id="items"><li>Загрузка…</li></ul>
-  <script>
-    // Заголовки и ссылки приходят из чужих лент: только textContent и только http(s)-ссылки
-    const safeUrl = (u) => {
-      try { const x = new URL(u); return ["http:", "https:"].includes(x.protocol) ? x.href : null; }
-      catch { return null; }
-    };
-    const list = document.getElementById("items");
-    fetch(`${location.protocol}//${location.hostname}:8000/raw_items?limit=30`)
-      .then(r => r.json())
-      .then(items => {
-        list.replaceChildren(...items.map(i => {
-          const li = document.createElement("li");
-          const href = safeUrl(i.url);
-          const title = document.createElement(href ? "a" : "span");
-          title.textContent = i.title;
-          if (href) { title.href = href; title.target = "_blank"; title.rel = "noopener noreferrer"; }
-          const meta = document.createElement("small");
-          meta.textContent = `${i.source_id} · ${i.published_at}`;
-          li.append(title, document.createElement("br"), meta);
-          return li;
-        }));
-      })
-      .catch(e => { list.textContent = "Бэкенд недоступен: " + e; });
-  </script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
