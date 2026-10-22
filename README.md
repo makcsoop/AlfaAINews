@@ -13,7 +13,12 @@ docker compose up --build
 
 - `init` создаёт таблицы и расширение `vector`, загружает CSV кейса из `data/case/` (если они там лежат) и фикстуру «ставка 14%».
 - `ingest` опрашивает RSS из `config/sources.yaml` и пишет материалы в `raw_items`.
-- `backend` (FastAPI) работает на http://localhost:8000: `/health`, `/raw_items`, `/stats/ingest`, документация в `/docs`.
+- `backend` (FastAPI) работает на http://localhost:8000, документация в `/docs`:
+  - `/stories?business_only=true` — свежие сюжеты с типом события и статусом подтверждения;
+  - `/stories/{id}` — сюжет, факты с цитатами и материалы;
+  - `/companies/{id}/counterparties` — граф платежей компании;
+  - `/raw_items`, `/stats/ingest`, `/health` — служебные.
+- `ingest` раз в 5 минут склеивает материалы в сюжеты и извлекает факты (правила; LLM — через порт экстрактора).
 - `frontend` работает на http://localhost:3000 (пока это заглушка со свежими материалами).
 
 CSV кейса (`df_Uid_data_hack.csv` и остальные) в репозиторий не коммитятся: положите их в `data/case/`. Повторный `up` не перезаливает CSV, если файлы не менялись; принудительно — `docker compose run --rm init python -m backend.db.init --load-case --force-case`.
