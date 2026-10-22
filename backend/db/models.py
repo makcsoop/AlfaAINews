@@ -166,4 +166,32 @@ feedback = Table(
     Column("data", JSONB, nullable=False),
 )
 
+# Разметка пар «сюжет × клиент» (инструмент разметки, eval/labeling). В data — снимок сюжета и клиента
+# на момент создания пары, чтобы все разметчики видели одно и то же.
+label_pairs = Table(
+    "label_pairs",
+    metadata,
+    Column("pair_id", String, primary_key=True),
+    Column("batch", String, nullable=False, index=True),
+    Column("story_id", String, nullable=False),
+    Column("company_id", String, nullable=False),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    Column("data", JSONB, nullable=False),
+)
+
+labels = Table(
+    "labels",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column(
+        "pair_id", String, ForeignKey("label_pairs.pair_id", ondelete="CASCADE"), nullable=False, index=True
+    ),
+    Column("labeler", String, nullable=False),
+    Column("important", Boolean, nullable=False),
+    Column("main_channel", String),
+    Column("sign", Integer),  # −1 риск, 0 нейтрально, +1 возможность
+    Column("comment", Text),
+    Column("at", DateTime(timezone=True), server_default=func.now()),
+)
+
 Index("ix_raw_items_source_native", raw_items.c.source_id, raw_items.c.native_id, unique=True)

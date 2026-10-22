@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разметка пар</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#15171c; --muted:#5f6673; --line:#d9dce3; --accent:#ef3124; --ok:#0f7d55; --risk:#cf2e1d; }
+  body { margin:0; font:15px/1.5 system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header b { margin-right:auto; }
+  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .cols { grid-template-columns:1fr; } }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 8px; }
+  h3 { margin:0 0 8px; font-size:17px; }
+  .muted { color:var(--muted); font-size:13px; }
+  ul { margin:6px 0; padding-left:18px; }
+  .chip { display:inline-block; padding:1px 8px; margin:2px 4px 2px 0; border-radius:999px; background:#eceef3; font-size:12.5px; }
+  form { display:grid; gap:12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .opt { border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; background:var(--card); }
+  .opt input { margin-right:6px; }
+  select, textarea, input[type=text] { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); }
+  textarea { width:100%; box-sizing:border-box; min-height:56px; }
+  button { font:inherit; padding:9px 16px; border-radius:8px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
+  button.secondary { background:#eceef3; color:var(--ink); }
+  .progress { height:6px; background:#eceef3; border-radius:3px; overflow:hidden; flex-basis:100%; }
+  .progress div { height:100%; background:var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <b>Разметка «сюжет × клиент»</b>
+  <label class="muted">Разметчик <input type="text" id="labeler" size="14" placeholder="имя"></label>
+  <span class="muted" id="count"></span>
+  <a class="muted" href="/labeling/export.csv">выгрузить CSV</a>
+  <div class="progress"><div id="bar" style="width:0"></div></div>
+</header>
+<main>
+  <div id="empty" class="muted" hidden></div>
+  <div class="cols" id="pair" hidden>
+    <section>
+      <h2>Сюжет</h2>
+      <h3 id="s-title"></h3>
+      <div class="muted" id="s-meta"></div>
+      <p id="s-summary"></p>
+      <div id="s-extra"></div>
+      <ul id="s-items"></ul>
+    </section>
+    <section>
+      <h2>Клиент</h2>
+      <h3 id="c-title"></h3>
+      <div id="c-body"></div>
+    </section>
+  </div>
+  <section id="form-card" hidden>
+    <form id="form">
+      <div class="row">
+        <strong>Важно для этого клиента?</strong>
+        <label class="opt"><input type="radio" name="important" value="1" required>Важно</label>
+        <label class="opt"><input type="radio" name="important" value="0">Не важно</label>
+      </div>
+      <div class="row">
+        <strong>Главный канал</strong>
+        <select id="channel"><option value="">— не задан —</option></select>
+      </div>
+      <div class="row">
+        <strong>Знак для клиента</strong>
+        <label class="opt"><input type="radio" name="sign" value="-1">Риск</label>
+        <label class="opt"><input type="radio" name="sign" value="0">Нейтрально</label>
+        <label class="opt"><input type="radio" name="sign" value="1">Возможность</label>
+      </div>
+      <textarea id="comment" placeholder="Комментарий: почему (необязательно)"></textarea>
+      <div class="row">
+        <button type="submit">Сохранить и дальше</button>
+        <span class="muted">Клавиши: 1 — важно, 0 — не важно, Enter — сохранить</span>
+      </div>
+    </form>
+  </section>
+</main>
+<script>
+// Текст сюжетов приходит из новостей — выводим только через textContent
+const $ = (id) => document.getElementById(id);
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+const safeUrl = (u) => { try { const x = new URL(u); return ["http:", "https:"].includes(x.protocol) ? x.href : null; } catch { return null; } };
+let current = null;
+
+const labeler = $("labeler");
+try { labeler.value = localStorage.getItem("labeler") || ""; } catch {}
+labeler.addEventListener("change", () => { try { localStorage.setItem("labeler", labeler.value.trim()); } catch {} load(); });
+
+async function loadChannels() {
+  const list = await (await fetch("/labeling/channels")).json();
+  for (const c of list) { const o = el("option", c.name); o.value = c.id; o.title = c.up ? "рост: " + c.up : ""; $("channel").append(o); }
+}
+
+function chips(parent, label, values) {
+  if (!values || !values.length) return;
+  const p = el("div"); p.append(el("span", label + ": ", "muted"));
+  for (const v of values) p.append(el("span", v, "chip"));
+  parent.append(p);
+}
+
+function render(pair) {
+  const s = pair.story, c = pair.client;
+  $("s-title").textContent = s.title;
+  $("s-meta").textContent = `${s.event_type || "тип не задан"} · ${s.status} · источников: ${s.corroboration}`;
+  $("s-summary").textContent = s.summary || "";
+  const extra = $("s-extra"); extra.replaceChildren();
+  chips(extra, "Числа", s.numbers); chips(extra, "Факторы", s.channels);
+  const items = $("s-items"); items.replaceChildren();
+  for (const it of s.items || []) {
+    const li = el("li"); const href = safeUrl(it.url);
+    const a = el(href ? "a" : "span", it.title); if (href) { a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer"; }
+    li.append(el("span", it.source_id + ": ", "muted"), a); items.append(li);
+  }
+  $("c-title").textContent = c.archetype;
+  const body = $("c-body"); body.replaceChildren();
+  body.append(el("div", `${c.company_id} · ${c.okved}`), el("div", `Выручка ${c.revenue_bn} млрд ₽ · ${c.region || ""}`, "muted"));
+  chips(body, "Продукты банка", c.products); chips(body, "Страны ВЭД", c.fts_countries);
+  chips(body, "Поставщики по отраслям", c.suppliers_by_sector); chips(body, "Покупатели по отраслям", c.buyers_by_sector);
+  if (c.high_dependency) body.append(el("div", "Высокая зависимость от одного контрагента", "muted"));
+}
+
+async function load() {
+  const name = labeler.value.trim();
+  if (!name) { $("empty").textContent = "Введите имя разметчика сверху."; $("empty").hidden = false; $("pair").hidden = $("form-card").hidden = true; return; }
+  const data = await (await fetch(`/labeling/next?labeler=${encodeURIComponent(name)}`)).json();
+  $("count").textContent = `размечено ${data.done} из ${data.total}`;
+  $("bar").style.width = data.total ? `${100 * data.done / data.total}%` : "0";
+  current = data.pair;
+  const has = !!current;
+  $("pair").hidden = $("form-card").hidden = !has;
+  $("empty").hidden = has;
+  if (!has) { $("empty").textContent = "Все пары размечены — спасибо! Выгрузка: «выгрузить CSV»."; return; }
+  render(current); $("form").reset();
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const sign = f.get("sign");
+  const body = { pair_id: current.pair_id, labeler: labeler.value.trim(), important: f.get("important") === "1",
+                 main_channel: $("channel").value || null, sign: sign === null ? null : Number(sign), comment: $("comment").value || null };
+  const r = await fetch("/labeling/labels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) { alert("Не сохранилось: " + r.status); return; }
+  load();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.key === "1" || e.key === "0") document.querySelector(`input[name=important][value="${e.key}"]`).checked = true;
+});
+
+loadChannels().then(load);
+</script>
+</body>
+</html>

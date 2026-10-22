@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
+from backend.api.labeling import router as labeling_router
 from backend.db import models as m
 from backend.db.engine import get_engine
 from backend.ingest.store import ingest_stats
@@ -11,6 +12,7 @@ from backend.profile.graph import get_graph
 from backend.schemas import CounterpartyGraph
 
 app = FastAPI(title="AlfaAINews")
+app.include_router(labeling_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
 
 
