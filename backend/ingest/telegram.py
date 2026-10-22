@@ -59,14 +59,24 @@ def username(src: Source) -> str:
     return (src.url or "").rstrip("/").rsplit("/", 1)[-1].lstrip("@")
 
 
+# значки и хештеги в начале строки: «❗️», «⚡️», «▪️», «🇷🇺#SBER»
+_LEADING_NOISE = re.compile(r"^(?:#\w+\s*|[^\w«\"(\[])+")
+_ONLY_TAGS = re.compile(r"^[\W_]*(?:[#$]\w+[\W_]*)+$")
+
+
+def post_title(text: str) -> str:
+    """Заголовок поста: первая содержательная строка без эмодзи и хештегов в начале."""
+    lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+    line = next((ln for ln in lines if not _ONLY_TAGS.match(ln) and len(ln.split()) >= 2), lines[0])
+    line = _LEADING_NOISE.sub("", line).strip() or line
+    return line if len(line) <= TITLE_MAX else line[: TITLE_MAX - 1].rsplit(" ", 1)[0] + "…"
+
+
 def message_to_item(src: Source, channel: str, msg, fetched_at: datetime) -> RawItem | None:
     text = clean_text(getattr(msg, "message", None))
     if not text:
         return None  # только медиа без подписи
-    first_line = text.split("\n", 1)[0]
-    title = (
-        first_line if len(first_line) <= TITLE_MAX else first_line[: TITLE_MAX - 1].rsplit(" ", 1)[0] + "…"
-    )
+    title = post_title(text)
     fwd = None
     if getattr(msg, "fwd_from", None):
         f = msg.fwd_from

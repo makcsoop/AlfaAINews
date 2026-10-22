@@ -3,8 +3,10 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
+
 from backend.ingest.registry import load_sources
-from backend.ingest.telegram import message_to_item, username
+from backend.ingest.telegram import message_to_item, post_title, username
 
 SRC = {s.id: s for s in load_sources("config/sources.yaml")}["tg_centralbank_russia"]
 NOW = datetime(2026, 10, 22, 12, tzinfo=UTC)
@@ -50,3 +52,22 @@ def test_forward_and_ads_and_media_only():
 def test_long_first_line_is_trimmed_on_word():
     item = message_to_item(SRC, "c", msg(4, "слово " * 80), NOW)
     assert len(item.title) <= 200 and item.title.endswith("…")
+
+
+@pytest.mark.parametrize(
+    ("text", "title"),
+    [
+        (
+            "❗️Путин назначил Шестакова врио губернатора Приморья.",
+            "Путин назначил Шестакова врио губернатора Приморья.",
+        ),
+        (
+            "🇷🇺#SBER\nНабсовет Сбербанка рассмотрит кандидатуру Григоренко",
+            "Набсовет Сбербанка рассмотрит кандидатуру Григоренко",
+        ),
+        ("▪️ «Газпром» и CNPC договорились о цене", "«Газпром» и CNPC договорились о цене"),
+        ("#нефть #brent Brent превысила $111", "Brent превысила $111"),
+    ],
+)
+def test_post_title_strips_emoji_and_tags(text, title):
+    assert post_title(text) == title
