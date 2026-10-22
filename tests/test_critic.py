@@ -52,12 +52,12 @@ def test_rate14_passes_first_time(analyzed):
 
 def test_missing_ref_fails_with_task(analyzed):
     dossier, results = analyzed
-    bad = mutated(results, "business", lambda r: edit_driver(r, "rate_cost", refs=["fact:ghost:9"]))
+    bad = mutated(results, "business", lambda r: edit_driver(r, "key_rate", refs=["fact:ghost:9"]))
     v = critique(dossier, bad)
     assert not v.ok
     f = [x for x in v.failures if x.code == "missing_ref"]
-    assert f and f[0].analyst == "business" and f[0].channel == "rate_cost"
-    assert v.planner_task and "rate_cost" in v.planner_task
+    assert f and f[0].analyst == "business" and f[0].channel == "key_rate"
+    assert v.planner_task and "key_rate" in v.planner_task
 
 
 def test_missing_ref_from_dropped_driver_note(analyzed):
@@ -75,7 +75,7 @@ def test_number_not_from_quote_fails(analyzed):
     bad = mutated(
         results,
         "finance",
-        lambda r: edit_driver(r, "rate_cost", rationale="Ставка сохранена на 17% годовых."),
+        lambda r: edit_driver(r, "key_rate", rationale="Ставка сохранена на 17% годовых."),
     )
     v = critique(dossier, bad)
     assert any(x.code == "number_unverified" and "17" in x.detail for x in v.failures)
@@ -99,10 +99,10 @@ def test_evaluative_word_fails_without_task(analyzed):
     bad = mutated(
         results,
         "business",
-        lambda r: edit_driver(r, "rate_cost", rationale="Это плохо для оптовой торговли."),
+        lambda r: edit_driver(r, "key_rate", rationale="Это плохо для оптовой торговли."),
     )
     v = critique(dossier, bad)
-    assert any(x.code == "evaluative" and x.channel == "rate_cost" for x in v.failures)
+    assert any(x.code == "evaluative" and x.channel == "key_rate" for x in v.failures)
     assert v.planner_task is None  # новыми данными не лечится
     assert any("плохо" in n for n in v.notes)
 
@@ -170,7 +170,7 @@ def test_one_analyst_down_is_note_only(analyzed):
 
 def _inject_ghost_ref(ctx: PipelineContext) -> None:
     for cd in ctx.artifacts["analysts"]["business"]["drivers"]:
-        if cd["driver"]["channel"] == "rate_cost":
+        if cd["driver"]["channel"] == "key_rate":
             cd["driver"]["refs"] = ["fact:ghost:9"]
 
 

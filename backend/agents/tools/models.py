@@ -5,7 +5,8 @@ from typing import Literal
 
 from pydantic import Field
 
-from backend.schemas.common import Schema, Score01, Signed
+from backend.schemas.common import Horizon, Schema, Score01, Signed
+from backend.schemas.knowledge import Forecast
 
 # --- get_profile ---------------------------------------------------------------------------------
 
@@ -16,7 +17,7 @@ class GetProfileIn(Schema):
 
 class ExposureOut(Schema):
     channel: str
-    exposure: Signed
+    sensitivity: Signed
     drivers: list[str]
     is_assumption: bool
 
@@ -105,10 +106,8 @@ class BankPositionOut(Schema):
     id: str
     thesis: str
     channel: str | None
-    stance: Signed | None
-    forecast_value: float | None
-    forecast_unit: str | None
-    forecast_horizon: str | None
+    direction: Signed | None = Field(description="куда банк ждёт движения фактора: + вверх, − вниз")
+    forecast: Forecast | None
     doc_id: str
     doc_title: str
     doc_date: date
@@ -116,6 +115,7 @@ class BankPositionOut(Schema):
     quote: str
     valid_until: date | None
     expired: bool = Field(description="valid_until раньше даты сюжета")
+    superseded_by: str | None = Field(description="id сюжета, который сделал позицию устаревшей")
 
 
 class BankPositionsOut(Schema):
@@ -128,12 +128,12 @@ class BankPositionsOut(Schema):
 class GetMarketKnowledgeIn(Schema):
     channel: str | None = Field(default=None, max_length=64)
     event_type: str | None = Field(default=None, max_length=64)
-    kind: Literal["mechanism", "expectation", "post_event_review"] | None = None
+    kind: Literal["mechanism", "expectation", "forecast", "case"] | None = None
 
 
 class MarketKnowledgeOut(Schema):
     id: str
-    kind: Literal["mechanism", "expectation", "post_event_review"]
+    kind: Literal["mechanism", "expectation", "forecast", "case"]
     published_at: datetime
     event_type: str | None
     channel: str | None
@@ -143,7 +143,8 @@ class MarketKnowledgeOut(Schema):
     expected_value: float | None
     expected_unit: str | None
     origin: Literal["telegram", "site", "manual"]
-    timing: Literal["before_event"]
+    horizon: Horizon | None
+    timing: Literal["before_event", "after_event"]
     channel_weight: Score01 | None
     one_sided: bool
 

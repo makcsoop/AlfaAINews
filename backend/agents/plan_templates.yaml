@@ -1,4 +1,4 @@
-# Шаблоны плана глубокого разбора «сюжет × отрасль» по типам событий из config/taxonomy.yaml.
+# Шаблоны плана глубокого разбора «сюжет × отрасль» по типам событий из config/event_types.yaml.
 # Шаг = вызов инструмента из backend.agents.tools.TOOLS. Только инструменты разбора отрасли:
 # get_profile и get_counterparties сюда не входят — компания подставляется позже, кодом.
 #
@@ -49,14 +49,14 @@ templates:
     - {tool: search_news, args: {query: "{title}", limit: 5}, why: "состав и сроки ограничений"}
     - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по каналу"}
     - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизмы: логистика, платежи, курс"}
-    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "разборы прошлых пакетов санкций"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: case}, why: "разборы прошлых пакетов санкций"}
     - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые пакеты в этой отрасли"}
 
   tariff_duty:
     - {tool: search_news, args: {query: "{title}", limit: 5}, why: "ставки, товарные группы, даты вступления"}
     - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по пошлинам"}
     - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм влияния пошлин на отрасль"}
-    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "итоги прошлых изменений пошлин"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: case}, why: "итоги прошлых изменений пошлин"}
     - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые изменения пошлин"}
     - {tool: calculator, args: {expression: "round({num0} - {num1}, 2)"}, requires_numbers: 2, same_unit: true, why: "изменение ставки пошлины в пунктах"}
 
@@ -80,14 +80,14 @@ templates:
     - {tool: search_news, args: {query: "{title}", limit: 5}, why: "масштаб и сроки сбоя"}
     - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по логистике"}
     - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "механизм передачи сбоя в цены и сроки"}
-    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "итоги прошлых сбоев"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: case}, why: "итоги прошлых сбоев"}
     - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые сбои поставок"}
 
   state_support:
     - {tool: search_news, args: {query: "{title}", limit: 5}, why: "условия меры: кто получает, сроки, объём"}
     - {tool: get_bank_positions, each_channel: true, args: {channel: "{channel}"}, why: "оценка ЦМИ по господдержке"}
     - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: mechanism}, why: "как мера доходит до отрасли"}
-    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: post_event_review}, why: "итоги прошлых мер"}
+    - {tool: get_market_knowledge, args: {event_type: "{event_type}", kind: case}, why: "итоги прошлых мер"}
     - {tool: find_similar_cases, args: {event_type: "{event_type}", sector: "{sector}", limit: 3}, why: "прошлые меры поддержки"}
 
   # типы без своего шаблона

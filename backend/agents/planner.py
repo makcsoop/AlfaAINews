@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_PATH = Path(__file__).with_name("plan_templates.yaml")
-TAXONOMY_PATH = ROOT / "config" / "taxonomy.yaml"
+EVENT_TYPES_PATH = ROOT / "config" / "event_types.yaml"
 PROMPT_PATH = ROOT / "prompts" / "planner.md"
 
 # Инструменты разбора отрасли. Профиль и контрагенты компании сюда не входят.
@@ -88,8 +88,8 @@ def max_steps() -> int:
 
 @lru_cache(maxsize=1)
 def taxonomy_channels() -> dict[str, list[str]]:
-    """Тип события -> каналы из config/taxonomy.yaml."""
-    data = yaml.safe_load(TAXONOMY_PATH.read_text(encoding="utf-8")) or {}
+    """Тип события -> каналы из config/event_types.yaml."""
+    data = yaml.safe_load(EVENT_TYPES_PATH.read_text(encoding="utf-8")) or {}
     return {et: list((v or {}).get("channels") or []) for et, v in (data.get("event_types") or {}).items()}
 
 
@@ -185,7 +185,7 @@ def story_and_fact_items(story: Story, facts: EventFacts) -> list[DossierItem]:
             data={
                 "event_type": facts.event_type,
                 "status": story.status,
-                "independent_sources": story.independent_sources,
+                "corroboration": story.corroboration,
                 "source_ids": story.source_ids,
                 "first_seen": story.first_seen.isoformat(),
                 "last_seen": story.last_seen.isoformat(),
@@ -253,8 +253,8 @@ def items_from_result(tool: str, out: BaseModel) -> list[DossierItem]:
                 DossierItem(
                     id=p["id"], kind="bank_position", title=p["doc_title"], text=_cut(p["quote"]),
                     data={k: p[k] for k in (
-                        "thesis", "channel", "stance", "forecast_value", "forecast_unit",
-                        "forecast_horizon", "doc_id", "page", "doc_date", "valid_until", "expired",
+                        "thesis", "channel", "direction", "forecast", "doc_id", "page", "doc_date",
+                        "valid_until", "expired", "superseded_by",
                     )},
                     source_tool=tool,
                 )
@@ -302,7 +302,9 @@ def compute_gaps(dossier: Dossier) -> list[str]:
     gaps: list[str] = []
     bank = [
         i for i in dossier.by_kind("bank_position")
-        if not i.data.get("expired") and (not tax or i.data.get("channel") in tax)
+        if not i.data.get("expired")
+        and not i.data.get("superseded_by")
+        and (not tax or i.data.get("channel") in tax)
     ]
     if not bank:
         where = f" по каналам типа события ({', '.join(tax)})" if tax else " по теме сюжета"

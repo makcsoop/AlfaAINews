@@ -23,7 +23,7 @@ STORY_AT = datetime(2026, 9, 11, 10, 30, tzinfo=UTC)
 def mk(id_, published, *, text="Ставку сохранили. Рынок ждал паузы.", **kw) -> MarketKnowledge:
     base = {
         "id": id_,
-        "kind": "post_event_review",
+        "kind": "case",
         "source_id": "chan_a",
         "item_id": f"item_{id_}",
         "published_at": published,
@@ -117,7 +117,7 @@ def test_ref_to_example_is_dropped():
     out = AnalystOutput(
         drivers=[
             Driver(
-                channel="rate_cost",
+                channel="key_rate",
                 direction="up",
                 strength="high",
                 horizon="quarter",

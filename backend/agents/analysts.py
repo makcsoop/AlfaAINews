@@ -20,13 +20,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agents.dossier import Dossier, DossierKind
 from backend.agents.examples import Example
+from backend.cards.signals import signed
 from backend.llm import BudgetExceeded, LLMClient, LLMUnavailable
 from backend.llm.client import data_block
 from backend.schemas import AnalystReport, ChannelImpact, Evidence
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPTS_DIR = ROOT / "prompts"
-TAXONOMY_PATH = ROOT / "config" / "taxonomy.yaml"
+CHANNELS_PATH = ROOT / "config" / "channels_matrix.yaml"
+EVENT_TYPES_PATH = ROOT / "config" / "event_types.yaml"
 
 AnalystName = Literal["business", "finance"]
 ANALYSTS: tuple[AnalystName, ...] = ("business", "finance")
@@ -36,7 +38,6 @@ STEP: dict[str, str] = {"business": "analyst_business", "finance": "analyst_fina
 EXCLUDED_KINDS: frozenset[str] = frozenset({"profile", "counterparties"})
 
 STRENGTH_WEIGHT = {"low": 0.3, "medium": 0.6, "high": 0.9}
-DIRECTION_SIGN = {"up": 1.0, "down": -1.0, "flat": 0.0}
 HORIZON_MAP = {"days": "days", "quarter": "quarters", "year": "years"}
 
 # Оценочные слова: аналитик не оценивает последствия для отрасли или клиента (знак ставит скоринг)
@@ -69,7 +70,7 @@ def find_evaluative(text: str) -> list[str]:
 class Driver(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    channel: str = Field(description="id канала из config/taxonomy.yaml")
+    channel: str = Field(description="id фактора из config/channels_matrix.yaml")
     direction: Literal["up", "down", "flat"]
     strength: Literal["low", "medium", "high"]
     horizon: Literal["days", "quarter", "year"]
@@ -122,8 +123,8 @@ class AnalystResult(BaseModel):
 
 @lru_cache
 def load_channels(path: str | None = None) -> dict[str, str]:
-    """Все каналы влияния {id: название} из config/taxonomy.yaml."""
-    raw = yaml.safe_load(Path(path or TAXONOMY_PATH).read_text(encoding="utf-8"))
+    """Все факторы (каналы влияния) {id: название} из config/channels_matrix.yaml."""
+    raw = yaml.safe_load(Path(path or CHANNELS_PATH).read_text(encoding="utf-8"))
     return {cid: str(v.get("name", cid)) for cid, v in raw["channels"].items()}
 
 
@@ -153,10 +154,10 @@ def render_examples(examples: Sequence[Example]) -> str:
 
 
 def event_channels_for(event_type: str | None) -> list[str]:
-    """Обязательные каналы типа события из таксономии (та же таблица, что у критика)."""
+    """Обязательные факторы типа события из config/event_types.yaml (та же таблица, что у критика)."""
     if not event_type:
         return []
-    raw = yaml.safe_load(Path(TAXONOMY_PATH).read_text(encoding="utf-8"))
+    raw = yaml.safe_load(Path(EVENT_TYPES_PATH).read_text(encoding="utf-8"))
     return list(((raw.get("event_types") or {}).get(event_type) or {}).get("channels") or [])
 
 
@@ -208,7 +209,7 @@ def validate_output(
     kept: dict[str, CheckedDriver] = {}
     for i, d in enumerate(out.drivers):
         if d.channel not in channels:
-            notes.append(f"driver[{i}] {d.channel}: канала нет в таксономии, отброшен")
+            notes.append(f"driver[{i}] {d.channel}: фактора нет в channels_matrix, отброшен")
             continue
         missing = [r for r in d.refs if r not in ids]
         if missing:
@@ -251,7 +252,7 @@ def to_report(
     analyst: AnalystName,
     model: str,
 ) -> AnalystReport:
-    """Конвертер в AnalystReport. impact — направление ФАКТОРА × вес силы, не оценка для клиента.
+    """Конвертер в AnalystReport. direction/strength — движение ФАКТОРА, не оценка для клиента.
 
     В отчёт идут только драйверы без оценочных слов: оценочный текст до карточки не доходит.
     """
@@ -267,7 +268,8 @@ def to_report(
         channels.append(
             ChannelImpact(
                 channel=d.channel,
-                impact=DIRECTION_SIGN[d.direction] * STRENGTH_WEIGHT[d.strength],
+                direction=d.direction,
+                strength=STRENGTH_WEIGHT[d.strength],
                 horizon=HORIZON_MAP[d.horizon],  # type: ignore[arg-type]
                 rationale=d.rationale,
                 evidence=evidence,
@@ -399,8 +401,8 @@ def agreement(reports: Mapping[str, AnalystReport | None]) -> list[ChannelAgreem
     b, f = reports.get("business"), reports.get("finance")
     if b is None or f is None:
         return []
-    bi = {c.channel: c.impact for c in b.channels}
-    fi = {c.channel: c.impact for c in f.channels}
+    bi = {c.channel: signed(c) for c in b.channels}
+    fi = {c.channel: signed(c) for c in f.channels}
     return [
         ChannelAgreement(
             channel=ch,

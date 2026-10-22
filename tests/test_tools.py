@@ -38,7 +38,7 @@ def mk(id_, *, published_at, timing="before_event", origin="telegram", kind="mec
         item_id="it",
         published_at=published_at,
         event_type="rate_decision",
-        channel="rate_cost",
+        channel="key_rate",
         statement="s",
         origin=origin,
         timing=timing,
@@ -63,7 +63,7 @@ def test_every_tool_answers_by_schema(ctx):
         "get_profile": {},
         "get_counterparties": {"top": 5},
         "search_news": {"query": "ключевая ставка", "limit": 5},
-        "get_bank_positions": {"channel": "rate_cost"},
+        "get_bank_positions": {"channel": "key_rate"},
         "get_market_knowledge": {},
         "find_similar_cases": {"event_type": "rate_decision"},
         "calculator": {"expression": "14 - 13.5"},
@@ -90,7 +90,7 @@ def test_profile_has_no_absolute_revenue(ctx):
     assert out.revenue_rank_in_okved == 3 and out.revenue_peers_in_okved == 57
     assert out.revenue_top_share == pytest.approx(3 / 57, abs=1e-3)
     assert out.foreign_trade is True and out.foreign_trade_country == "Китай"
-    assert out.okved_code == "46.69" and {e.channel for e in out.exposures} >= {"rate_cost"}
+    assert out.okved_code == "46.69" and {e.channel for e in out.exposures} >= {"key_rate"}
     assert COMPANY not in dumped
 
 
@@ -143,11 +143,11 @@ def test_search_news_respects_story_boundary(ctx):
 
 
 def test_bank_positions_filtered_by_date_and_channel(ctx):
-    out, _ = run_tool(ctx, "get_bank_positions", {"channel": "rate_cost"})
+    out, _ = run_tool(ctx, "get_bank_positions", {"channel": "key_rate"})
     assert len(out.positions) == 5
     assert all(p.quote and p.page >= 1 for p in out.positions)
     q, _ = run_tool(ctx, "get_bank_positions", {"query": "ключевую ставку 13,5%"})
-    assert q.positions and all(p.channel == "rate_cost" for p in q.positions)
+    assert q.positions and all(p.channel == "key_rate" for p in q.positions)
     old = ToolContext(
         company_id=COMPANY,
         role="cfo",

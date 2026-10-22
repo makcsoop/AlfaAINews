@@ -188,7 +188,7 @@ def test_critic_summary_checked_against_whole_dossier(analyzed):  # noqa: F811
 def test_critic_coverage_without_material_asks_planner_with_material_does_not(analyzed):  # noqa: F811
     dossier, results = analyzed
     dossier = dossier.model_copy(deep=True)
-    dossier.event_type = "rate_decision"  # каналы: rate_cost, deposit_yield, fx_rub
+    dossier.event_type = "rate_decision"  # каналы: key_rate, inflation, fx_rub
     def drop_fx(r):
         r.drivers = [d for d in r.drivers if d.driver.channel != "fx_rub"]
         r.report.channels = [c for c in r.report.channels if c.channel != "fx_rub"]

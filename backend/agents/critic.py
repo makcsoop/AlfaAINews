@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
-from backend.agents.analysts import EXCLUDED_KINDS, TAXONOMY_PATH, AnalystResult, find_evaluative
+from backend.agents.analysts import EVENT_TYPES_PATH, EXCLUDED_KINDS, AnalystResult, find_evaluative
 from backend.agents.dossier import Dossier, DossierItem
 from backend.schemas.common import BANK_SOURCE_PREFIX
 
@@ -159,12 +159,12 @@ def unsupported_numbers(text: str, items: list[DossierItem]) -> list[str]:
     return bad
 
 
-# --- таксономия -----------------------------------------------------------------------------------
+# --- типы событий -----------------------------------------------------------------------------------
 
 
 @lru_cache
 def event_channels(path: str | None = None) -> dict[str, list[str]]:
-    raw = yaml.safe_load(Path(path or TAXONOMY_PATH).read_text(encoding="utf-8"))
+    raw = yaml.safe_load(Path(path or EVENT_TYPES_PATH).read_text(encoding="utf-8"))
     return {et: list(v.get("channels") or []) for et, v in raw.get("event_types", {}).items()}
 
 

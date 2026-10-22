@@ -1,6 +1,6 @@
 """Примеры разборов аналитиков рынка для подсказки двум аналитикам.
 
-Берутся только разборы после ПРОШЛЫХ событий того же типа (post_event_review), опубликованные строго раньше
+Берутся только разборы после ПРОШЛЫХ событий того же типа (case), опубликованные строго раньше
 даты сюжета (инвариант 10). Это образец рассуждения, а не источник фактов: в refs аналитика они не попадают.
 """
 
@@ -70,7 +70,7 @@ def select_examples(
     cutoff = _utc(story_published_at)
     candidates: list[MarketKnowledge] = []
     for mk in source.market_knowledge():
-        if mk.kind != "post_event_review" or not mk.statement.strip():
+        if mk.kind != "case" or not mk.statement.strip():
             continue
         if _utc(mk.published_at) >= cutoff:  # инвариант 10; заодно отсекает разбор самого сюжета
             continue

@@ -68,8 +68,8 @@ def make_dossier(bundle, company_id: str) -> Dossier:
             DossierItem(
                 id=bp.id, kind="bank_position", title=bp.thesis, text=bp.quote, published_at=_utc(bp.doc_date),
                 data={
-                    "channel": bp.channel, "stance": bp.stance, "forecast_value": bp.forecast_value,
-                    "forecast_unit": bp.forecast_unit, "quote": bp.quote, "doc_date": bp.doc_date.isoformat(),
+                    "channel": bp.channel, "direction": bp.direction,
+                    "forecast": bp.forecast.model_dump(mode="json") if bp.forecast else None, "quote": bp.quote, "doc_date": bp.doc_date.isoformat(),
                     "valid_until": bp.valid_until.isoformat() if bp.valid_until else None,
                     "superseded_by": bp.superseded_by,
                 },
@@ -87,16 +87,6 @@ def make_dossier(bundle, company_id: str) -> Dossier:
     return d
 
 
-def factor_direction(reports):
-    """Отчёты фикстуры хранят rate_cost со знаком для отрасли; аналитики отдают направление фактора."""
-    return [
-        r.model_copy(update={"channels": [
-            c.model_copy(update={"impact": -c.impact}) if c.channel == "rate_cost" else c for c in r.channels
-        ]})
-        for r in reports
-    ]
-
-
 def env(bundle, company_id: str, role: str) -> dict:
     return {
         "story": bundle["story"][0],
@@ -104,7 +94,7 @@ def env(bundle, company_id: str, role: str) -> dict:
         "relevance": next(r for r in bundle["relevance_score"] if r.company_id == company_id),
         "profile": next(p for p in bundle["company_profile"] if p.company_id == company_id),
         "graph": next((g for g in bundle["counterparty_graph"] if g.company_id == company_id), None),
-        "analyses": factor_direction(bundle["analyst_report"]),
+        "analyses": bundle["analyst_report"],
         "role": role,
         "trace_id": f"trace_{company_id}",
     }
@@ -171,7 +161,9 @@ def test_card_valid_and_labelled(bundle, tmp_path, company, role):
 def test_confidence_and_surprise_set_by_code(bundle, tmp_path):
     cfo = write(env(bundle, *CASES[0]), fixture_client(tmp_path), sources=bundle["source"]).card
     tre = write(env(bundle, *CASES[1]), fixture_client(tmp_path), sources=bundle["source"]).card
-    assert cfo.confidence == "high" and tre.confidence == "medium"
+    # ЦМИ ждёт ставку выше (direction ↑ — направление фактора), аналитики так же: у обоих прямой канал key_rate
+    assert cfo.confidence == "high" and tre.confidence == "high"
+    assert any("совпадает" in r for r in tre.confidence_reasons)
     assert any("первоисточник" in r for r in cfo.confidence_reasons)
     assert cfo.relevance.polarity == "risk" and tre.relevance.polarity == "opportunity"
     for card in (cfo, tre):
@@ -288,7 +280,7 @@ def test_market_view_by_mk_ref(bundle):
     e["dossier"].add(DossierItem(
         id="mk_demo_1", kind="market_knowledge", title="Большинство аналитиков ждали снижения ставки",
         text="Большинство аналитиков ждали снижения ставки", published_at=datetime(2026, 9, 10, tzinfo=UTC),
-        data={"channel": "rate_cost", "expected_value": 13.5},
+        data={"channel": "key_rate", "expected_value": 13.5},
     ))
 
     def add(d):
@@ -354,7 +346,7 @@ def test_offer_only_with_trigger(bundle):
     assert not [a for a in card.actions if a.type == "bank_product"]
     assert not [c for c in card.claims if c.type == "bank_offer"]
     # направление обратное (ставка ниже): фиксация не предлагается
-    down = [r.model_copy(update={"channels": [c.model_copy(update={"impact": -0.6}) for c in r.channels]}) for r in an]
+    down = [r.model_copy(update={"channels": [c.model_copy(update={"direction": "down", "strength": 0.6}) for c in r.channels]}) for r in an]
     rel_down = rel.model_copy(update={"contributions": [c.model_copy(update={"sign": 1}) for c in rel.contributions]})
     assert find_offer(profile=prof, relevance=rel_down, analyses=down) is None
     # слух: рекламы нет

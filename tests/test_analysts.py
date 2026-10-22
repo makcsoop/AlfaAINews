@@ -114,10 +114,11 @@ def test_both_analysts_answer_on_rate14(tmp_path, dossier):
         assert r.drivers_total == len(r.report.channels) >= 3
         assert r.cost_rub == 0.0
     fin = {c.channel: c for c in res["finance"].report.channels}
-    assert fin["rate_cost"].impact == pytest.approx(0.9)  # ставка ↑ высокая сила — направление фактора
-    assert fin["deposit_yield"].impact == pytest.approx(0.6)
-    assert fin["fx_rub"].impact == pytest.approx(0.3)
-    assert fin["consumer_demand"].impact == pytest.approx(-0.3)
+    # направление фактора и сила отдельными полями (ставка ↑ высокая сила), знака «для клиента» нет
+    assert (fin["key_rate"].direction, fin["key_rate"].strength) == ("up", pytest.approx(0.9))
+    assert (fin["inflation"].direction, fin["inflation"].strength) == ("up", pytest.approx(0.6))
+    assert (fin["fx_rub"].direction, fin["fx_rub"].strength) == ("up", pytest.approx(0.3))
+    assert (fin["consumer_demand"].direction, fin["consumer_demand"].strength) == ("down", pytest.approx(0.3))
 
 
 def test_conversion_to_analyst_report(tmp_path, dossier):
@@ -126,7 +127,7 @@ def test_conversion_to_analyst_report(tmp_path, dossier):
     assert isinstance(rep, AnalystReport)
     AnalystReport.model_validate(rep.model_dump(mode="json"))
     assert rep.analyst == "finance" and rep.sector == "46" and rep.story_id == dossier.story_id
-    rate = next(c for c in rep.channels if c.channel == "rate_cost")
+    rate = next(c for c in rep.channels if c.channel == "key_rate")
     assert rate.horizon == "quarters"
     assert {e.source_id for e in rate.evidence} == {
         "fact:st_2026-09-11_keyrate:2",
@@ -136,15 +137,15 @@ def test_conversion_to_analyst_report(tmp_path, dossier):
     assert all(e.quote for e in rate.evidence)  # у этих элементов в досье есть текст
     assert next(c for c in reports["business"].channels if c.channel == "construction").horizon == "years"
     assert next(c for c in reports["finance"].channels if c.channel == "fx_rub").horizon == "days"
-    # flat -> 0
-    assert next(c for c in reports["business"].channels if c.channel == "fx_rub").impact == 0.0
+    flat = next(c for c in reports["business"].channels if c.channel == "fx_rub")
+    assert flat.direction == "flat"
 
 
 def test_agreement_for_arbiter(tmp_path, dossier):
     reports = run_analysts(dossier, client=fixture_client(tmp_path), trace_id="t3")
     ag = {a.channel: a for a in agreement(reports)}
-    assert set(ag) == {"rate_cost", "consumer_demand", "fx_rub"}
-    assert ag["rate_cost"].same_direction and ag["rate_cost"].strength_diff == pytest.approx(0.3)
+    assert set(ag) == {"key_rate", "consumer_demand", "fx_rub"}
+    assert ag["key_rate"].same_direction and ag["key_rate"].strength_diff == pytest.approx(0.3)
     assert ag["consumer_demand"].same_direction and ag["consumer_demand"].strength_diff == 0
     assert not ag["fx_rub"].same_direction  # бизнес: flat, финансы: up
     assert agreement({"business": reports["business"], "finance": None}) == []
@@ -177,15 +178,15 @@ def test_evaluative_driver_is_flagged_and_excluded_from_report(tmp_path, dossier
     )["finance"]
     assert res.report is not None
     flagged = [d for d in res.drivers if d.flags]
-    assert [d.driver.channel for d in flagged] == ["rate_cost"]
+    assert [d.driver.channel for d in flagged] == ["key_rate"]
     assert {f.split(":")[0] for f in flagged[0].flags} == {"evaluative"}
     assert res.summary_flags  # «негатив…», «неблагоприятн…» в summary
     assert res.check_failures == 2
-    assert [c.channel for c in res.report.channels] == ["deposit_yield"]  # оценочный драйвер в отчёт не идёт
+    assert [c.channel for c in res.report.channels] == ["inflation"]  # оценочный драйвер в отчёт не идёт
     # оценочная сводка заменена нейтральной, собранной кодом из драйверов
     assert not find_evaluative(res.report.summary)
-    assert "deposit_yield" in res.report.summary and "средняя" in res.report.summary
-    assert "кварталы" in res.report.summary and "rate_cost" not in res.report.summary
+    assert "inflation" in res.report.summary and "средняя" in res.report.summary
+    assert "кварталы" in res.report.summary and "key_rate" not in res.report.summary
 
 
 def test_missing_ref_and_unknown_channel_dropped(tmp_path, dossier):
@@ -193,9 +194,9 @@ def test_missing_ref_and_unknown_channel_dropped(tmp_path, dossier):
         dossier, client=fixture_client(tmp_path), trace_id="t5", fixture_keys={"finance": "bad_ref"}
     )["finance"]
     assert res.drivers_total == 3
-    assert [c.channel for c in res.report.channels] == ["rate_cost"]
+    assert [c.channel for c in res.report.channels] == ["key_rate"]
     assert any("cmi_nonexistent_doc#p9#c9" in n for n in res.notes)
-    assert any("crypto_mining" in n and "таксономии" in n for n in res.notes)
+    assert any("crypto_mining" in n and "channels_matrix" in n for n in res.notes)
 
 
 def test_hidden_profile_ref_is_not_valid(tmp_path):
@@ -204,7 +205,7 @@ def test_hidden_profile_ref_is_not_valid(tmp_path):
         {
             "drivers": [
                 {
-                    "channel": "rate_cost",
+                    "channel": "key_rate",
                     "direction": "up",
                     "strength": "low",
                     "horizon": "days",
@@ -222,7 +223,7 @@ def test_hidden_profile_ref_is_not_valid(tmp_path):
 
 def test_schema_rejects_bad_shapes():
     base = {
-        "channel": "rate_cost",
+        "channel": "key_rate",
         "direction": "up",
         "strength": "low",
         "horizon": "days",

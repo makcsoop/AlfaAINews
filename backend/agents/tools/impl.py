@@ -58,7 +58,7 @@ def get_profile(ctx: ToolContext, _: GetProfileIn) -> ProfileOut:
         foreign_trade_country=p.fts_country,
         exposures=[
             ExposureOut(
-                channel=e.channel, exposure=e.exposure, drivers=e.drivers, is_assumption=e.is_assumption
+                channel=e.channel, sensitivity=e.sensitivity, drivers=e.drivers, is_assumption=e.is_assumption
             )
             for e in p.exposures
         ],
@@ -160,10 +160,8 @@ def get_bank_positions(ctx: ToolContext, inp: GetBankPositionsIn) -> BankPositio
                 id=bp.id,
                 thesis=bp.thesis,
                 channel=bp.channel,
-                stance=bp.stance,
-                forecast_value=bp.forecast_value,
-                forecast_unit=bp.forecast_unit,
-                forecast_horizon=bp.forecast_horizon,
+                direction=bp.direction,
+                forecast=bp.forecast,
                 doc_id=bp.doc_id,
                 doc_title=bp.doc_title,
                 doc_date=bp.doc_date,
@@ -171,6 +169,7 @@ def get_bank_positions(ctx: ToolContext, inp: GetBankPositionsIn) -> BankPositio
                 quote=bp.quote,
                 valid_until=bp.valid_until,
                 expired=bp.valid_until is not None and bp.valid_until < boundary,
+                superseded_by=bp.superseded_by,
             )
             for _, _, bp in rows[:20]
         ]
@@ -181,7 +180,8 @@ def get_market_knowledge(ctx: ToolContext, inp: GetMarketKnowledgeIn) -> MarketK
     rows = []
     for mk in ctx.source.market_knowledge():
         # инвариант 10: только опубликованное раньше сюжета и до события
-        if mk.published_at >= ctx.story_published_at or mk.timing != "before_event":
+        # (разбор случая — kind=case — по определению написан после своего события, но до нашего сюжета)
+        if mk.published_at >= ctx.story_published_at or (mk.timing != "before_event" and mk.kind != "case"):
             continue
         if mk.origin == "telegram" and not ctx.allow_telegram_origin:
             continue
@@ -207,7 +207,8 @@ def get_market_knowledge(ctx: ToolContext, inp: GetMarketKnowledgeIn) -> MarketK
                 expected_value=m.expected_value,
                 expected_unit=m.expected_unit,
                 origin=m.origin,
-                timing="before_event",
+                horizon=m.horizon,
+                timing=m.timing,
                 channel_weight=m.channel_weight,
                 one_sided=m.one_sided,
             )

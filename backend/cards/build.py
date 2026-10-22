@@ -99,12 +99,6 @@ def _as_datetime(value: Any) -> datetime | None:
     return None
 
 
-# Позиции ЦМИ (stance) хранят знак «для заёмщика»: по каналам-издержкам рост фактора даёт минус
-# (ставка выше → rate_cost < 0). Аналитики называют направление самого фактора, поэтому для сравнения
-# с ними знак позиции по таким каналам переворачивается.
-COST_CHANNELS = frozenset({"rate_cost"})
-
-
 def _sign(x: float | None) -> int:
     return 0 if x is None else (x > 0) - (x < 0)
 
@@ -239,7 +233,7 @@ def _event(
         title=story.title,
         first_seen=story.first_seen,
         sources=out,
-        independent_sources=story.independent_sources,
+        corroboration=story.corroboration,
     )
 
 
@@ -272,9 +266,9 @@ def compute_confidence(
     bank_same = False
     if factor and mean is not None:
         stances = [
-            _sign(i.data.get("stance")) * (-1 if factor in COST_CHANNELS else 1)
+            _sign(i.data.get("direction"))  # позиция ЦМИ уже хранит направление фактора
             for i in bank_items
-            if i.data.get("channel") == factor and i.data.get("stance") is not None
+            if i.data.get("channel") == factor and i.data.get("direction") is not None
         ]
         bank_same = any(s == _sign(mean) for s in stances if s)
         if stances and not bank_same:
@@ -325,10 +319,12 @@ def _build_surprise(
         pub = it.published_at or _as_datetime(it.data.get("doc_date"))
         if pub is not None and pub.astimezone(UTC) > story_published_at.astimezone(UTC):
             return None  # инвариант 10: ожидание должно быть опубликовано до события
-        v = it.data.get(key)
+        v: Any = it.data
+        for part in key.split("."):  # «forecast.value» — вложенное поле позиции ЦМИ
+            v = v.get(part) if isinstance(v, dict) else None
         return float(v) if isinstance(v, int | float) else None
 
-    bank = expectation(ds.bank_ref, BANK_SOURCE_PREFIX, "bank_position", "forecast_value")
+    bank = expectation(ds.bank_ref, BANK_SOURCE_PREFIX, "bank_position", "forecast.value")
     market = expectation(ds.market_ref, MARKET_SOURCE_PREFIX, "market_knowledge", "expected_value")
     if bank is None and market is None:
         return None
@@ -483,6 +479,7 @@ def assemble_card(
                     text=offer.text,
                     based_on=based_on,
                     is_advertising=True,
+                    trigger=offer.trigger_id,
                 )
             )
             actions.append(Action(type="bank_product", text=offer.text, is_advertising=True))
@@ -494,6 +491,9 @@ def assemble_card(
         card_id=f"card_{story.id}_{profile.company_id}_{role}",
         company_id=profile.company_id,
         user_role=role,
+        version=story.version,
+        stage="deep",
+        analysis_ref=f"{story.id}:{dossier.sector}:{story.version}",
         event=event,
         relevance=relevance,
         what_happened=what_happened,

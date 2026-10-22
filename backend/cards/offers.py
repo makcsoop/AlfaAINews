@@ -38,13 +38,13 @@ TRIGGERS: tuple[_Trigger, ...] = (
     _Trigger(
         id="fix_rate",
         text="Фиксация ставки по новым траншам",
-        factor="rate_cost",
+        factor="key_rate",
         when=lambda p, rate, w: _has(p, "loans", "leasing") and rate > 0,
     ),
     _Trigger(
         id="long_deposit",
         text="Депозит на более длинный срок по текущей ставке",
-        factor="deposit_yield",
+        factor="key_rate",
         when=lambda p, rate, w: _has(p, "deposits") and rate > 0,
     ),
     _Trigger(
@@ -67,7 +67,7 @@ def find_offer(
 ) -> BankOffer | None:
     if story_status in NO_OFFER_STATUSES:
         return None
-    rate = rate_direction(analyses, relevance)
+    rate = rate_direction(analyses, relevance, profile)
     best: BankOffer | None = None
     for t in TRIGGERS:
         contrib = [c for c in relevance.contributions if c.factor == t.factor]

@@ -36,11 +36,22 @@ ROLE_QUESTION: dict[UserRole, str] = {
 }
 
 CHANNEL_QUESTION: dict[str, str] = {
-    "rate_cost": "Какая доля долга и лизинга компании привязана к плавающей ставке?",
-    "deposit_yield": "Какую часть свободных остатков можно разместить на более длинный срок без "
+    "key_rate_debt": "Какая доля долга и лизинга компании привязана к плавающей ставке?",
+    "key_rate_deposit": "Какую часть свободных остатков можно разместить на более длинный срок без "
     "потери ликвидности?",
     "fx_rub": "Какая часть валютной выручки и платежей по ВЭД не закрыта по текущему курсу?",
 }
+
+
+def _channel_question(channel: str | None, profile: CompanyProfile) -> str | None:
+    """Вопрос аналитику по главному фактору; для ставки — по продуктам клиента (долг или размещение)."""
+    if channel == "key_rate":
+        if profile.products.get("loans") or profile.products.get("leasing"):
+            return CHANNEL_QUESTION["key_rate_debt"]
+        if profile.products.get("deposits"):
+            return CHANNEL_QUESTION["key_rate_deposit"]
+        return None
+    return CHANNEL_QUESTION.get(channel or "")
 
 
 def _strength(x: float) -> str:
@@ -157,8 +168,9 @@ def template_draft(
 
     top_channel = next((ch for c in tops if (ch := _channel_of(c))), None)
     actions = [DraftAction(type="analysis_question", text=ROLE_QUESTION[role], refs=fact0)]
-    if top_channel in CHANNEL_QUESTION:
-        actions.append(DraftAction(type="analysis_question", text=CHANNEL_QUESTION[top_channel], refs=fact0))
+    question = _channel_question(top_channel, profile)
+    if question:
+        actions.append(DraftAction(type="analysis_question", text=question, refs=fact0))
 
     bank_items = _bank_candidates(dossier, top_channel, dossier.story_published_at)
     if not bank_items and top_channel:  # по главному каналу позиции нет: берём ближайшую по теме сюжета

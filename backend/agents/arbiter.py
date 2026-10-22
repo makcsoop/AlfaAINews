@@ -12,8 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from backend.agents.dossier import DossierItem
-from backend.cards.build import COST_CHANNELS
-from backend.cards.signals import MIN_STRENGTH, channel_mean
+from backend.cards.signals import MIN_STRENGTH, channel_mean, signed
 from backend.schemas import AnalystReport
 
 MEDIUM = 0.6  # вес силы «средняя» (analysts.STRENGTH_WEIGHT)
@@ -50,21 +49,19 @@ def _dir(x: float, threshold: float = 0.0) -> Direction:
 
 
 def _bank_direction(channel: str, positions: Sequence[DossierItem]) -> Direction | None:
-    """Направление ФАКТОРА по позициям ЦМИ.
-
-    stance хранит знак «для заёмщика», по каналам-издержкам он обратный.
-    """
+    """Направление ФАКТОРА по позициям ЦМИ: direction позиции — куда банк ждёт движения фактора."""
     total, seen = 0.0, False
     for p in positions:
-        stance = p.data.get("stance")
+        direction = p.data.get("direction")
         if (
             p.data.get("channel") != channel
-            or not isinstance(stance, (int, float))
-            or isinstance(stance, bool)
+            or not isinstance(direction, (int, float))
+            or isinstance(direction, bool)
+            or p.data.get("superseded_by")  # позицию заместил сюжет: она больше не ожидание
         ):
             continue
         seen = True
-        total += float(stance) * (-1 if channel in COST_CHANNELS else 1)
+        total += float(direction)
     return _dir(total, 1e-9) if seen else None
 
 
@@ -76,8 +73,8 @@ def arbitrate(
 
     b, f = by.get("business"), by.get("finance")
     if b is not None and f is not None:
-        bi = {c.channel: c.impact for c in b.channels}
-        fi = {c.channel: c.impact for c in f.channels}
+        bi = {c.channel: signed(c) for c in b.channels}
+        fi = {c.channel: signed(c) for c in f.channels}
         for ch in bi:
             if ch not in fi:
                 continue

@@ -1,7 +1,7 @@
 {
   "drivers": [
     {
-      "channel": "rate_cost",
+      "channel": "key_rate",
       "direction": "up",
       "strength": "medium",
       "horizon": "quarter",

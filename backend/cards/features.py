@@ -9,21 +9,21 @@ from backend.schemas import CompanyProfile, CounterpartyGraph, RelevanceScore
 from backend.schemas.common import UserRole
 
 CHANNEL_LABELS: dict[str, str] = {
-    "rate_cost": "стоимость заёмных средств",
-    "deposit_yield": "доходность размещения ликвидности",
+    "key_rate": "ключевая ставка и стоимость денег",
     "fx_rub": "курс рубля",
     "oil_gas": "нефть и газ",
     "metals": "цены на металлы",
     "agro": "агросырьё",
     "gold": "золото",
-    "consumer_demand": "потребительский спрос",
-    "labor_market": "рынок труда и зарплаты",
-    "construction": "стройка и ипотека",
-    "tariffs_sanctions": "пошлины и санкции",
-    "logistics": "логистика и платежи ВЭД",
-    "taxes_regulation": "налоги и регулирование",
-    "public_procurement": "госзаказ и господдержка",
     "inflation": "инфляция и издержки",
+    "consumer_demand": "потребительский спрос",
+    "labor_costs": "рынок труда и зарплаты",
+    "construction": "стройка и ипотека",
+    "trade_restrictions": "пошлины, санкции, ограничения ВЭД",
+    "logistics_costs": "логистика и платежи ВЭД",
+    "tax_burden": "налоговая нагрузка",
+    "regulation": "отраслевое регулирование",
+    "public_spending": "госзаказ, бюджет и господдержка",
 }
 
 ROLE_FOCUS: dict[UserRole, str] = {

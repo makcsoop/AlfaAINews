@@ -15,7 +15,7 @@
 | Д3 15:00 | Реестр ЦМИ + поиск | Р1 | Р2, Р3 | ⬜ | |
 | Д3 вечер | Консенсус по ЦБ | Р1 | Р2 | ⬜ | |
 | Д3 вечер | «Банк и рынок», «Статистик», примеры разборов | Р1 | Р3 | ⬜ | |
-| Д3 вечер | Analysis + Card | Р3 | Р2 | 🟨 | на фикстуре rate_14 готово: `run_for_client(story_id, company_id, role, sector=…)` → (InsightCard, RunTrace), `/feed`; `AnalystReport.channels[].impact` — направление фактора (рост ставки = +); ждём живые сюжеты и скоринг |
+| Д3 вечер | Analysis + Card | Р3 | Р2 | 🟨 | на фикстуре rate_14 готово: `run_for_client(story_id, company_id, role, sector=…)` → (InsightCard, RunTrace), `/feed`; `AnalystReport.channels[]` — `direction`/`strength` (направление фактора, схемы 0.2.0); ждём живые сюжеты и скоринг |
 | Д4 13:00 | Приоры каналов | Р1 | Р2 | ⬜ | |
 | Д4 15:00 | Эндпоинт «вставить ссылку» | Р1 | Р2 | ⬜ | |
 | Д4 день | Данные трассы и журнал стоимости | Р3 | Р2 | ✅ | `GET /trace/{id}` (RunTrace: шаги, инструменты, вызовы моделей), `GET /trace/{id}/cost` (₽ по шагам, остаток бюджета); `POST /ask` — вопрос-ответ |
@@ -25,9 +25,11 @@
 | Кто просит | Чья зона | Что нужно | Зачем | Статус |
 |---|---|---|---|---|
 | Р3 | Р1 | Поле заголовка карточки (`headline: str`) в `InsightCard` + фикстура | модель пишет заголовок, сейчас он лежит рядом в `CardResult`, не в схеме | ⬜ |
-| Р3 | Р1 | `analyst_report` в фикстуре rate_14: `impact` ставки −0,6 — это знак «плохо для отрасли»; по инварианту 5 нужно направление фактора (ставка ↑ = +) | аналитики Р3 пишут направление фактора, фикстура противоречит; то же со `stance` позиций ЦМИ по `rate_cost` (сейчас знак переворачивается в `backend/cards/signals.py`, `COST_CHANNELS`); Р2 читает знак из разбора — нужно одно соглашение | ⬜ |
+| Р3 | Р1 | `analyst_report` в фикстуре rate_14: `impact` ставки −0,6 — это знак «плохо для отрасли»; по инварианту 5 нужно направление фактора (ставка ↑ = +) | аналитики Р3 пишут направление фактора, фикстура противоречит; то же со `stance` позиций ЦМИ по `rate_cost` (сейчас знак переворачивается в `backend/cards/signals.py`, `COST_CHANNELS`); Р2 читает знак из разбора — нужно одно соглашение | ✅ закрыто схемами 0.2.0: `ChannelImpact.direction/strength`, `BankPosition.direction` — направление фактора; `COST_CHANNELS` в Р3 удалён |
 | Р3 | Р1, Р2 | Реализация `ToolDataSource` из БД (`backend/agents/tools/source.py`: profile, counterparties, raw_items, bank_positions, market_knowledge, stories, event_facts, sources) | сейчас инструменты агентов работают на `FixtureDataSource("rate_14")` | ⬜ |
-| Р3 | Р1 | Добавить `mypy` в dev-зависимости `pyproject.toml` | команда `uv run mypy newsai` из CLAUDE.md не запускается | ⬜ |
+| Р3 | Р1 | Добавить `mypy` в dev-зависимости `pyproject.toml` | команда `uv run mypy backend` из CLAUDE.md не запускается | ⬜ |
 | Р3 | Р1 | `Action` и `what_would_change` в `InsightCard` без `refs`/`kind` (строки) | инвариант 4: у каждого утверждения карточки метка и ссылки; сейчас ссылки проверяются кодом, но в карточку не сохраняются | ⬜ |
 | Р3 | Р1 | Добавить `LLM_API_BASE_FALLBACK=https://api.alfahack-gateway26.ru/v1` в `.env.example` (пустая строка — отключить запасной адрес) | клиент `backend/llm/client.py` при сетевой ошибке/5xx на основном адресе один раз повторяет запрос на запасной (адрес для российских хостингов); по умолчанию уже зашит в `backend/llm/settings.py` | ⬜ |
 | Р3 | Р1 | Kimi-K2.6 с рассуждением стоит 2,43 ₽ за крошечный запрос (без него 0,02 ₽). Звать модели только через клиент: в `config/models.yaml` у шагов `reasoning_effort: none` по умолчанию, `bank_registry` уже так | реестр ЦМИ может съесть дневной лимит | ⬜ |
+| Р3 | Р1 | Сохранить `Analysis` из конвейера Р3 в БД/фикстуру: сейчас кеш разбора (`backend/agents/cache.py`) хранит свой формат (досье + отчёты), а не `Analysis` с `drivers/claims/agreement`; ключ `story_id:sector:version` совпадает с `InsightCard.analysis_ref` | нужен ли вам `Analysis` как отдельный объект и где он лежит — иначе Р3 соберёт его из кеша по просьбе | ⬜ |
+| Р3 | Р1 | `Claim.trigger` для `bank_offer`: Р3 пишет id триггера (`fix_rate`, `long_deposit`, `fx_hedge`), в фикстуре — формат `loa+rate_up`; согласовать формат | валидатор схемы требует триггер, формат не зафиксирован | ⬜ |

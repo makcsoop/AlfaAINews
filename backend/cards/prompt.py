@@ -53,7 +53,7 @@ def render_analyses(analyses: Sequence[AnalystReport]) -> str:
     lines = []
     for a in analyses:
         chans = "; ".join(
-            f"{c.channel} ({channel_label(c.channel)}): {c.impact:+.1f}"
+            f"{c.channel} ({channel_label(c.channel)}): {c.direction} {c.strength:.1f}"
             + (f", горизонт {c.horizon}" if c.horizon else "")
             for c in a.channels
         )

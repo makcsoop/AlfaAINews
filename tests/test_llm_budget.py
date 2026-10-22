@@ -2,7 +2,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from backend.llm.budget import BudgetExceeded, BudgetManager, InMemoryBudgetStore, RedisBudgetStore, budget_day
+from backend.llm.budget import (
+    BudgetExceeded,
+    BudgetManager,
+    InMemoryBudgetStore,
+    RedisBudgetStore,
+    budget_day,
+)
 from backend.llm.models import default_models_config, parse_models_config
 from backend.llm.settings import LLMSettings
 
