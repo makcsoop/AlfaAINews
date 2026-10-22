@@ -304,12 +304,17 @@ def critique(
             # Новый круг планировщика нужен, только если в досье нет материала по каналу:
             # если материал есть, а аналитики канал не оценили, новые данные это не исправят.
             has_material = any((i.data or {}).get("channel") == ch for i in dossier.items)
+            # Достройка по критику уже была (шаги origin="critic") или канал уже назван в gaps:
+            # второй круг по тому же каналу не нужен, провал уходит в notes.
+            already_asked = any(s.origin == "critic" for s in dossier.plan) or any(
+                ch in g for g in dossier.gaps
+            )
             fail(
                 NO_CHANNEL_COVERAGE,
                 "all",
                 f"нет оценки канала {ch}",
                 ch,
-                None if has_material else f"найти позицию ЦМИ или материал по каналу {ch}",
+                None if has_material or already_asked else f"найти позицию ЦМИ или материал по каналу {ch}",
             )
 
     notes = list(dict.fromkeys(notes))

@@ -226,3 +226,22 @@ async def test_pipeline_critic_gives_up_after_two_rounds(monkeypatch):
     assert ctx.critic_rounds == 2 and len(ctx.artifacts["critic_rounds"]) == 3
     assert "critic_unresolved" in ctx.flags
     assert ctx.state == State.PUBLISHED  # идём дальше с пометкой
+
+
+def test_repeated_uncovered_channel_gives_no_second_round(analyzed):
+    from newsai.agents.dossier import PlanStep
+
+    dossier, results = analyzed
+    bad = {a: r.model_copy(deep=True) for a, r in results.items()}
+    for res in bad.values():
+        res.drivers = [d for d in res.drivers if d.driver.channel != "fx_rub"]
+        res.report.channels = [c for c in res.report.channels if c.channel != "fx_rub"]
+    assert critique(dossier, bad).planner_task  # первый раз задача есть
+    again = dossier.model_copy(deep=True)
+    again.plan.append(PlanStep(tool="search_news", why="fx_rub", origin="critic"))
+    v = critique(again, bad)
+    assert any(x.code == "no_channel_coverage" for x in v.failures)
+    assert v.planner_task is None and any("fx_rub" in n for n in v.notes)
+    gap = dossier.model_copy(deep=True)
+    gap.gaps = ["fx_rub: нет материала"]
+    assert critique(gap, bad).planner_task is None

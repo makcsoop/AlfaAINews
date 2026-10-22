@@ -152,6 +152,14 @@ def render_examples(examples: Sequence[Example]) -> str:
     return f"{EXAMPLES_NOTE}\n{data_block(body)}"
 
 
+def event_channels_for(event_type: str | None) -> list[str]:
+    """Обязательные каналы типа события из таксономии (та же таблица, что у критика)."""
+    if not event_type:
+        return []
+    raw = yaml.safe_load(Path(TAXONOMY_PATH).read_text(encoding="utf-8"))
+    return list(((raw.get("event_types") or {}).get(event_type) or {}).get("channels") or [])
+
+
 def build_messages(
     analyst: AnalystName,
     dossier: Dossier,
@@ -162,11 +170,19 @@ def build_messages(
     system, _ = load_prompt(STEP[analyst])
     kinds = set(get_args(DossierKind)) - EXCLUDED_KINDS
     channel_lines = "\n".join(f"- {cid}: {name}" for cid, name in channels.items())
+    required = [c for c in event_channels_for(dossier.event_type) if c in channels]
+    required_line = (
+        "Обязательно оцени каждый из каналов: " + ", ".join(required) + "; если материала нет — "
+        'направление по общему механизму, сила low, в rationale "в досье нет прямого материала".\n\n'
+        if required
+        else ""
+    )
     user = (
         f"Сюжет: {dossier.story_id} (версия {dossier.story_version}), отрасль ОКВЭД: {dossier.sector}"
         f"{', тип события: ' + dossier.event_type if dossier.event_type else ''}.\n"
         f"Дата сюжета: {dossier.story_published_at.isoformat()}.\n\n"
         f"Каналы влияния (используй только эти id):\n{channel_lines}\n\n"
+        f"{required_line}"
         f"{dossier.render_for_prompt(kinds=kinds)}"
     )
     if dossier.gaps:
