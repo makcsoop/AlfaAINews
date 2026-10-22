@@ -318,3 +318,61 @@ def verify_card(
             fail("offer_no_trigger", "предложение банка без сработавшего триггера", offers[0].claim_id)
 
     return CardCheck(ok=not fails, failures=fails)
+
+
+# ---------- результат проверки — в карточку ----------
+
+_CHECKS: dict[str, tuple[str, ...]] = {
+    "refs": ("no_support", "unknown_source", "unknown_feature", "unknown_claim"),
+    "label": ("bank_view_source", "market_view_source", "fact_opinion_source", "bank_voice"),
+    "numbers": ("number_not_in_source",),
+    "dates": ("date_not_in_source",),
+}
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[«»“”„\"'’]", "", text)).strip().casefold()
+
+
+def annotate_card(
+    card: InsightCard,
+    dossier: Dossier,
+    check: CardCheck,
+    raw_texts: dict[str, str] | None = None,
+    urls: dict[str, str] | None = None,
+) -> InsightCard:
+    """Копия карточки с итогом проверки кодом: `claim.verified` по группам, `evidence.verified` и url цитат.
+
+    Цитата считается проверенной, если дословно (без учёта кавычек, регистра и пробелов) есть в тексте
+    элемента досье или исходного материала (`raw_texts`: id материала -> текст).
+    """
+    raw_texts, urls = raw_texts or {}, urls or {}
+    failed: dict[str, set[str]] = {}
+    for f in check.failures:
+        if f.claim_id:
+            failed.setdefault(f.claim_id, set()).add(f.code)
+
+    def quote_found(source_id: str, quote: str | None) -> bool | None:
+        if not quote:
+            return None
+        texts = [raw_texts.get(source_id, "")]
+        for it in _items_for(dossier, source_id):
+            texts += [it.title, it.text, json.dumps(it.data, ensure_ascii=False, default=str)]
+        q = _norm(quote)
+        return any(q in _norm(t) for t in texts if t)
+
+    claims = []
+    for c in card.claims:
+        codes = failed.get(c.claim_id, set())
+        verified: dict[str, bool | str] = {k: not (codes & set(v)) for k, v in _CHECKS.items()}
+        evidence = [
+            ev.model_copy(
+                update={
+                    "verified": quote_found(ev.source_id, ev.quote),
+                    "url": ev.url or urls.get(ev.source_id),
+                }
+            )
+            for ev in c.evidence
+        ]
+        claims.append(c.model_copy(update={"verified": verified, "evidence": evidence}))
+    return card.model_copy(update={"claims": claims})

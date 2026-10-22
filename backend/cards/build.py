@@ -568,7 +568,7 @@ def assemble_card(
         stage="deep",
         analysis_ref=f"{story.id}:{dossier.sector}:{story.version}",
         event=event,
-        relevance=relevance,
+        relevance=relevance.model_copy(update={"deep_analysis": True}),
         what_happened=what_happened,
         why_it_matters=why_ids,
         consequences=cons_ids,

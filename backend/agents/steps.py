@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import os
 import threading
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ from backend.cards.analysis import build_analysis
 from backend.cards.card import retry_feedback
 from backend.cards.features import allowed_features
 from backend.cards.prompt import prompt_version
+from backend.cards.verify import annotate_card
 from backend.llm import LLMClient, get_client
 from backend.profile.exposures import with_exposures
 from backend.ranking.fast_card import fast_card
@@ -431,6 +433,14 @@ def card_verify_step(ctx: PipelineContext, source: ToolDataSource | None = None)
     )
     ctx.verify_ok = check.ok
     ctx.verify_errors = check.messages()
+    raw = src.raw_items()
+    ctx.card = annotate_card(
+        ctx.card,
+        Dossier.model_validate(ctx.dossier),
+        check,
+        raw_texts={r.id: " ".join(filter(None, (r.title, r.lead, r.text))) for r in raw},
+        urls={r.id: r.url for r in raw if r.url},
+    )
     ctx.artifacts["card_verify"] = {"ok": check.ok, "failures": [f.model_dump() for f in check.failures]}
     return ctx
 
@@ -473,7 +483,12 @@ def make_handlers(
     now: datetime | None = None,
 ) -> Handlers:
     """Заглушки для ещё не сделанных шагов + настоящие planner, analysts, card."""
-    src = source or FixtureDataSource(bundle)
+    # TOOL_SOURCE=db — данные Р1 из БД; иначе фикстура этого прогона
+    src = source or (
+        get_tool_source()
+        if os.environ.get("TOOL_SOURCE", "").strip().lower() == "db"
+        else FixtureDataSource(bundle)
+    )
     stub_handlers = make_stub_handlers(bundle)
 
     def planned(ctx: PipelineContext) -> PipelineContext:
