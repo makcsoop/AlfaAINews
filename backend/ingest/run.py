@@ -91,14 +91,32 @@ async def telegram_round(client, channels: list[Source]) -> int:
     return total
 
 
-async def telegram_forever(channels: list[Source], once: bool = False) -> None:
+async def telegram_web_forever(fetcher: Fetcher, channels: list[Source], once: bool) -> None:
+    """Без аккаунта: публичные страницы t.me/s. Каналы по очереди, общий лимит 1 запрос/с на хост."""
+    from backend.ingest.tme_web import ingest_channel_web
+
+    while True:
+        total = 0
+        for src in channels:
+            try:
+                total += await ingest_channel_web(fetcher, src)
+            except Exception:
+                log.exception("%s: сбой t.me/s", src.id)
+        log.info("Telegram (t.me/s, без входа): круг по %d каналам, записано %d", len(channels), total)
+        if once:
+            return
+        await asyncio.sleep(TELEGRAM_EVERY)
+
+
+async def telegram_forever(fetcher: Fetcher, channels: list[Source], once: bool = False) -> None:
+    """Telethon, если есть сессия (TG_SESSION_STRING); иначе — публичные страницы t.me/s без входа."""
     from backend.ingest.telegram import make_client
 
     if not channels:
         return
     client = make_client()
     if client is None:
-        log.warning("Telegram: нет TG_SESSION_STRING — каналы пропускаю (scripts/telegram_login.py)")
+        await telegram_web_forever(fetcher, channels, once)
         return
     async with client:
         while True:
@@ -145,12 +163,12 @@ async def main_async(once: bool, only: list[str] | None) -> None:
     try:
         if once:
             await asyncio.gather(
-                *(ingest_rss(fetcher, s) for s in sources), telegram_forever(channels, once=True)
+                *(ingest_rss(fetcher, s) for s in sources), telegram_forever(fetcher, channels, once=True)
             )
         else:
             await asyncio.gather(
                 *(run_source_forever(fetcher, s) for s in sources),
-                telegram_forever(channels),
+                telegram_forever(fetcher, channels),
                 stories_forever(),
             )
     finally:
