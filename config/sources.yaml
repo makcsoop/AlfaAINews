@@ -22,21 +22,21 @@ sources:
      tier: 2, weight: 0.8, value: 4, poll_seconds: 180, full_text: feed,
      tags: [business_media], audience: "Все"}
 
-  # ---------- RSS: день 2 (код тот же, включаются флагом) ----------
+  # ---------- RSS: день 2 ----------
   - {id: tass, name: "ТАСС", kind: rss, url: "https://tass.ru/rss/v2.xml",
-     tier: 1, weight: 0.85, value: 4, full_text: fetch, enabled: false,
-     tags: [agency], audience: "ВЭД, госсектор"}
+     tier: 1, weight: 0.85, value: 4, full_text: none,
+     tags: [agency], audience: "ВЭД, госсектор"}  # страницы статей отдают 403 боту — берём лид из ленты
   - {id: kommersant, name: "Коммерсантъ", kind: rss, url: "https://www.kommersant.ru/RSS/news.xml",
-     tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true, enabled: false,
+     tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true,
      tags: [business_media], audience: "Отраслевые эксклюзивы"}
   - {id: vedomosti, name: "Ведомости", kind: rss, url: "https://www.vedomosti.ru/rss/news",
-     tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true, enabled: false,
+     tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true,
      tags: [business_media], audience: "Отраслевые рубрики"}
   - {id: cbr_press, name: "ЦБ — пресс-релизы", kind: rss, url: "http://www.cbr.ru/rss/RssPress",
-     tier: 0, weight: 1.0, value: 5, poll_seconds: 300, full_text: fetch, official: true, enabled: false,
+     tier: 0, weight: 1.0, value: 5, poll_seconds: 300, full_text: fetch, official: true,
      tags: [regulator, rate], audience: "Заёмщики, казначейство, ВЭД"}
   - {id: cbr_events, name: "ЦБ — новости и выступления", kind: rss, url: "http://www.cbr.ru/rss/eventrss",
-     tier: 0, weight: 1.0, value: 4, poll_seconds: 600, full_text: fetch, official: true, enabled: false,
+     tier: 0, weight: 1.0, value: 4, poll_seconds: 600, full_text: fetch, official: true,
      tags: [regulator], audience: "Казначейство, финдиректора"}
   - {id: agroinvestor, name: "Агроинвестор", kind: rss, url: "https://www.agroinvestor.ru/rss/",
      tier: 2, weight: 0.7, value: 3, poll_seconds: 600, full_text: fetch, enabled: false,

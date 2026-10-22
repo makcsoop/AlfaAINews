@@ -75,6 +75,26 @@ async def run_source_forever(fetcher: Fetcher, src: Source) -> None:
         await asyncio.sleep(src.poll_seconds)
 
 
+STORIES_EVERY = 300  # секунд между пересборками сюжетов
+
+
+def _rebuild_stories() -> dict:
+    from backend.stories.cluster import rebuild
+
+    with get_engine().begin() as conn:
+        return rebuild(conn)
+
+
+async def stories_forever() -> None:
+    """Склейка идёт в том же воркере, что и сбор: раз в 5 минут, в отдельном потоке."""
+    while True:
+        await asyncio.sleep(STORIES_EVERY)
+        try:
+            log.info("сюжеты: %s", await asyncio.to_thread(_rebuild_stories))
+        except Exception:
+            log.exception("сбой склейки")
+
+
 async def main_async(once: bool, only: list[str] | None) -> None:
     sources = [s for s in load_sources(enabled_only=not only) if s.kind == "rss"]
     if only:
@@ -85,7 +105,7 @@ async def main_async(once: bool, only: list[str] | None) -> None:
         if once:
             await asyncio.gather(*(ingest_rss(fetcher, s) for s in sources))
         else:
-            await asyncio.gather(*(run_source_forever(fetcher, s) for s in sources))
+            await asyncio.gather(*(run_source_forever(fetcher, s) for s in sources), stories_forever())
     finally:
         await fetcher.aclose()
 
