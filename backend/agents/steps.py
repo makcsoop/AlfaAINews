@@ -48,8 +48,29 @@ def set_tool_source(source: ToolDataSource | None) -> None:
 def get_tool_source() -> ToolDataSource:
     global _source
     if _source is None:
-        _source = FixtureDataSource("rate_14")
+        _source = _make_source()
     return _source
+
+
+def _make_source() -> ToolDataSource:
+    """TOOL_SOURCE=fixture|db (по умолчанию fixture); при db и недоступной БД — предупреждение и фикстура."""
+    import logging
+    import os
+
+    if os.environ.get("TOOL_SOURCE", "fixture").strip().lower() == "db":
+        try:
+            from sqlalchemy import text
+
+            from backend.agents.tools.db_source import DbDataSource
+            from backend.db.engine import get_engine
+
+            engine = get_engine()
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return DbDataSource(engine)
+        except Exception as e:
+            logging.getLogger(__name__).warning("TOOL_SOURCE=db, БД недоступна (%s): фикстура", e)
+    return FixtureDataSource("rate_14")
 
 
 # --- журнал вызовов модели в трассе ---------------------------------------------------------------
