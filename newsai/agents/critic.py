@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -197,9 +197,14 @@ def _task_unique(tasks: list[str], task: str) -> None:
 
 
 def critique(
-    dossier: Dossier, analyst_results: Mapping[str, AnalystResult] | list[AnalystResult]
+    dossier: Dossier,
+    analyst_results: Mapping[str, AnalystResult] | list[AnalystResult],
+    asked: Sequence[str] = (),
 ) -> CriticVerdict:
-    """Проверяет разборы по досье. `analyst_results` — {аналитик: результат} или список результатов."""
+    """Проверяет разборы по досье. `analyst_results` — {аналитик: результат} или список результатов.
+
+    `asked` — задачи планировщику из прошлых кругов: канал, о котором уже просили, второй круг не даёт.
+    """
     results: dict[str, AnalystResult] = (
         dict(analyst_results)
         if isinstance(analyst_results, Mapping)
@@ -307,7 +312,7 @@ def critique(
             # Достройка по критику уже была (шаги origin="critic") или канал уже назван в gaps:
             # второй круг по тому же каналу не нужен, провал уходит в notes.
             already_asked = any(s.origin == "critic" for s in dossier.plan) or any(
-                ch in g for g in dossier.gaps
+                ch in g for g in (*dossier.gaps, *asked)
             )
             fail(
                 NO_CHANNEL_COVERAGE,

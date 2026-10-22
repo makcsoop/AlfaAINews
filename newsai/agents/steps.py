@@ -154,8 +154,9 @@ def critic_step(ctx: PipelineContext) -> PipelineContext:
     """CRITIQUED: проверка кодом; задача планировщику -> verdict "retry" (автомат вернётся в PLANNED)."""
     if not ctx.dossier:
         raise ValueError("критику нужно досье (шаг PLANNED не выполнен)")
-    verdict = critique(Dossier.model_validate(ctx.dossier), _analyst_results(ctx))
     rounds: list[dict[str, Any]] = ctx.artifacts.setdefault("critic_rounds", [])
+    asked = [r["planner_task"] for r in rounds if r.get("planner_task")]
+    verdict = critique(Dossier.model_validate(ctx.dossier), _analyst_results(ctx), asked=asked)
     rounds.append(
         {
             "round": ctx.critic_rounds + 1,

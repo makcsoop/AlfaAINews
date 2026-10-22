@@ -245,3 +245,6 @@ def test_repeated_uncovered_channel_gives_no_second_round(analyzed):
     gap = dossier.model_copy(deep=True)
     gap.gaps = ["fx_rub: нет материала"]
     assert critique(gap, bad).planner_task is None
+    # задача из прошлого круга тоже считается запросом, даже если replan не добавил шагов
+    first = critique(dossier, bad).planner_task
+    assert critique(dossier, bad, asked=[first]).planner_task is None
