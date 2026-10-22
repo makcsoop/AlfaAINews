@@ -25,7 +25,12 @@ ANALYSIS_STEPS = frozenset({"planner", "analyst_business", "analyst_finance", "c
 CARD_STEPS = frozenset({"card"})
 
 
-def load_entries(directory: str | Path) -> list[JournalEntry]:
+def is_live(e: JournalEntry) -> bool:
+    return e.mode == "live" if e.mode is not None else e.base is not None
+
+
+def load_entries(directory: str | Path, *, live_only: bool = True) -> list[JournalEntry]:
+    """Записи журнала; по умолчанию только настоящие вызовы (ответы фикстур в расход ключа не входят)."""
     entries: list[JournalEntry] = []
     for path in sorted(Path(directory).glob("*.jsonl")):
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -33,9 +38,11 @@ def load_entries(directory: str | Path) -> list[JournalEntry]:
             if not line:
                 continue
             try:
-                entries.append(JournalEntry.model_validate_json(line))
+                e = JournalEntry.model_validate_json(line)
             except ValueError:
                 continue  # битая строка не должна ронять отчёт
+            if is_live(e) or not live_only:
+                entries.append(e)
     return entries
 
 
@@ -176,9 +183,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--day", help="бюджетные сутки YYYY-MM-DD (по умолчанию — последние в журнале)")
     ap.add_argument("--out", default="reports/budget.md")
     ap.add_argument("--limit", type=float, default=500.0, help="лимит суток на общий ключ, ₽")
+    ap.add_argument("--include-fixture", action="store_true", help="учитывать и ответы фикстур (тесты)")
     args = ap.parse_args(argv)
 
-    entries = load_entries(args.journal)
+    entries = load_entries(args.journal, live_only=not args.include_fixture)
     rep = build_report(entries, args.day, daily_limit_rub=args.limit)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

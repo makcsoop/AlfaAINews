@@ -31,6 +31,9 @@ class JournalEntry(BaseModel):
     args_hash: str = ""
     validation: Literal["ok", "invalid", "error"] = "ok"
     error: str | None = None
+    # live — настоящий вызов; fixture — ответ из фикстуры (тесты), в итог бюджета не идёт.
+    # У старых записей поля нет: live, если отработал адрес API (base), иначе fixture.
+    mode: Literal["live", "fixture"] | None = None
     at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

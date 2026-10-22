@@ -433,3 +433,10 @@ def test_cache_key_depends_on_reasoning_and_token_cap():
     base = cache_key("m", MSG, "S", 0.2)
     assert cache_key("m", MSG, "S", 0.2, reasoning_effort="none") != base
     assert cache_key("m", MSG, "S", 0.2, max_tokens=100) != base
+
+
+def test_fixture_mode_default_journal_stays_in_memory(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    s = LLMSettings(_env_file=None, llm_mode="fixture", llm_journal_dir=str(tmp_path / "journal"))
+    client = LLMClient(settings=s)
+    assert client.journal._dir is None  # тесты не пишут в журнал расхода ключа

@@ -47,9 +47,12 @@ def test_reserve_flag():
 
 def test_cli_reads_journal(tmp_path):
     j = Journal(tmp_path / "j")
-    j.record(_e(datetime(2026, 10, 22, 12, 0, tzinfo=UTC), cost=1.5, cached=True))
+    j.record(_e(datetime(2026, 10, 22, 12, 0, tzinfo=UTC), cost=1.5, cached=True, mode="live"))
+    j.record(_e(datetime(2026, 10, 22, 12, 1, tzinfo=UTC), cost=0.7, mode="fixture"))
+    j.record(_e(datetime(2026, 10, 22, 12, 2, tzinfo=UTC), cost=0.3))  # старая запись без base — фикстура
     entries = load_entries(tmp_path / "j")
-    assert len(entries) == 1
+    assert len(entries) == 1  # ответы фикстур в расход ключа не входят
+    assert len(load_entries(tmp_path / "j", live_only=False)) == 3
     out = tmp_path / "b.md"
     assert main(["--journal", str(tmp_path / "j"), "--out", str(out)]) == 0
     text = out.read_text(encoding="utf-8")

@@ -325,7 +325,10 @@ class LLMClient:
         self.settings = settings or LLMSettings()
         self.config = config or default_models_config()
         self.budget = budget or BudgetManager(config=self.config, settings=self.settings)
-        self.journal = journal or Journal(self.settings.llm_journal_dir)
+        # в режиме фикстур журнал только в памяти: тесты не засоряют журнал расхода ключа
+        self.journal = journal or Journal(
+            self.settings.llm_journal_dir if self.settings.llm_mode == "live" else None
+        )
         self.cache = cache or ResponseCache(self.settings.llm_cache_dir, self.settings.llm_cache_enabled)
         self.transport = transport or self._default_transport()
 
@@ -398,7 +401,7 @@ class LLMClient:
                     cached=cached, prompt_version=prompt_version,
                     prompt_hash=prompt_hash, args_hash=args_hash,
                     validation=validation,  # type: ignore[arg-type]
-                    error=error,
+                    error=error, mode=self.settings.llm_mode,  # type: ignore[arg-type]
                 )
             )
 
