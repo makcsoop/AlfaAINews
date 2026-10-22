@@ -11,6 +11,7 @@ import copy
 import threading
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,11 +27,16 @@ from backend.agents.planner import build_dossier, replan
 from backend.agents.stub_steps import make_stub_handlers
 from backend.agents.tools import FixtureDataSource, ToolContext, ToolDataSource
 from backend.cards import CardResult, assemble_card, template_draft, verify_card, write_card
+from backend.cards.analysis import build_analysis
 from backend.cards.card import retry_feedback
 from backend.cards.features import allowed_features
 from backend.cards.prompt import prompt_version
 from backend.llm import LLMClient, get_client
-from backend.schemas import InsightCard, RunTrace, ToolCall
+from backend.profile.exposures import with_exposures
+from backend.ranking.fast_card import fast_card
+from backend.ranking.score import score_pair
+from backend.ranking.surprise import find_surprise
+from backend.schemas import CompanyProfile, InsightCard, RunTrace, ToolCall
 from backend.schemas.common import UserRole
 
 # Разбор считается на отрасль, а не на компанию: инструменты планировщика данных компании не читают.
@@ -251,6 +257,86 @@ def arbiter_step(ctx: PipelineContext) -> PipelineContext:
     return ctx
 
 
+# --- скоринг (Р2) -----------------------------------------------------------------------------------
+
+
+def profile_v1(src: ToolDataSource, company_id: str) -> CompanyProfile | None:
+    """Профиль v1 (с чувствительностями к факторам) для скоринга и карточки."""
+    profile = src.profile(company_id)
+    if profile is None:
+        return None
+    return with_exposures(profile, src.counterparties(company_id))
+
+
+def _now(ctx: PipelineContext, now: datetime | None) -> datetime:
+    """Момент оценки свежести: явный параметр; в LLM_MODE=fixture — время сюжета (детерминированные тесты)."""
+    import os
+
+    if now is not None:
+        return now
+    if os.environ.get("LLM_MODE", "").strip().lower() == "fixture" and ctx.story is not None:
+        return ctx.story.last_seen
+    return datetime.now(UTC)
+
+
+def _score(ctx: PipelineContext, src: ToolDataSource, now: datetime | None, *, with_analysis: bool) -> None:
+    assert ctx.story is not None and ctx.company_id is not None
+    profile = profile_v1(src, ctx.company_id)
+    if profile is None:
+        raise LookupError(f"нет профиля компании {ctx.company_id}")
+    surprise = find_surprise(
+        ctx.story, ctx.facts, bank_positions=src.bank_positions(), market=src.market_knowledge()
+    )
+    ctx.relevance = score_pair(
+        ctx.story,
+        profile,
+        now=_now(ctx, now),
+        facts=ctx.facts,
+        graph=src.counterparties(ctx.company_id),
+        sources={s.id: s for s in src.sources()},
+        analysis=ctx.analysis if with_analysis else None,
+        surprise=surprise,
+        role=ctx.role,  # type: ignore[arg-type]
+    )
+
+
+def scored_step(ctx: PipelineContext, src: ToolDataSource, now: datetime | None = None) -> PipelineContext:
+    """SCORED: значимость пары «сюжет × клиент» кодом (backend.ranking), без LLM."""
+    _score(ctx, src, now, with_analysis=False)
+    return ctx
+
+
+def quick_step(ctx: PipelineContext, src: ToolDataSource) -> PipelineContext:
+    """QUICK_CARD: быстрая карточка кодом по вкладам скоринга."""
+    assert ctx.story is not None and ctx.relevance is not None and ctx.company_id is not None
+    ctx.quick_card = fast_card(
+        ctx.story,
+        ctx.relevance,
+        ctx.role,  # type: ignore[arg-type]
+        facts=ctx.facts,
+        items={i.id: i for i in src.raw_items()},
+        sources={s.id: s for s in src.sources()},
+        bank_positions=src.bank_positions(),
+        profile=profile_v1(src, ctx.company_id),
+        market=src.market_knowledge(),
+    )
+    return ctx
+
+
+def rescored_arbiter_step(
+    ctx: PipelineContext, src: ToolDataSource, now: datetime | None = None
+) -> PipelineContext:
+    """ARBITRATED + шаг 11 архитектуры: после арбитра значимость пересчитывается по разбору."""
+    ctx = arbiter_step(ctx)
+    if ctx.story is not None and ctx.company_id is not None and ctx.reports:
+        ctx.analysis = build_analysis(
+            ctx.story.id, ctx.sector, ctx.story_version, ctx.reports, on_review=ctx.on_review,
+            trace_id=ctx.trace_id,
+        )
+        _score(ctx, src, now, with_analysis=True)
+    return ctx
+
+
 # --- карточка -------------------------------------------------------------------------------------
 
 
@@ -273,7 +359,7 @@ def card_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> Pip
     if ctx.story is None or ctx.relevance is None or not ctx.dossier:
         raise ValueError("карточке нужны сюжет, скоринг и досье")
     src = source or get_tool_source()
-    profile = src.profile(ctx.company_id)
+    profile = profile_v1(src, ctx.company_id)
     if profile is None:
         raise LookupError(f"нет профиля компании {ctx.company_id}")
     role: UserRole = ctx.role  # type: ignore[assignment]
@@ -288,6 +374,10 @@ def card_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> Pip
         "analyses": list(ctx.reports),
         "graph": src.counterparties(ctx.company_id),
         "sources": src.sources(),
+        "facts": ctx.facts,
+        "analysis": ctx.analysis,
+        "bank_positions": src.bank_positions(),
+        "market": src.market_knowledge(),
     }
     client = get_client()
     before = _llm_mark(ctx, client)
@@ -328,7 +418,7 @@ def card_verify_step(ctx: PipelineContext, source: ToolDataSource | None = None)
     if ctx.card is None or ctx.company_id is None or not ctx.dossier:
         raise ValueError("проверке нужны карточка, company_id из сессии и досье")
     src = source or get_tool_source()
-    profile = src.profile(ctx.company_id)
+    profile = profile_v1(src, ctx.company_id)
     if profile is None:
         raise LookupError(f"нет профиля компании {ctx.company_id}")
     graph = src.counterparties(ctx.company_id)
@@ -380,9 +470,11 @@ def make_handlers(
     *,
     source: ToolDataSource | None = None,
     cache: AnalysisCache | None = None,
+    now: datetime | None = None,
 ) -> Handlers:
     """Заглушки для ещё не сделанных шагов + настоящие planner, analysts, card."""
     src = source or FixtureDataSource(bundle)
+    stub_handlers = make_stub_handlers(bundle)
 
     def planned(ctx: PipelineContext) -> PipelineContext:
         hit = cache.get(ctx.analysis_key) if cache is not None and not ctx.planner_task else None
@@ -416,17 +508,39 @@ def make_handlers(
             )
         return ctx
 
+    stub_scored = stub_handlers[State.SCORED]
+    stub_quick = stub_handlers[State.QUICK_CARD]
+
+    def scored(ctx: PipelineContext) -> PipelineContext:
+        if ctx.company_id is None:  # разбор отрасли без клиента: скоринг пары не нужен
+            return stub_scored(ctx)
+        return scored_step(ctx, src, now)
+
+    def quick(ctx: PipelineContext) -> PipelineContext:
+        if ctx.company_id is None or ctx.relevance is None:
+            return stub_quick(ctx)
+        try:
+            return quick_step(ctx, src)
+        except Exception as e:  # быстрая карточка не должна ронять разбор
+            ctx.flags.append(f"fast_card_failed:{type(e).__name__}")
+            return stub_quick(ctx)
+
+    def arbitrated(ctx: PipelineContext) -> PipelineContext:
+        return rescored_arbiter_step(ctx, src, now)
+
     def drafted(ctx: PipelineContext) -> PipelineContext:
         return card_step(ctx, src)
 
     def verified(ctx: PipelineContext) -> PipelineContext:
         return card_verify_step(ctx, src)
 
-    handlers = dict(make_stub_handlers(bundle))
+    handlers = dict(stub_handlers)
+    handlers[State.SCORED] = scored
+    handlers[State.QUICK_CARD] = quick
     handlers[State.PLANNED] = planned
     handlers[State.ANALYZED] = analyzed
     handlers[State.CRITIQUED] = critic_step
-    handlers[State.ARBITRATED] = arbiter_step
+    handlers[State.ARBITRATED] = arbitrated
     handlers[State.CARD_DRAFTED] = drafted
     handlers[State.CARD_VERIFIED] = verified
     return handlers

@@ -95,6 +95,7 @@ def env(bundle, company_id: str, role: str) -> dict:
         "profile": next(p for p in bundle["company_profile"] if p.company_id == company_id),
         "graph": next((g for g in bundle["counterparty_graph"] if g.company_id == company_id), None),
         "analyses": bundle["analyst_report"],
+        "facts": bundle["event_facts"][0],
         "role": role,
         "trace_id": f"trace_{company_id}",
     }
@@ -163,7 +164,7 @@ def test_confidence_and_surprise_set_by_code(bundle, tmp_path):
     tre = write(env(bundle, *CASES[1]), fixture_client(tmp_path), sources=bundle["source"]).card
     # ЦМИ ждёт ставку выше (direction ↑ — направление фактора), аналитики так же: у обоих прямой канал key_rate
     assert cfo.confidence == "high" and tre.confidence == "high"
-    assert any("совпадает" in r for r in tre.confidence_reasons)
+    assert any("то же направление" in r for r in tre.confidence_reasons)
     assert any("первоисточник" in r for r in cfo.confidence_reasons)
     assert cfo.relevance.polarity == "risk" and tre.relevance.polarity == "opportunity"
     for card in (cfo, tre):
@@ -276,7 +277,7 @@ def test_unknown_ref_and_wrong_kind_rejected(bundle):
 
 
 def test_market_view_by_mk_ref(bundle):
-    e = env(bundle, *CASES[0])
+    e = {**env(bundle, *CASES[0]), "facts": None}  # без фактов кода сюрприз берётся из черновика модели
     e["dossier"].add(DossierItem(
         id="mk_demo_1", kind="market_knowledge", title="Большинство аналитиков ждали снижения ставки",
         text="Большинство аналитиков ждали снижения ставки", published_at=datetime(2026, 9, 10, tzinfo=UTC),
@@ -308,8 +309,21 @@ def test_invented_features_dropped_and_two_features_required(bundle):
     assert "ВЫДУМАННЫЙ ПРИЗНАК" not in feats
 
 
-def test_surprise_only_with_expectations(bundle):
+def test_surprise_code_wins_over_draft(bundle):
+    """find_surprise (Р2) считает по фактам и прогнозу ЦМИ; ссылки модели на него не влияют."""
     e = env(bundle, *CASES[0])
+    none = mutate("U_DEMO_BORROWER_cfo", lambda d: d["surprise"].update(bank_ref=None))
+    s = assemble(e, none).surprise
+    assert s and s.actual == 14.0 and s.bank_expected == 14.0 and s.direction == "in_line"
+    # ожидание после события код не берёт (инвариант 10)
+    late = e["dossier"]
+    old = late.get("cmi_keyrate_2026_09#p1#c4")
+    late.add(old.model_copy(update={"published_at": datetime(2026, 9, 12, tzinfo=UTC)}))
+    assert assemble(e, draft_of("U_DEMO_BORROWER_cfo")).surprise is None
+
+
+def test_surprise_only_with_expectations(bundle):
+    e = {**env(bundle, *CASES[0]), "facts": None}
     none = mutate("U_DEMO_BORROWER_cfo", lambda d: d["surprise"].update(bank_ref=None))
     assert assemble(e, none).surprise is None
     # ожидание, опубликованное после события, не годится (инвариант 10)
@@ -326,7 +340,7 @@ def test_confidence_rules(bundle):
     # нет первичного источника: ниже high
     weak = [s.model_copy(update={"tier": 2}) for s in bundle["source"]]
     card = assemble(e, d, sources=weak)
-    assert card.confidence == "medium" and any("нет первичного" in r for r in card.confidence_reasons)
+    assert card.confidence == "medium" and any("источник" in r and "регулятор" not in r for r in card.confidence_reasons)
     # слух -> low
     rumor = e["story"].model_copy(update={"status": "rumor"})
     assert assemble({**e, "story": rumor}, d, sources=bundle["source"]).confidence == "low"

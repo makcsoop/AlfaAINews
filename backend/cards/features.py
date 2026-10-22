@@ -5,26 +5,9 @@
 
 import re
 
+from backend.ranking.select import factor_label
 from backend.schemas import CompanyProfile, CounterpartyGraph, RelevanceScore
 from backend.schemas.common import UserRole
-
-CHANNEL_LABELS: dict[str, str] = {
-    "key_rate": "ключевая ставка и стоимость денег",
-    "fx_rub": "курс рубля",
-    "oil_gas": "нефть и газ",
-    "metals": "цены на металлы",
-    "agro": "агросырьё",
-    "gold": "золото",
-    "inflation": "инфляция и издержки",
-    "consumer_demand": "потребительский спрос",
-    "labor_costs": "рынок труда и зарплаты",
-    "construction": "стройка и ипотека",
-    "trade_restrictions": "пошлины, санкции, ограничения ВЭД",
-    "logistics_costs": "логистика и платежи ВЭД",
-    "tax_burden": "налоговая нагрузка",
-    "regulation": "отраслевое регулирование",
-    "public_spending": "госзаказ, бюджет и господдержка",
-}
 
 ROLE_FOCUS: dict[UserRole, str] = {
     "cfo": "долг и ставка: стоимость кредитов и лизинга, рефинансирование, процентные расходы, "
@@ -58,7 +41,8 @@ def is_sector_feature(feature: str) -> bool:
 
 
 def channel_label(channel: str) -> str:
-    return CHANNEL_LABELS.get(channel, channel)
+    """Название фактора для человека: все виды вкладов скоринга."""
+    return factor_label(channel)
 
 
 def company_features(profile: CompanyProfile, graph: CounterpartyGraph | None = None) -> list[str]:

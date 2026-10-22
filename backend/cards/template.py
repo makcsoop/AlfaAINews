@@ -64,13 +64,11 @@ def _top(relevance: RelevanceScore, n: int = 2) -> list[Contribution]:
 
 
 def _channel_of(c: Contribution) -> str | None:
-    return None if c.factor.startswith("counterparty:") else c.factor
+    return None if ":" in c.factor or c.factor == "surprise" else c.factor
 
 
 def _factor_label(factor: str) -> str:
-    if factor.startswith("counterparty:"):
-        return f"покупатели и поставщики из отрасли {factor.split(':', 1)[1]}"
-    return channel_label(factor)
+    return channel_label(factor)  # подписи всех видов вкладов — из скоринга (ranking.select.factor_label)
 
 
 def _bank_candidates(dossier: Dossier, channel: str | None, story_at: datetime) -> list[DossierItem]:

@@ -11,7 +11,10 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import Any
 
+from pydantic import ValidationError
+
 from backend.agents.dossier import Dossier, DossierItem
+from backend.cards.analysis import build_analysis
 from backend.cards.features import (
     allowed_features,
     canonical,
@@ -21,14 +24,20 @@ from backend.cards.features import (
 from backend.cards.llm_schema import CardDraft, DraftItem, DraftSurprise
 from backend.cards.offers import find_offer
 from backend.cards.signals import analysts_disagree, channel_horizon, channel_mean
+from backend.ranking.confidence import confidence as score_confidence
+from backend.ranking.surprise import find_surprise
 from backend.schemas import (
     Action,
+    Analysis,
     AnalystReport,
+    BankPosition,
     Claim,
     CompanyProfile,
     CounterpartyGraph,
+    EventFacts,
     Evidence,
     InsightCard,
+    MarketKnowledge,
     RelevanceScore,
     Source,
     Story,
@@ -308,6 +317,38 @@ def compute_confidence(
     return level, reasons
 
 
+def _bank_from_dossier(dossier: Dossier) -> list[BankPosition]:
+    """Позиции ЦМИ из досье: в data часть полей, недостающие подставляем."""
+    out: list[BankPosition] = []
+    for it in dossier.by_kind("bank_position"):
+        d = it.data
+        doc_date = (it.published_at or _as_datetime(d.get("doc_date")))
+        if doc_date is None:
+            continue
+        try:
+            out.append(
+                BankPosition(
+                    id=it.id, doc_id=it.id.split("#")[0], doc_title=it.title, doc_date=doc_date.date(),
+                    page=1, thesis=it.title, channel=d.get("channel"), direction=d.get("direction"),
+                    forecast=d.get("forecast"), quote=str(d.get("quote") or it.text or it.title),
+                )
+            )
+        except ValidationError:
+            continue
+    return out
+
+
+def _market_from_dossier(dossier: Dossier) -> list[MarketKnowledge]:
+    """Знания рынка в досье неполные: берём только те, что собираются в схему целиком."""
+    out: list[MarketKnowledge] = []
+    for it in dossier.by_kind("market_knowledge"):
+        try:
+            out.append(MarketKnowledge.model_validate(it.data))
+        except ValidationError:
+            continue
+    return out
+
+
 def _build_surprise(
     ds: DraftSurprise | None, dossier: Dossier, story_published_at: datetime
 ) -> Surprise | None:
@@ -365,6 +406,10 @@ def assemble_card(
     graph: CounterpartyGraph | None = None,
     sources: Sequence[Source] | None = None,
     with_offer: bool = True,
+    facts: EventFacts | None = None,
+    analysis: Analysis | None = None,
+    bank_positions: Sequence[BankPosition] | None = None,
+    market: Sequence[MarketKnowledge] | None = None,
 ) -> InsightCard:
     if relevance.company_id != profile.company_id or relevance.story_id != story.id:
         raise CardAssemblyError("relevance или профиль относятся к другой паре «сюжет × клиент»")
@@ -492,9 +537,29 @@ def assemble_card(
             )
             actions.append(Action(type="bank_product", text=offer.text, is_advertising=True))
 
-    confidence, reasons = compute_confidence(
-        event=event, relevance=relevance, analyses=analyses, bank_items=b.bank_items, profile=profile
-    )
+    bank_models = list(bank_positions) if bank_positions is not None else _bank_from_dossier(dossier)
+    market_models = list(market) if market is not None else _market_from_dossier(dossier)
+    if analysis is None and analyses:
+        analysis = build_analysis(story.id, dossier.sector, story.version, analyses)
+    try:
+        confidence, reasons = score_confidence(
+            story=story,
+            relevance=relevance,
+            profile=profile,
+            sources={s.id: s for s in sources or []},
+            analysis=analysis,
+            claims=b.claims,
+            bank_positions=bank_models,
+            market=market_models,
+        )
+    except Exception:  # запасная формула, если скоринг Р2 не смог посчитать
+        confidence, reasons = compute_confidence(
+            event=event, relevance=relevance, analyses=analyses, bank_items=b.bank_items, profile=profile
+        )
+    # сюрприз: сначала код по фактам, черновик модели — только если код ничего не нашёл
+    surprise = find_surprise(story, facts, bank_positions=bank_models, market=market_models)
+    if surprise is None:
+        surprise = _build_surprise(draft.surprise, dossier, dossier.story_published_at)
     return InsightCard(
         card_id=f"card_{story.id}_{profile.company_id}_{role}",
         company_id=profile.company_id,
@@ -510,7 +575,7 @@ def assemble_card(
         actions=actions,
         bank_and_market=bank_and_market,
         what_would_change=would_change,
-        surprise=_build_surprise(draft.surprise, dossier, dossier.story_published_at),
+        surprise=surprise,
         claims=b.claims,
         confidence=confidence,
         confidence_reasons=reasons,

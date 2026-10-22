@@ -69,7 +69,8 @@ def render_contributions(relevance: RelevanceScore, n: int = 3) -> str:
     if not top:
         return "(вкладов нет)"
     return "\n".join(
-        f"- {c.factor}: знак для клиента — {_SIGN_WORD[c.sign]}; вес {c.value:.2f}; признаки: "
+        f"- {c.factor} ({channel_label(c.factor)}): знак для клиента — {_SIGN_WORD[c.sign]}; "
+        f"вес {c.value:.2f}; признаки: "
         + ("; ".join(c.client_features) or "—")
         for c in top
     )

@@ -16,10 +16,14 @@ from backend.cards.template import template_draft
 from backend.cards.verify import CardCheck, CardFailure, verify_card
 from backend.llm import BudgetExceeded, LLMClient, LLMUnavailable, data_block, get_client
 from backend.schemas import (
+    Analysis,
     AnalystReport,
+    BankPosition,
     CompanyProfile,
     CounterpartyGraph,
+    EventFacts,
     InsightCard,
+    MarketKnowledge,
     RelevanceScore,
     Source,
     Story,
@@ -67,6 +71,10 @@ def write_card(
     fixture_key: str | None = None,
     feedback: str | None = None,
     force_template: bool = False,
+    facts: EventFacts | None = None,
+    analysis: Analysis | None = None,
+    bank_positions: Sequence[BankPosition] | None = None,
+    market: Sequence[MarketKnowledge] | None = None,
 ) -> CardResult:
     """Черновик модели -> сборка; любой сбой или `force_template` -> шаблон.
 
@@ -79,6 +87,9 @@ def write_card(
         "profile": profile,
         "analyses": analyses,
         "graph": graph,
+    }
+    scoring_kw: dict[str, Any] = {
+        "facts": facts, "analysis": analysis, "bank_positions": bank_positions, "market": market,
     }
     version = prompt_version()
     reason: str = "принудительный шаблон"
@@ -97,7 +108,7 @@ def write_card(
             fixture_key=fixture_key or f"{profile.company_id}_{role}",
         )
         draft = res.value
-        card = assemble_card(draft, role=role, trace_id=trace_id, sources=sources, **common)  # type: ignore[arg-type]
+        card = assemble_card(draft, role=role, trace_id=trace_id, sources=sources, **common, **scoring_kw)  # type: ignore[arg-type]
         return CardResult(
             card=card,
             headline=draft.headline,
@@ -116,7 +127,7 @@ def write_card(
 
     try:
         draft = template_draft(role=role, **{k: v for k, v in common.items()})  # type: ignore[arg-type]
-        card = assemble_card(draft, role=role, trace_id=trace_id, sources=sources, **common)  # type: ignore[arg-type]
+        card = assemble_card(draft, role=role, trace_id=trace_id, sources=sources, **common, **scoring_kw)  # type: ignore[arg-type]
     except (CardAssemblyError, ValidationError) as e:
         raise CardUnavailable(f"шаблон не собрался ({e}); до него: {reason}") from e
     return CardResult(
@@ -170,6 +181,10 @@ def write_verified_card(
     sources: Sequence[Source] | None = None,
     client: LLMClient | None = None,
     fixture_key: str | None = None,
+    facts: EventFacts | None = None,
+    analysis: Analysis | None = None,
+    bank_positions: Sequence[BankPosition] | None = None,
+    market: Sequence[MarketKnowledge] | None = None,
 ) -> CardResult:
     """Черновик модели -> проверка кодом; провал -> одна перегенерация -> шаблон (он тоже проверяется)."""
     cl = client or get_client()
@@ -177,6 +192,7 @@ def write_verified_card(
     kw: dict[str, Any] = {
         "story": story, "dossier": dossier, "relevance": relevance, "profile": profile, "role": role,
         "trace_id": trace_id, "analyses": analyses, "graph": graph, "sources": sources, "client": cl,
+        "facts": facts, "analysis": analysis, "bank_positions": bank_positions, "market": market,
     }
     chk = {
         "dossier": dossier, "profile": profile, "graph": graph, "relevance": relevance, "analyses": analyses,

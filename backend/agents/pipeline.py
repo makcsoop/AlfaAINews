@@ -23,6 +23,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from backend.schemas import (
+    Analysis,
     AnalystReport,
     EventFacts,
     InsightCard,
@@ -127,6 +128,7 @@ class PipelineContext:
     quick_card: InsightCard | None = None
     dossier: dict[str, Any] = field(default_factory=dict)
     reports: list[AnalystReport] = field(default_factory=list)
+    analysis: Analysis | None = None  # разбор по отчётам после арбитра: drivers для пересчёта скоринга
     critic_notes: list[str] = field(default_factory=list)
     card: InsightCard | None = None
     # прочие результаты шагов для критика и трассы: отчёты аналитиков с проверками, источник карточки и т. п.
