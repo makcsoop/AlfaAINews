@@ -305,7 +305,7 @@ def test_news_only_inside_data_block_and_profile_hidden(dossier):
         assert "SECRET_PROFILE" not in user and "profile:U_DEMO_BORROWER" not in user
         for cid in channels:  # все каналы таксономии, не только типа события
             assert f"- {cid}:" in user
-    assert len(channels) == 15
+    assert len(channels) == 30  # полная таксономия config/channels_matrix.yaml
 
 
 def test_analysts_get_identical_input_and_do_not_see_each_other(tmp_path, dossier):

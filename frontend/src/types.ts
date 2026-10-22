@@ -57,7 +57,7 @@ export interface CardEvent {
   title: string;
   first_seen: string;
   sources: StorySource[];
-  independent_sources: number;
+  corroboration: number;
 }
 
 export interface Action {
@@ -81,6 +81,9 @@ export interface InsightCard {
   card_id: string;
   company_id: string;
   user_role: UserRole;
+  version?: number;
+  stage: "fast" | "deep";
+  analysis_ref?: string | null;
   event: CardEvent;
   relevance: RelevanceScore;
   what_happened: string[];

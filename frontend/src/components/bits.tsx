@@ -11,7 +11,16 @@ export function PolarityChip({ polarity }: { polarity: Polarity }) {
 }
 
 export function ReviewChip({ card }: { card: InsightCard }) {
-  return card.review_status === "on_review" ? <span className="chip chip-review">на проверке</span> : null;
+  return (
+    <>
+      {card.stage === "fast" && (
+        <span className="chip" title="Оценка по профилю компании, глубокий разбор ещё не готов">
+          быстрая оценка
+        </span>
+      )}
+      {card.review_status === "on_review" && <span className="chip chip-review">на проверке</span>}
+    </>
+  );
 }
 
 // Три главных вклада скоринга → «почему вы это видите»

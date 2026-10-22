@@ -8,9 +8,9 @@
 | Д1 вечер | LLM-клиент с бюджетом и журналом | Р3 | Р1 | ✅ | `backend.llm.get_client().call(step=…, schema=…, trace_id=…, dev="r1")`; шаги и запасные — `config/models.yaml`; тексты новостей через `data_block()`; в тестах `LLM_MODE=fixture`, ответы в `backend/llm/fixtures/<step>/` |
 | Д1 вечер | API на заглушках /feed /card /trace /ask | Р3 | Р2 | ✅ | вход `POST /session {company_id, role}` (демо: U_DEMO_BORROWER, U_DEMO_DEPOSITOR), дальше cookie; OpenAPI в `/docs`; ошибки `{error: {code, message, trace_id}}` |
 | Д2 15:00 | Граф платежей: контрагенты, HHI | Р1 | Р2 | ⬜ | |
-| Д2 15:00 | Профили и матрица каналов | Р2 | Р3 | ⬜ | |
+| Д2 15:00 | Профили и матрица каналов | Р2 | Р3 | ✅ | 30 факторов и 52 отрасли в `config/channels_matrix.yaml` (+ `sector_links`), 40 типов в `event_types.yaml` (+ `prior`); профиль v1 — `backend.profile.exposures.with_exposures(profile, graph)`; в БД: `python -m backend.profile.publish` пишет все профили в `company_profiles` (граф берёт из `counterparty_graphs`, если есть) |
 | Д2 вечер | Сюжеты и факты 100+ | Р1 | Р2, Р3 | ⬜ | |
-| Д2 вечер | Скоринг v0 и топ-K | Р2 | Р3 | ⬜ | |
+| Д2 вечер | Скоринг v0 и топ-K | Р2 | Р3 | ✅ | `backend.ranking.score.score_pair(story, profile_v1, now=…, facts=…, graph=…, sources=…, analysis=…)` → `RelevanceScore` (вместо `relevance_score` из фикстуры в `stub_steps`); топ-K — `backend.ranking.select.select_deep(scores, sector_of, spent_rub=…, limit_rub=…)`; быстрая карточка — `backend.ranking.fast_card.fast_card(...)` (`stage="fast"`); веса — `config/scoring.yaml` |
 | Д3 11:00 | Инструмент разметки | Р1 | все | ⬜ | |
 | Д3 15:00 | Реестр ЦМИ + поиск | Р1 | Р2, Р3 | ⬜ | |
 | Д3 вечер | Консенсус по ЦБ | Р1 | Р2 | ⬜ | |
@@ -33,3 +33,13 @@
 | Р3 | Р1 | Kimi-K2.6 с рассуждением стоит 2,43 ₽ за крошечный запрос (без него 0,02 ₽). Звать модели только через клиент: в `config/models.yaml` у шагов `reasoning_effort: none` по умолчанию, `bank_registry` уже так | реестр ЦМИ может съесть дневной лимит | ⬜ |
 | Р3 | Р1 | Сохранить `Analysis` из конвейера Р3 в БД/фикстуру: сейчас кеш разбора (`backend/agents/cache.py`) хранит свой формат (досье + отчёты), а не `Analysis` с `drivers/claims/agreement`; ключ `story_id:sector:version` совпадает с `InsightCard.analysis_ref` | нужен ли вам `Analysis` как отдельный объект и где он лежит — иначе Р3 соберёт его из кеша по просьбе | ⬜ |
 | Р3 | Р1 | `Claim.trigger` для `bank_offer`: Р3 пишет id триггера (`fix_rate`, `long_deposit`, `fx_hedge`), в фикстуре — формат `loa+rate_up`; согласовать формат | валидатор схемы требует триггер, формат не зафиксирован | ⬜ |
+| Р2 | Р3 | `tests/test_analysts.py`: проверка `len(channels) == 15` заменена на 30 (таксономия расширена до 30 факторов по плану) — уже в ветке Р2, посмотреть | иначе тест падает после расширения матрицы | ✅ сделано Р2, нужен взгляд Р3 |
+| Р2 | Р3 | `backend/cards/features.py` `CHANNEL_LABELS` знает 15 факторов: брать названия из `backend.profile.taxonomy.channel_name()` | новые 15 факторов попадут в карточку как id (`import_prices`) | ⬜ |
+| Р2 | Р3 | В вкладах скоринга появились факторы `direct:*`, `counterparty:XX`, `linked_sector:XX`, `surprise` — не каналы матрицы; в шаблоне карточки подпись — `backend.ranking.select.factor_label()` | «почему вы это видите» для прямых совпадений | ⬜ |
+| Р2 | Р1 | `EventFacts.sectors_okved` заполнять у отраслевых событий (санкции против нефтяников → `["06"]`) | скоринг ослабляет такие события для чужих отраслей (`off_sector`) и даёт прямое совпадение своим и связанным | ⬜ |
+| Р2 | Р1 | Граф контрагентов в `counterparty_graphs` (срок Д2 15:00) | профиль v1 добавляет каналы отраслей контрагентов и HHI; пока профили без него | ⬜ |
+| Р2 | Р3 | Уверенность: `backend.ranking.confidence.confidence(story=…, relevance=…, profile=…, sources=…, analysis=…, claims=…, bank_positions=…, market=…)` — 5 признаков плана (источники, согласие аналитиков, доля проверенных утверждений, банк и рынок, прямая связь); предлагаю вызывать её в `assemble_card` вместо `compute_confidence`, чтобы быстрая и глубокая карточка считались одинаково | по плану уверенность — зона Р2; сейчас две разные формулы | ⬜ |
+| Р2 | Р3 | Сюрприз кодом: `backend.ranking.surprise.find_surprise(story, facts, bank_positions=…, market=…)` → `Surprise` по числу из фактов, прогнозу ЦМИ к дате события и консенсусу (медиана ожиданий до события); можно брать вместо `DraftSurprise` от модели | числа не из LLM; тот же объект идёт во вклад «сюрприз» скоринга | ⬜ |
+| Р2 | Р3 | Пересчёт по разбору: `score_pair(..., analysis=Analysis, role=…)` — воздействие из `Analysis.drivers`, знак и веса ролей ставит скоринг | шаг 11 архитектуры, вызывать после арбитра | ⬜ |
+| Р2 | Р1 | Экспорт разметки в CSV `pair_id,labeler,relevance` (0–3) | `backend.eval.agreement` считает каппу на 10 общих парах | ⬜ |
+| Р2 | Р1 | `MarketKnowledge` ожиданий перед заседаниями: `kind=expectation`, `event_type`, `target_event_date`, `expected_value`; агрегат — `source_id="consensus"` | «рынок ждал» в сюрпризе | ⬜ |

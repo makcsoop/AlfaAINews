@@ -115,3 +115,6 @@ cite { font-style: normal; color: var(--ink); }
   .claim { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .card { padding: 16px; }
 }
+
+.banner { font-size: 13.5px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--market) 8%, var(--surface)); border-left: 3px solid var(--market); }
+.banner-review { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-left-color: var(--warn); }

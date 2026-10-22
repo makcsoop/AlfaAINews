@@ -38,23 +38,47 @@ export const STORY_STATUS_LABELS: Record<string, string> = {
   contradictory: "источники расходятся",
 };
 
-// Каналы влияния — config/taxonomy.yaml
+// Факторы — config/channels_matrix.yaml (названия для ленты, коротко)
 export const CHANNEL_LABELS: Record<string, string> = {
-  rate_cost: "стоимость кредитов",
-  deposit_yield: "доходность размещений",
+  key_rate: "ключевая ставка",
   fx_rub: "курс рубля",
   oil_gas: "нефть и газ",
-  metals: "металлы",
+  metals: "цены на металлы",
   agro: "агросырьё",
   gold: "золото",
+  inflation: "инфляция",
   consumer_demand: "потребительский спрос",
-  labor_market: "рынок труда",
+  labor_costs: "рынок труда",
   construction: "стройка и ипотека",
-  tariffs_sanctions: "пошлины и санкции",
-  logistics: "логистика и платежи ВЭД",
-  taxes_regulation: "налоги и регулирование",
-  public_procurement: "госзаказ и господдержка",
-  inflation: "инфляция и издержки",
+  trade_restrictions: "пошлины и санкции",
+  logistics_costs: "логистика и платежи ВЭД",
+  tax_burden: "налоги",
+  regulation: "регулирование",
+  public_spending: "госзаказ и господдержка",
+  coal: "уголь",
+  petroleum_products: "топливо",
+  fertilizers_chemicals: "удобрения и химия",
+  timber: "лес и древесина",
+  electricity_tariffs: "тарифы на энергию",
+  rail_tariffs: "тарифы РЖД",
+  capital_controls: "валютный контроль",
+  credit_conditions: "условия кредитования",
+  counterparty_defaults: "неплатежи контрагентов",
+  equity_market: "фондовый рынок",
+  real_estate: "недвижимость",
+  it_import_substitution: "импортозамещение ПО",
+  export_demand: "внешний спрос",
+  subsidized_lending: "льготные кредиты",
+  import_prices: "цены импорта",
+};
+
+// Прямые совпадения скоринга: backend/ranking/score.py (direct_contributions)
+const DIRECT_LABELS: Record<string, string> = {
+  company: "о вашей компании",
+  group: "о вашей группе",
+  counterparty: "о вашем контрагенте",
+  sector: "о вашей отрасли",
+  region: "о вашем регионе",
 };
 
 // Поля CSV кейса → что это значит для клиента
@@ -81,8 +105,11 @@ export function featureLabel(f: string): string {
 
 export function channelLabel(c: string): string {
   // вклад через контрагентов: «counterparty:41» — покупатели или поставщики из сектора ОКВЭД 41
-  const cp = c.match(/^counterparty:(.+)$/);
-  if (cp) return `контрагенты из ОКВЭД ${cp[1]}`;
+  const [kind, arg] = c.split(":");
+  if (kind === "counterparty" && arg) return `контрагенты из ОКВЭД ${arg}`;
+  if (kind === "linked_sector" && arg) return `связанная отрасль, ОКВЭД ${arg}`;
+  if (kind === "direct" && arg) return DIRECT_LABELS[arg] ?? arg;
+  if (c === "surprise") return "неожиданный исход";
   return CHANNEL_LABELS[c] ?? c;
 }
 

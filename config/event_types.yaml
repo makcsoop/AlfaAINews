@@ -1,29 +1,52 @@
-# Типы событий и факторы, которые они двигают. Стартовая версия: 25 типов; полная — 40 из рабочей папки (ПП).
+# Типы событий и факторы, которые они двигают. 40 типов: первые 25 — стартовые, остальные — расширение.
 # Принятое и предлагаемое регулирование — разные типы (правило GDELT).
+#
+# channels — факторы, которые разбор обязан оценить (читают планировщик, аналитики, критик).
+# prior — направление и сила фактора по умолчанию, −1…1 (+ фактор растёт, − падает): быстрый скоринг
+#   берёт его, пока экстрактор не дал направление из текста. Нет prior — направление зависит от
+#   события (ставку могут и поднять, и снизить), без фактов канал в быстрый скор не идёт.
+# proposed_discount — у предлагаемых мер воздействие слабее, чем у принятых.
 
 event_types:
   rate_decision:        {channels: [key_rate, fx_rub, inflation]}
   monetary_signal:      {channels: [key_rate]}
   fx_move:              {channels: [fx_rub]}
-  fx_control:           {channels: [fx_rub, logistics_costs]}
+  fx_control:           {channels: [fx_rub, logistics_costs, capital_controls], prior: {capital_controls: 0.6}}
   inflation_data:       {channels: [inflation, key_rate, consumer_demand]}
   macro_data:           {channels: [consumer_demand, labor_costs]}
-  tax_change_adopted:   {channels: [tax_burden]}
-  tax_change_proposed:  {channels: [tax_burden]}
-  regulation_adopted:   {channels: [regulation]}
-  regulation_proposed:  {channels: [regulation]}
-  tariff_duty:          {channels: [trade_restrictions]}
-  sanctions:            {channels: [trade_restrictions, logistics_costs, fx_rub]}
+  tax_change_adopted:   {channels: [tax_burden], prior: {tax_burden: 0.6}}
+  tax_change_proposed:  {channels: [tax_burden], prior: {tax_burden: 0.3}}
+  regulation_adopted:   {channels: [regulation], prior: {regulation: 0.5}}
+  regulation_proposed:  {channels: [regulation], prior: {regulation: 0.25}}
+  tariff_duty:          {channels: [trade_restrictions], prior: {trade_restrictions: 0.6}}
+  sanctions:            {channels: [trade_restrictions, logistics_costs, fx_rub], prior: {trade_restrictions: 0.8, logistics_costs: 0.5, counterparty_defaults: 0.3}}
   commodity_price:      {channels: [oil_gas, metals, agro, gold]}
-  supply_disruption:    {channels: [logistics_costs]}
+  supply_disruption:    {channels: [logistics_costs], prior: {logistics_costs: 0.6}}
   corporate_results:    {channels: []}
   m_and_a:              {channels: []}
-  default_bankruptcy:   {channels: []}
+  default_bankruptcy:   {channels: [], prior: {counterparty_defaults: 0.6}}
   rating_action:        {channels: []}
-  state_support:        {channels: [public_spending]}
-  public_procurement:   {channels: [public_spending]}
+  state_support:        {channels: [public_spending], prior: {public_spending: 0.6}}
+  public_procurement:   {channels: [public_spending], prior: {public_spending: 0.5}}
   labor_policy:         {channels: [labor_costs]}
   budget_policy:        {channels: [tax_burden, public_spending]}
   ofz_auction:          {channels: [key_rate]}
   energy_policy:        {channels: [oil_gas]}
   other:                {channels: []}
+
+  # ---------- расширение до 40 ----------
+  secondary_sanctions:  {channels: [trade_restrictions, logistics_costs, capital_controls], prior: {trade_restrictions: 0.8, logistics_costs: 0.7, capital_controls: 0.4}}
+  sanctions_relief:     {channels: [trade_restrictions, logistics_costs], prior: {trade_restrictions: -0.6, logistics_costs: -0.4}}
+  export_duty:          {channels: [trade_restrictions, fx_rub], prior: {trade_restrictions: 0.7, tax_burden: 0.4}}
+  import_duty:          {channels: [trade_restrictions, import_prices], prior: {trade_restrictions: 0.6, import_prices: 0.6}}
+  export_ban_quota:     {channels: [trade_restrictions, agro, petroleum_products], prior: {trade_restrictions: 0.8}}
+  capital_control_change: {channels: [capital_controls, fx_rub]}
+  credit_regulation:    {channels: [credit_conditions, key_rate], prior: {credit_conditions: 0.5}}
+  subsidized_lending_program: {channels: [subsidized_lending, public_spending], prior: {subsidized_lending: 0.6, public_spending: 0.3}}
+  mortgage_program:     {channels: [construction, real_estate, subsidized_lending]}
+  tariff_indexation:    {channels: [electricity_tariffs, rail_tariffs, inflation], prior: {inflation: 0.2}}
+  fuel_damper:          {channels: [petroleum_products, oil_gas, tax_burden]}
+  minimum_wage:         {channels: [labor_costs], prior: {labor_costs: 0.5}}
+  windfall_tax:         {channels: [tax_burden], prior: {tax_burden: 0.8}}
+  foreign_demand_data:  {channels: [export_demand]}
+  equity_market_move:   {channels: [equity_market]}
