@@ -1,5 +1,5 @@
 # Каналы влияния (факторы) и матрица «ОКВЭД → чувствительность к каналам».
-# Стартовая версия: 15 факторов; полная — 30 каналов из рабочей папки (ПП), заменить без правки кода.
+# 30 факторов: первые 15 — стартовые (на их id завязан код разбора), остальные 15 — расширение.
 #
 # Канал = фактор с направлением (У17): событие двигает фактор вверх или вниз, а «хорошо / плохо»
 # для клиента получается только умножением на его чувствительность к фактору:
@@ -21,7 +21,93 @@ channels:
   tax_burden:         {name: "Налоговая нагрузка", up: "налоги выше"}
   regulation:         {name: "Отраслевое регулирование", up: "регулирование жёстче"}
   public_spending:    {name: "Госзаказ, бюджет и господдержка", up: "госрасходы и поддержка растут"}
+  coal:               {name: "Цены на уголь", up: "уголь дороже"}
+  petroleum_products: {name: "Цены на топливо и нефтепродукты", up: "бензин, дизель и мазут дороже"}
+  fertilizers_chemicals: {name: "Цены на удобрения и химию", up: "удобрения и химия дороже"}
+  timber:             {name: "Цены на лес и древесину", up: "древесина дороже"}
+  electricity_tariffs: {name: "Тарифы на электроэнергию и газ для бизнеса", up: "энергия дороже"}
+  rail_tariffs:       {name: "Тарифы РЖД и перевозок", up: "перевозка по железной дороге дороже"}
+  capital_controls:   {name: "Валютный контроль и продажа выручки", up: "требования жёстче"}
+  credit_conditions:  {name: "Условия кредитования и нормативы ЦБ", up: "кредит получить труднее"}
+  counterparty_defaults: {name: "Неплатежи и банкротства контрагентов", up: "неплатежей больше"}
+  equity_market:      {name: "Фондовый рынок", up: "котировки растут"}
+  real_estate:        {name: "Цены и спрос на недвижимость", up: "недвижимость дороже, спрос выше"}
+  it_import_substitution: {name: "Импортозамещение ПО и техники", up: "больше требований и поддержки отечественного"}
+  export_demand:      {name: "Внешний спрос на российский экспорт", up: "спрос за рубежом выше"}
+  subsidized_lending: {name: "Льготные программы кредитования", up: "льготных программ больше"}
+  import_prices:      {name: "Цены импорта и параллельного импорта", up: "импортные товары и оборудование дороже"}
 
-# ОКВЭД (2 знака) → чувствительность сектора к факторам, −1…1. Заполняется для профиля клиента
-# (роль «ML и скоринг»); продукты банка, ВЭД и контрагенты добавляются к ней кодом профиля.
-okved: {}
+# ОКВЭД (2 знака) → чувствительность отрасли к факторам, −1…1: что получает компания отрасли, когда
+# фактор растёт. Экспертная оценка команды (стартовый приор), уточняется знаниями аналитиков рынка.
+# Продукты банка, ВЭД и контрагенты добавляются к ней кодом профиля (backend/profile/exposures.py).
+okved:
+  "01": {agro: 0.8, fertilizers_chemicals: -0.5, petroleum_products: -0.4, trade_restrictions: -0.5, fx_rub: -0.4, subsidized_lending: 0.6, key_rate: -0.3, labor_costs: -0.3}
+  "02": {timber: 0.7, trade_restrictions: -0.5, fx_rub: -0.4, rail_tariffs: -0.4}
+  "03": {export_demand: 0.5, fx_rub: -0.5, petroleum_products: -0.4, trade_restrictions: -0.4}
+  "05": {coal: 0.9, rail_tariffs: -0.7, export_demand: 0.6, fx_rub: -0.6, trade_restrictions: -0.6, tax_burden: -0.4}
+  "06": {oil_gas: 0.9, fx_rub: -0.7, trade_restrictions: -0.7, tax_burden: -0.6, export_demand: 0.5, regulation: -0.3}
+  "07": {metals: 0.8, fx_rub: -0.6, export_demand: 0.5, trade_restrictions: -0.5, rail_tariffs: -0.4, tax_burden: -0.4}
+  "08": {construction: 0.5, rail_tariffs: -0.4, electricity_tariffs: -0.3}
+  "09": {oil_gas: 0.7, trade_restrictions: -0.7, counterparty_defaults: -0.5, import_prices: -0.4, key_rate: -0.3}
+  "10": {agro: -0.6, consumer_demand: 0.6, inflation: -0.3, electricity_tariffs: -0.3, regulation: -0.3, labor_costs: -0.3}
+  "11": {consumer_demand: 0.6, tax_burden: -0.6, regulation: -0.5}
+  "13": {consumer_demand: 0.5, fx_rub: 0.3, trade_restrictions: -0.4}
+  "14": {consumer_demand: 0.5, fx_rub: 0.3, trade_restrictions: -0.4, labor_costs: -0.4}
+  "16": {timber: 0.5, construction: 0.4, fx_rub: -0.4, trade_restrictions: -0.5, rail_tariffs: -0.4}
+  "17": {timber: -0.4, consumer_demand: 0.3, fx_rub: -0.3, electricity_tariffs: -0.4}
+  "19": {petroleum_products: 0.8, oil_gas: -0.4, regulation: -0.5, tax_burden: -0.5, trade_restrictions: -0.5, fx_rub: -0.3}
+  "20": {fertilizers_chemicals: 0.8, oil_gas: -0.4, fx_rub: -0.6, trade_restrictions: -0.6, export_demand: 0.5, rail_tariffs: -0.4}
+  "21": {fx_rub: 0.5, import_prices: -0.3, regulation: -0.5, public_spending: 0.5}
+  "22": {oil_gas: -0.4, construction: 0.3, fx_rub: 0.3}
+  "23": {construction: 0.8, electricity_tariffs: -0.6, oil_gas: -0.4, rail_tariffs: -0.4, key_rate: -0.4}
+  "24": {metals: 0.9, fx_rub: -0.6, export_demand: 0.6, trade_restrictions: -0.6, rail_tariffs: -0.5, electricity_tariffs: -0.4, coal: -0.4, construction: 0.4}
+  "25": {metals: -0.5, construction: 0.5, public_spending: 0.4}
+  "26": {fx_rub: 0.6, trade_restrictions: -0.7, import_prices: -0.4, public_spending: 0.5, it_import_substitution: 0.5}
+  "27": {fx_rub: 0.4, metals: -0.5, construction: 0.4, public_spending: 0.4}
+  "28": {fx_rub: 0.4, metals: -0.4, trade_restrictions: -0.5, import_prices: -0.3, key_rate: -0.4, public_spending: 0.4, subsidized_lending: 0.4}
+  "29": {consumer_demand: 0.6, key_rate: -0.6, fx_rub: 0.5, trade_restrictions: -0.6, subsidized_lending: 0.4}
+  "30": {public_spending: 0.7, trade_restrictions: -0.5}
+  "35": {electricity_tariffs: 0.8, oil_gas: -0.3, coal: -0.3, regulation: -0.4, key_rate: -0.4}
+  "36": {electricity_tariffs: -0.4, regulation: -0.4, public_spending: 0.4}
+  "38": {electricity_tariffs: -0.3, regulation: -0.4, public_spending: 0.4}
+  "41": {construction: 0.9, key_rate: -0.8, subsidized_lending: 0.7, real_estate: 0.5, metals: -0.4, labor_costs: -0.5, inflation: -0.3, counterparty_defaults: -0.3}
+  "42": {public_spending: 0.9, construction: 0.5, key_rate: -0.5, metals: -0.4, petroleum_products: -0.3}
+  "43": {construction: 0.8, key_rate: -0.5, labor_costs: -0.5, counterparty_defaults: -0.4}
+  "45": {consumer_demand: 0.6, key_rate: -0.6, fx_rub: 0.6, import_prices: -0.5, trade_restrictions: -0.6, logistics_costs: -0.4}
+  "46": {fx_rub: 0.5, import_prices: -0.5, consumer_demand: 0.4, logistics_costs: -0.5, trade_restrictions: -0.5, key_rate: -0.4, counterparty_defaults: -0.4, capital_controls: -0.3}
+  "47": {consumer_demand: 0.9, inflation: -0.3, fx_rub: 0.4, import_prices: -0.3, key_rate: -0.3, labor_costs: -0.5, logistics_costs: -0.3}
+  "49": {petroleum_products: -0.7, logistics_costs: 0.4, consumer_demand: 0.3, export_demand: 0.3, labor_costs: -0.5, key_rate: -0.4, trade_restrictions: -0.3}
+  "50": {logistics_costs: 0.5, export_demand: 0.5, trade_restrictions: -0.5, fx_rub: -0.3}
+  "51": {petroleum_products: -0.8, fx_rub: 0.6, trade_restrictions: -0.7, consumer_demand: 0.5}
+  "52": {logistics_costs: 0.4, export_demand: 0.4, consumer_demand: 0.3, trade_restrictions: -0.5}
+  "55": {consumer_demand: 0.8, labor_costs: -0.6, inflation: -0.3}
+  "56": {consumer_demand: 0.8, labor_costs: -0.6, inflation: -0.3}
+  "61": {it_import_substitution: 0.6, regulation: -0.4, fx_rub: 0.3, public_spending: 0.3}
+  "62": {it_import_substitution: 0.8, labor_costs: -0.6, tax_burden: -0.4, public_spending: 0.4}
+  "63": {it_import_substitution: 0.6, labor_costs: -0.5, regulation: -0.4}
+  "64": {key_rate: 0.4, credit_conditions: -0.4, equity_market: 0.5, regulation: -0.5}
+  "68": {real_estate: 0.8, key_rate: -0.6, construction: 0.4, consumer_demand: 0.3}
+  "69": {labor_costs: -0.5, regulation: -0.3}
+  "70": {labor_costs: -0.5, consumer_demand: 0.3}
+  "71": {construction: 0.4, public_spending: 0.4, labor_costs: -0.5}
+  "73": {consumer_demand: 0.5, labor_costs: -0.4}
+  "77": {key_rate: -0.7, credit_conditions: -0.5, counterparty_defaults: -0.5, fx_rub: 0.3}
+  "86": {public_spending: 0.5, fx_rub: 0.4, import_prices: -0.3, labor_costs: -0.5}
+
+# Связанные отрасли: типичные заказчики и поставщики сектора (предположение, вес 0…1).
+# Событие про связанную отрасль — прямое совпадение «касается ваших заказчиков», даже без графа платежей.
+sector_links:
+  "05": {"35": 0.5, "24": 0.4}
+  "07": {"24": 0.6}
+  "09": {"06": 0.8}
+  "10": {"01": 0.6, "47": 0.5}
+  "16": {"41": 0.4}
+  "19": {"06": 0.6}
+  "20": {"01": 0.4}
+  "23": {"41": 0.7, "42": 0.5}
+  "24": {"25": 0.4, "41": 0.3, "28": 0.3}
+  "25": {"41": 0.4, "28": 0.3}
+  "46": {"47": 0.5}
+  "49": {"46": 0.5, "47": 0.4}
+  "52": {"46": 0.5, "49": 0.4}
+  "77": {"49": 0.4, "41": 0.3}

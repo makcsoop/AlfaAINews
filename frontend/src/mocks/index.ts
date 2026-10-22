@@ -15,6 +15,7 @@ function withDefaults(c: Raw): InsightCard {
     what_would_change: [],
     confidence_reasons: [],
     review_status: "published",
+    stage: "fast",
     surprise: null,
     ...c,
     claims: (c.claims ?? []).map((x) => ({

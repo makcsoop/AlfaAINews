@@ -128,7 +128,7 @@ function Sources({ card }: { card: InsightCard }) {
           <span key={s.source_id}>{label}</span>
         );
       })}
-      <span className="muted">· независимых: {card.event.independent_sources}</span>
+      <span className="muted">· независимых: {card.event.corroboration}</span>
     </div>
   );
 }
