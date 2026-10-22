@@ -66,6 +66,7 @@ def compute_exposures(
     matrix = matrix or load_matrix()
     cfg = cfg or load_scoring().profile
     acc = _Acc()
+    acc.add(cfg.baseline, 1.0, "общий фактор для всех компаний", assumption=True)
 
     if profile.sector and profile.sector in matrix.okved:
         acc.add(matrix.okved[profile.sector], cfg.sector_weight, f"MAINOKVED_CODE={profile.okved_code}")

@@ -37,6 +37,27 @@ const cards = (bundle.insight_card as unknown as Raw[]).map(withDefaults);
 const demoCompanies = new Set(cards.map((c) => c.company_id));
 let session: SessionInfo | null = null;
 
+// Догрузка разбора: первые секунды карточки с глубоким разбором отдаются как быстрые
+const DEEP_READY_MS = 12000;
+const startedAt = Date.now();
+
+function asOfNow(c: InsightCard): InsightCard {
+  if (c.stage !== "deep" || Date.now() - startedAt > DEEP_READY_MS) return c;
+  const keep = new Set([...c.what_happened, ...c.bank_and_market, ...c.why_it_matters.slice(0, 1)]);
+  return {
+    ...c,
+    stage: "fast",
+    relevance: { ...c.relevance, deep_analysis: true },
+    why_it_matters: c.why_it_matters.slice(0, 1),
+    consequences: [],
+    actions: [],
+    what_would_change: [],
+    claims: c.claims.filter((x) => keep.has(x.claim_id)),
+    confidence: "low",
+    confidence_reasons: ["быстрая оценка по профилю, глубокого разбора ещё нет"],
+  };
+}
+
 const delay = <T>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 150));
 
 function requireSession(): SessionInfo {
@@ -55,12 +76,13 @@ export const mockApi: Api = {
     const own = cards.filter((c) => c.company_id === s.company_id);
     // как FixtureCardStore: нет карточек под роль — карточки компании, а не пустая лента
     const byRole = own.filter((c) => c.user_role === s.role);
-    return delay([...(byRole.length ? byRole : own)].sort((a, b) => b.relevance.score - a.relevance.score));
+    const list = (byRole.length ? byRole : own).map(asOfNow);
+    return delay(list.sort((a, b) => b.relevance.score - a.relevance.score));
   },
   async card(cardId) {
     const s = requireSession();
     const found = cards.find((c) => c.card_id === cardId && c.company_id === s.company_id);
     if (!found) throw new HttpError(404, "Карточка не найдена");
-    return delay(found);
+    return delay(asOfNow(found));
   },
 };

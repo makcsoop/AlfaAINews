@@ -9,7 +9,11 @@ import { Layout } from "./components/Layout";
 import { DEMO_ROLES } from "./labels";
 import type { InsightCard, UserRole } from "./types";
 
-type View = { name: "home" } | { name: "feed" } | { name: "card"; id: string };
+// Глубокий разбор занимает до нескольких минут (метрика «время до глубокой карточки» — до 15 мин)
+const DEEP_POLL_MS = 8000;
+const DEEP_POLL_TRIES = 110;
+
+type View ={ name: "home" } | { name: "feed" } | { name: "card"; id: string };
 
 function parseHash(): View {
   const h = location.hash.replace(/^#\/?/, "");
@@ -108,6 +112,24 @@ export function App() {
       return next;
     });
   }, [api, cardId, cards, seenKey]);
+
+  // Быстрая карточка, отобранная на глубокий разбор, перечитывается, пока разбор не догрузится
+  const waitingDeep = opened?.stage === "fast" && opened.relevance.deep_analysis;
+  useEffect(() => {
+    if (!api || !waitingDeep || !opened) return;
+    let tries = 0;
+    const id = opened.card_id;
+    const timer = setInterval(() => {
+      tries += 1;
+      api.card(id).then((fresh) => {
+        if (fresh.stage !== "deep" && tries < DEEP_POLL_TRIES) return;
+        clearInterval(timer);
+        setOpened((cur) => (cur?.card_id === id ? fresh : cur));
+        setCards((list) => list?.map((c) => (c.card_id === id ? fresh : c)) ?? list);
+      }, () => clearInterval(timer));
+    }, DEEP_POLL_MS);
+    return () => clearInterval(timer);
+  }, [api, waitingDeep, opened?.card_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const unseen = useMemo(
     () => new Set((cards ?? []).map((c) => c.card_id).filter((id) => !seen.has(id))),

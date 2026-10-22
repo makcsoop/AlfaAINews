@@ -42,6 +42,18 @@ export function CardView({ card, onBack }: { card: InsightCard; onBack: () => vo
         </div>
         <h1>{card.event.title}</h1>
         <Sources card={card} />
+        {card.stage === "fast" && (
+          <div className="banner" role="status">
+            {card.relevance.deep_analysis
+              ? "Идёт глубокий разбор: аналитики оценивают событие для вашей отрасли. Карточка обновится сама."
+              : "Быстрая оценка по профилю компании. Глубокий разбор для этого события не запускался."}
+          </div>
+        )}
+        {card.review_status === "on_review" && (
+          <div className="banner banner-review" role="status">
+            Аналитики разошлись в оценке — вывод на проверке у эксперта банка. Факты и источники проверены.
+          </div>
+        )}
       </header>
 
       <Section title="Что произошло" claims={pick(card.what_happened)} byId={byId} />

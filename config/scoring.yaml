@@ -7,6 +7,8 @@ version: v0
 # ---------- профиль: откуда берётся чувствительность клиента к фактору ----------
 profile:
   sector_weight: 1.0              # строка ОКВЭД из channels_matrix.yaml
+  # общее для всех компаний: налоги платит любая, предположение без признака в CSV
+  baseline: {tax_burden: -0.5}
   # продукт в банке → чувствительность к фактору (что получает клиент при росте фактора)
   products:
     loans:      {key_rate: -0.8, credit_conditions: -0.5}
@@ -61,6 +63,34 @@ surprise:
   # отклонение факта от ожиданий, при котором сюрприз считается полным
   full_at: {"%": 0.5, "п.п.": 0.5, "руб": 5.0, "б.п.": 50}
   default_full_at: 0.1            # в долях от ожидания, если единица неизвестна
+  # какое число события сравнивать с ожиданиями: тип события → метрика.
+  # number_hint — слово в period или цитате числа из фактов; forecast_prefix — Forecast.metric позиции ЦМИ
+  metrics:
+    rate_decision:  {metric: "ключевая ставка", unit: "%", number_hint: "ставк", forecast_prefix: "key_rate_decision"}
+    inflation_data: {metric: "инфляция", unit: "%", number_hint: "инфляц", forecast_prefix: "cpi"}
+    fx_move:        {metric: "курс доллара", unit: "руб", number_hint: "доллар", forecast_prefix: "usdrub"}
+
+# ---------- акценты ролей: множитель вклада канала ----------
+# финдиректору важнее долг и ставка, казначею — курс и ликвидность, главбуху — налоги и отчётность
+roles:
+  cfo:
+    focus: {key_rate: 1.5, credit_conditions: 1.5, subsidized_lending: 1.3, counterparty_defaults: 1.3}
+    other: 0.85
+  treasurer:
+    focus: {fx_rub: 1.5, key_rate: 1.3, capital_controls: 1.4, equity_market: 1.2, export_demand: 1.2}
+    other: 0.85
+  chief_accountant:
+    focus: {tax_burden: 2.0, regulation: 1.5, capital_controls: 1.3, labor_costs: 1.2}
+    other: 0.6
+
+# ---------- уверенность уровнями с причинами ----------
+# баллы: источники, согласие аналитиков, проверенные утверждения, поддержка банка и рынка, прямая связь
+confidence:
+  high_from: 4                     # баллов для «высокая»
+  medium_from: 2
+  verified_good: 0.9               # доля проверенных утверждений: выше — плюс балл
+  verified_bad: 0.7                # ниже — минус балл
+  corroboration_good: 2            # независимых источников для балла без первоисточника
 
 # событие названо про конкретные отрасли (sectors_okved), а клиент не из них и с ними не связан
 # (ни отраслью-соседом, ни контрагентами) — вклады каналов ослабляются: пошлина на зерно не про металлурга

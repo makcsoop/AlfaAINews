@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from backend.profile.taxonomy import ChannelsMatrix, load_event_types, load_matrix
-from backend.ranking.config import ScoringConfig, load_scoring
+from backend.ranking.config import ScoringConfig, load_scoring, role_weight
 from backend.schemas import (
     Analysis,
     CompanyProfile,
@@ -93,9 +93,13 @@ def freshness(story: Story, now: datetime, cfg: ScoringConfig) -> float:
 
 
 def channel_contributions(
-    drivers: Sequence[Driver], profile: CompanyProfile, cfg: ScoringConfig, scope: float = 1.0
+    drivers: Sequence[Driver],
+    profile: CompanyProfile,
+    cfg: ScoringConfig,
+    scope: float = 1.0,
+    role: UserRole | None = None,
 ) -> list[Contribution]:
-    """scope < 1 — событие про другие отрасли (см. sector_scope)."""
+    """scope < 1 — событие про другие отрасли (см. sector_scope); role — акценты роли из scoring.yaml."""
     exposures = {e.channel: e for e in profile.exposures}
     out = []
     for d in drivers:
@@ -104,6 +108,7 @@ def channel_contributions(
             continue
         sign = d.direction * (1 if e.sensitivity > 0 else -1)
         value = d.strength * abs(e.sensitivity) * cfg.weights.channels * scope
+        value *= role_weight(cfg, role, d.channel)
         out.append(
             Contribution(factor=d.channel, value=round(value, 3), client_features=e.drivers, sign=sign)
         )
@@ -252,7 +257,7 @@ def score_pair(
     cfg = cfg or load_scoring()
     matrix = load_matrix()
     scope = sector_scope(profile, facts, graph, cfg, matrix)
-    contribs = channel_contributions(story_drivers(story, facts, analysis), profile, cfg, scope)
+    contribs = channel_contributions(story_drivers(story, facts, analysis), profile, cfg, scope, role)
     contribs += direct_contributions(profile, facts, story, graph, cfg, matrix)
     if (s := surprise_contribution(surprise, cfg)) is not None:
         contribs.append(s)

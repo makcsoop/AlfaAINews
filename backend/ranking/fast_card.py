@@ -8,7 +8,9 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 
 from backend.profile.taxonomy import load_matrix
+from backend.ranking.confidence import confidence
 from backend.ranking.select import factor_label, top_contributions
+from backend.ranking.surprise import find_surprise
 from backend.schemas import (
     BankPosition,
     Claim,
@@ -16,6 +18,7 @@ from backend.schemas import (
     Contribution,
     EventFacts,
     InsightCard,
+    MarketKnowledge,
     RawItem,
     RelevanceScore,
     Source,
@@ -121,6 +124,7 @@ def fast_card(
     sources: Mapping[str, Source] | None = None,
     bank_positions: Sequence[BankPosition] = (),
     profile: CompanyProfile | None = None,
+    market: Sequence[MarketKnowledge] = (),
 ) -> InsightCard:
     items, sources = items or {}, sources or {}
     matrix = load_matrix()
@@ -155,11 +159,17 @@ def fast_card(
         ],
         corroboration=story.corroboration,
     )
-    reasons = [
-        STATUS_REASON.get(story.status, story.status),
-        "быстрая оценка по профилю, без глубокого разбора",
-    ]
-    confidence = "medium" if story.status == "confirmed" and relevance.quality >= 0.8 else "low"
+    surprise = find_surprise(story, facts, bank_positions=bank_positions, market=market)
+    level, reasons = confidence(
+        story=story,
+        relevance=relevance,
+        profile=profile or CompanyProfile(company_id=relevance.company_id),
+        sources=dict(sources),
+        claims=claims,
+        bank_positions=bank_positions,
+        market=market,
+    )
+    reasons.insert(0, STATUS_REASON.get(story.status, story.status))
     return InsightCard(
         card_id=card_id(story.id, relevance.company_id, role),
         company_id=relevance.company_id,
@@ -171,7 +181,8 @@ def fast_card(
         why_it_matters=why,
         consequences=[],
         bank_and_market=["B1"] if bank else [],
+        surprise=surprise,
         claims=claims,
-        confidence=confidence,
+        confidence=level,
         confidence_reasons=reasons,
     )

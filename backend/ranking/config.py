@@ -22,6 +22,7 @@ class Fea(_Cfg):
 
 class ProfileCfg(_Cfg):
     sector_weight: float
+    baseline: dict[str, Signed]
     products: dict[str, dict[str, Signed]]
     fea: Fea
     exporter_sectors: list[str]
@@ -63,9 +64,30 @@ class DirectCfg(_Cfg):
     region: float
 
 
+class SurpriseMetric(_Cfg):
+    metric: str
+    unit: str
+    number_hint: str
+    forecast_prefix: str
+
+
 class SurpriseCfg(_Cfg):
     full_at: dict[str, float]
     default_full_at: float
+    metrics: dict[str, SurpriseMetric]
+
+
+class RoleCfg(_Cfg):
+    focus: dict[str, float]
+    other: float
+
+
+class ConfidenceCfg(_Cfg):
+    high_from: int
+    medium_from: int
+    verified_good: float
+    verified_bad: float
+    corroboration_good: int
 
 
 class PolarityCfg(_Cfg):
@@ -91,11 +113,19 @@ class ScoringConfig(_Cfg):
     weights: Weights
     direct: DirectCfg
     surprise: SurpriseCfg
+    roles: dict[str, RoleCfg]
+    confidence: ConfidenceCfg
     off_sector: float
     saturation: float
     min_contribution: float
     polarity: PolarityCfg
     deep: DeepCfg
+
+
+def role_weight(cfg: "ScoringConfig", role: str | None, channel: str) -> float:
+    """Множитель канала для роли; роль без акцентов (ceo, owner) или без роли — 1."""
+    r = cfg.roles.get(role or "")
+    return 1.0 if r is None else r.focus.get(channel, r.other)
 
 
 @lru_cache
