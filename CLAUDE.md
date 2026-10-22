@@ -40,7 +40,7 @@
 
 - Python 3.12, uv, FastAPI, Pydantic v2, PostgreSQL + pgvector, Redis, APScheduler; React + Vite во `frontend/`.
 - NLP: Natasha, rapidfuzz, sentence-transformers (`deepvk/USER-bge-m3`), trafilatura, feedparser, Telethon.
-- Запуск: `docker compose up -d` · тесты: `uv run pytest -q` · линт: `uv run ruff check . --fix` · типы: `uv run mypy newsai`
+- Запуск: `docker compose up -d` · тесты: `uv run pytest -q` · линт: `uv run ruff check . --fix` · типы: `uv run mypy backend`
 - Фронт: `cd frontend && npm run dev` · сборка `npm run build`
 - Тесты не вызывают настоящие модели: LLM-клиент в тестах в режиме `LLM_MODE=fixture`.
 
