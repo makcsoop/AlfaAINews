@@ -132,6 +132,21 @@ def planner_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> 
     return ctx
 
 
+def _enrich_with_r1(ctx: PipelineContext, src: ToolDataSource) -> None:
+    """«Банк и рынок» и «Статистик» Р1 в досье (только TOOL_SOURCE=db); сбой — флаг в трассе, не ошибка."""
+    engine = getattr(src, "engine", None)
+    if engine is None or not ctx.dossier:
+        return
+    from backend.agents.r1_dossier import enrich_dossier
+
+    dossier = Dossier.model_validate(ctx.dossier)
+    flags = enrich_dossier(dossier, engine)
+    ctx.dossier = dossier.model_dump(mode="json")
+    ctx.flags.extend(flags)
+    if ctx.trace is not None:
+        ctx.trace.steps.extend(f"dossier:{f}" for f in flags)
+
+
 # --- аналитики ------------------------------------------------------------------------------------
 
 
@@ -502,7 +517,10 @@ def make_handlers(
                 ctx.trace.steps.append(f"analysis:cache_hit:{ctx.analysis_key}")
             return ctx
         ctx.artifacts["analysis_cached"] = False
-        return planner_step(ctx, src)
+        planner_step(ctx, src)
+        if not ctx.planner_task:
+            _enrich_with_r1(ctx, src)
+        return ctx
 
     def analyzed(ctx: PipelineContext) -> PipelineContext:
         if ctx.artifacts.get("analysis_cached"):
@@ -524,6 +542,16 @@ def make_handlers(
         return ctx
 
     stub_scored = stub_handlers[State.SCORED]
+    stub_facts = stub_handlers[State.FACTS_READY]
+
+    def facts_ready(ctx: PipelineContext) -> PipelineContext:
+        """Сюжет и факты из источника данных (в БД их много); нет в источнике — фикстура прогона."""
+        story = next((s for s in src.stories() if s.id == ctx.story_id), None)
+        if story is None:
+            return stub_facts(ctx)
+        ctx.story = story
+        ctx.facts = next((f for f in src.event_facts() if f.story_id == story.id), None)
+        return ctx
     stub_quick = stub_handlers[State.QUICK_CARD]
 
     def scored(ctx: PipelineContext) -> PipelineContext:
@@ -550,6 +578,7 @@ def make_handlers(
         return card_verify_step(ctx, src)
 
     handlers = dict(stub_handlers)
+    handlers[State.FACTS_READY] = facts_ready
     handlers[State.SCORED] = scored
     handlers[State.QUICK_CARD] = quick
     handlers[State.PLANNED] = planned

@@ -1,0 +1,170 @@
+"""Лента из многих сюжетов: быстрые карточки для всех, глубокий разбор не более K, чужая компания не видна."""
+
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
+
+from backend.agents.dossier import Dossier
+from backend.agents.r1_dossier import bank_market_items, enrich_dossier, statistician_items
+from backend.agents.tools.source import FixtureDataSource
+from backend.api.store import PipelineCardStore
+from backend.schemas import RunTrace
+
+BORROWER, DEPOSITOR = "U_DEMO_BORROWER", "U_DEMO_DEPOSITOR"
+
+
+class MultiSource(FixtureDataSource):
+    """rate_14 + синтетические сюжеты на тех же материалах."""
+
+    def __init__(self) -> None:
+        super().__init__("rate_14")
+        base_story, base_facts = self._b["story"][0], self._b["event_facts"][0]
+        self.extra_ids = ["s_2", "s_3", "s_4"]
+        quality = {"s_2": 0.9, "s_3": 0.2, "s_4": 0.5}
+        for sid in self.extra_ids:
+            self._b["story"].append(
+                base_story.model_copy(update={"id": sid, "title": f"{base_story.title} ({sid})",
+                                              "quality": quality[sid]})
+            )
+            if sid != "s_3":  # у s_3 нет фактов: только быстрая карточка
+                self._b["event_facts"].append(base_facts.model_copy(update={"story_id": sid}))
+
+
+@pytest.fixture(autouse=True)
+def fixture_mode(monkeypatch):
+    monkeypatch.setenv("LLM_MODE", "fixture")
+    monkeypatch.delenv("CACHE_BACKEND", raising=False)
+    monkeypatch.setenv("FEED_MIN_SCORE", "0")
+
+
+def make_store(k: int = 2):
+    calls: list[str] = []
+    holder: dict = {}
+
+    def runner(story_id, company_id, role, *, sector, story_version, handlers):
+        calls.append(story_id)
+        fast = holder["store"]._cards[f"card_{story_id}_{company_id}_{role}"]
+        now = datetime.now(UTC)
+        trace = RunTrace(run_id=f"run_{story_id}", story_id=story_id, company_id=company_id,
+                         started_at=now, finished_at=now)
+        deep = fast.model_copy(
+            update={
+                "trace_id": trace.run_id,
+                "relevance": fast.relevance.model_copy(update={"deep_analysis": True}),
+            }
+        )
+        return deep, trace
+
+    store = PipelineCardStore(source=MultiSource(), runner=runner, deep_per_request=k)
+    holder["store"] = store
+    return store, calls
+
+
+def test_feed_has_card_per_story_sorted_with_limited_deep():
+    store, calls = make_store(k=2)
+    cards = store.list_cards(BORROWER, "cfo")
+    assert {c.event.story_id if hasattr(c, "event") else None for c in cards} or cards
+    assert len(cards) == 4  # rate_14 + три синтетических
+    scores = [c.relevance.score for c in cards]
+    assert scores == sorted(scores, reverse=True)
+    deep = [c for c in cards if c.relevance.deep_analysis]
+    assert len(deep) == len(calls) == 2  # K=2, остальные — быстрые
+    assert "s_3" not in calls  # без фактов глубокий разбор не запускается
+    assert len(cards) - len(deep) == 2
+
+
+def test_next_requests_upgrade_remaining_without_repeats():
+    store, calls = make_store(k=2)
+    store.list_cards(BORROWER, "cfo")
+    cards = store.list_cards(BORROWER, "cfo")
+    assert len(calls) == len(set(calls)) == 3  # третий факт-сюжет добран, s_3 без фактов остался быстрым
+    assert sum(c.relevance.deep_analysis for c in cards) == 3
+    store.list_cards(BORROWER, "cfo")
+    assert len(calls) == 3 and store.runs == 3
+
+
+def test_deep_card_replaces_fast_of_same_story():
+    store, calls = make_store(k=1)
+    cards = store.list_cards(BORROWER, "cfo")
+    ids = [c.card_id for c in cards]
+    assert len(ids) == len(set(ids)) == 4
+    assert len(calls) == 1
+
+
+def test_foreign_company_not_visible():
+    store, _ = make_store(k=3)
+    mine = store.list_cards(BORROWER, "cfo")
+    theirs = store.list_cards(DEPOSITOR, "treasurer")
+    assert {c.company_id for c in mine} == {BORROWER}
+    assert {c.company_id for c in theirs} == {DEPOSITOR}
+    assert all(store.get_card(c.card_id, BORROWER) is None for c in theirs)
+    assert store.list_cards("U_UNKNOWN", "cfo") == []
+
+
+def test_pipeline_failure_keeps_fast_card_on_review():
+    def boom(*a, **kw):
+        raise RuntimeError("модель недоступна")
+
+    store = PipelineCardStore(source=MultiSource(), runner=boom, deep_per_request=1)
+    cards = store.list_cards(BORROWER, "cfo")
+    assert len(cards) == 4
+    assert sum(c.review_status == "on_review" for c in cards) == 1
+    again = store.list_cards(BORROWER, "cfo")
+    assert len(again) == 4 and store.runs == 2  # упавший сюжет не перезапускается, берётся следующий
+
+
+def test_zero_k_gives_only_fast_cards():
+    store, calls = make_store(k=0)
+    cards = store.list_cards(BORROWER, "cfo")
+    assert len(cards) == 4 and not calls
+    assert not any(c.relevance.deep_analysis for c in cards)
+
+
+def test_fixture_source_without_db_single_story():
+    store = PipelineCardStore(source=None, runner=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    cards = store.list_cards(BORROWER, "cfo")
+    assert len(cards) == 1
+
+
+# --- адаптер модулей Р1 --------------------------------------------------------------------------
+
+
+def _dossier() -> Dossier:
+    return Dossier(
+        story_id="s_1", sector="64", story_published_at=datetime(2025, 10, 24, tzinfo=UTC), trace_id="t"
+    )
+
+
+def test_bank_market_adapter_items():
+    view = SimpleNamespace(
+        position_id="cmi_1", doc_title="Обзор", quote="Ставка снизится", thesis="t", channel="key_rate",
+        direction=-1.0, forecast=None, page=3, doc_date=datetime(2025, 9, 1).date(), stale=False,
+        before_event=True,
+    )
+    late = SimpleNamespace(**{**view.__dict__, "position_id": "cmi_2", "before_event": False})
+    market = SimpleNamespace(meeting=datetime(2025, 10, 24).date(), statement="Ждут 16%", expected_value=16.0)
+    items = bank_market_items(SimpleNamespace(bank=[view, late], market=market), _dossier())
+    assert {i.id for i in items} == {"cmi_1", "mk_consensus_2025-10-24"}
+    assert next(i for i in items if i.id.startswith("mk_")).data["kind"] == "expectation"
+
+
+def test_statistician_adapter_skips_future_and_self():
+    d = _dossier()
+    mk = lambda sid, fs: SimpleNamespace(  # noqa: E731
+        story_id=sid, title=sid, event_type="rate_decision", first_seen=fs, similarity=0.8,
+        analyst_notes=[SimpleNamespace(excerpt="заметка")],
+    )
+    rep = SimpleNamespace(similar=[mk("old", "2025-06-01T00:00:00"), mk("new", "2025-12-01T00:00:00"), mk("s_1", "2025-01-01")])
+    assert [i.id for i in statistician_items(rep, d)] == ["old"]
+
+
+def test_enrich_without_db_tables_skips_with_flag():
+    engine = create_engine("sqlite://", poolclass=StaticPool)
+    d = _dossier()
+    flags = enrich_dossier(d, engine)
+    assert flags == ["r1:bank_market:skipped:OperationalError", "r1:statistician:skipped:OperationalError"]
+    assert d.items == []
+    _ = timedelta

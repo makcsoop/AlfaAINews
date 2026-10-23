@@ -31,6 +31,7 @@ RAW_ITEMS_LIMIT = 3000  # свежие не отброшенные новост�
 class DbDataSource:
     def __init__(self, engine: Engine, *, raw_items_limit: int = RAW_ITEMS_LIMIT) -> None:
         self._engine = engine
+        self.engine = engine  # для модулей Р1 «Банк и рынок» / «Статистик» (подключение к БД, только чтение)
         self._raw_limit = raw_items_limit
 
     def _rows(self, sql: str, **params: Any) -> list[Any]:
