@@ -95,6 +95,32 @@ def save_facts(conn: Connection, facts: EventFacts) -> None:
     )
 
 
+def keep_llm_typing(old: EventFacts, new: EventFacts) -> EventFacts:
+    """Модель в этот раз не ответила (потолок, бюджет, сюжет не дошёл до модели), а раньше типировала сюжет —
+    тип, факторы, отрасли и сводку берём от модели: правила по одному слову ошибаются чаще.
+    Числа — объединение (новый материал мог добавить проверенные числа)."""
+    if not (new.extractor_model or "rules").startswith("rules"):
+        return new
+    if not old.extractor_model or old.extractor_model.startswith("rules"):
+        return new
+    seen = {(n.value, n.unit) for n in old.numbers}
+    return new.model_copy(
+        update={
+            "event_type": old.event_type,
+            "status": old.status,
+            "is_rumor": old.is_rumor,
+            "is_intent": old.is_intent,
+            "channels": old.channels,
+            "sectors_okved": old.sectors_okved,
+            "summary": old.summary,
+            "summary_evidence": old.summary_evidence,
+            "numbers": old.numbers + [n for n in new.numbers if (n.value, n.unit) not in seen],
+            # не с «rules»: при следующем пересчёте разбор модели снова сохранится
+            "extractor_model": old.extractor_model.split(" (+правила)")[0] + " (+правила)",
+        }
+    )
+
+
 def run(
     conn: Connection,
     hours: float = 72,
@@ -112,13 +138,21 @@ def run(
         key=lambda s: (-s.corroboration, s.first_seen),
     )
     llm_ids = {s.id for s in for_llm[:limit]} if llm else set()
-    stats = {"stories": len(stories), "llm": 0, "unverified": 0}
+    # сначала сюжеты для модели (по важности): потолок вызовов за проход достаётся главным
+    stories = [s for s in for_llm if s.id in llm_ids] + [s for s in stories if s.id not in llm_ids]
+    stats = {"stories": len(stories), "llm": 0, "unverified": 0, "kept_llm": 0}
     for story in stories:
         rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(story.item_ids))).scalars()
         items = [RawItem.model_validate(r) for r in rows]
         if not items:
             continue
         facts = extract(story, items, llm if story.id in llm_ids else None)
+        old_raw = conn.execute(
+            select(m.event_facts.c.data).where(m.event_facts.c.story_id == story.id)
+        ).scalar()
+        if old_raw and (kept := keep_llm_typing(EventFacts.model_validate(old_raw), facts)) is not facts:
+            facts = kept
+            stats["kept_llm"] += 1
         save_facts(conn, facts)
         stats["llm"] += facts.extractor_model is not None and not facts.extractor_model.startswith("rules")
         stats["unverified"] += bool(facts.unverified_fields)

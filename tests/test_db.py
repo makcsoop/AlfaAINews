@@ -249,3 +249,40 @@ def test_story_version_grows_only_on_material_change(engine):
         rebuild(conn, hours=72, now=now)
         data = conn.execute(select(m.stories.c.data).where(m.stories.c.id == sid)).scalar_one()
     assert (v1, v2, data["version"]) == (1, 2, 2)
+
+
+def test_worker_keeps_llm_typing_when_model_silent(engine):
+    # воркер без ответа модели (потолок вызовов) не должен откатывать тип от модели к правилам
+    from datetime import timedelta
+
+    from backend.extract.llm_port import FixtureLLM
+    from backend.extract.run import run as extract_run
+    from backend.stories.cluster import rebuild
+
+    now = datetime.now(UTC)
+
+    def item(n, src, title, h):
+        return RawItem(
+            id=f"keep_{n}", source_id=src, native_id=f"k{n}", tier=1, title=title,
+            lead="Еврокомиссия обсуждает новые ограничения для российских компаний.",
+            published_at=now - timedelta(hours=h), fetched_at=now, content_hash=f"k{n}",
+        )
+
+    title = "ЕС ввел новые санкции против российских банков"
+    answer = {
+        "event_type": "other", "status": "fact", "summary": "ЕС обсуждает ограничения",
+        "summary_quote": "Еврокомиссия обсуждает новые ограничения", "channels": [], "numbers": [],
+    }
+    with engine.begin() as conn:
+        insert_items(conn, [item(1, "interfax", title, 5), item(2, "tass", title, 4)])
+        rebuild(conn, hours=72, now=now)
+        extract_run(conn, llm=FixtureLLM(answer))
+        sid = conn.execute(select(m.raw_items.c.story_id).where(m.raw_items.c.id == "keep_1")).scalar_one()
+        first = conn.execute(select(m.event_facts.c.data).where(m.event_facts.c.story_id == sid)).scalar_one()
+        insert_items(conn, [item(3, "rbc", title, 3)])  # новый материал — пересчёт, модель молчит
+        rebuild(conn, hours=72, now=now)
+        stats = extract_run(conn, llm=FixtureLLM(None))
+        after = conn.execute(select(m.event_facts.c.data).where(m.event_facts.c.story_id == sid)).scalar_one()
+    assert first["event_type"] == "other" and after["event_type"] == "other"  # правила дали бы sanctions
+    assert stats["kept_llm"] >= 1 and "keep_3" in after["source_item_ids"]
+    assert after["extractor_model"].endswith("(+правила)")

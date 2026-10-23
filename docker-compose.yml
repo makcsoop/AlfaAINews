@@ -62,6 +62,12 @@ services:
     <<: *app
     command: ["python", "-m", "backend.ingest.run"]
     restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-newsai}:${POSTGRES_PASSWORD:-newsai}@db:5432/${POSTGRES_DB:-newsai}
+      REDIS_URL: redis://redis:6379/0
+      # true — подтверждённые сюжеты типирует модель (шаг extract общего клиента, до 60 вызовов за проход);
+      # нужен LLM_MODE=live и ключ в .env
+      EXTRACT_LLM: ${EXTRACT_LLM:-false}
     depends_on:
       init:
         condition: service_completed_successfully
