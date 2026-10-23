@@ -6,7 +6,9 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Literal, Protocol
+
+from pydantic import BaseModel
 
 from backend.agents.cache import KV, RedisJsonStore, cache_ttl_s, make_kv
 from backend.agents.steps import AnalysisCache, get_tool_source, make_handlers, profile_v1, run_for_client
@@ -91,6 +93,20 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+class DeepRun(BaseModel):
+    """Запись журнала глубоких разборов ленты: что разбирали, чем кончилось и сколько стоило."""
+
+    story_id: str
+    company_id: str
+    role: str
+    status: Literal["published", "on_review", "dropped", "failed"]
+    reason: str | None = None
+    score: float | None = None  # значимость после разбора
+    trace_id: str | None = None
+    cost_rub: float = 0.0
+    at: datetime
+
+
 @dataclass
 class _Feed:
     """Лента одной пары «компания × роль»: оценки сюжетов, быстрые и глубокие карточки."""
@@ -136,6 +152,7 @@ class PipelineCardStore:
             if deep_per_request is not None
             else _env_int("FEED_DEEP_PER_REQUEST", DEFAULT_DEEP_PER_REQUEST)
         )
+        self.deep_log: list[DeepRun] = []  # журнал глубоких разборов, в т. ч. неудачных и отброшенных
         self._fallback = FixtureCardStore(bundle_name)
         self._handlers = None
         self.analysis_cache = AnalysisCache(backend=self._redis)
@@ -167,7 +184,7 @@ class PipelineCardStore:
         sources = {s.id: s for s in src.sources()}
         graph = src.counterparties(company_id)
         positions, market = src.bank_positions(), src.market_knowledge()
-        min_score = _env_float("FEED_MIN_SCORE", DEFAULT_FEED_MIN_SCORE)
+        min_score = self._min_score()
         fixture_mode = os.environ.get("LLM_MODE", "").strip().lower() == "fixture"
         feed = _Feed(company_id, role, profile.sector or "")
         for story in src.stories():
@@ -237,6 +254,31 @@ class PipelineCardStore:
         for pair in pairs[: self._deep_per_request]:
             self._run_deep(feed, pair.story_id)
 
+    def _log_run(
+        self, feed: _Feed, story_id: str, status: str, *, reason: str | None = None,
+        trace: RunTrace | None = None, score: float | None = None,
+    ) -> None:
+        run = DeepRun(
+            story_id=story_id, company_id=feed.company_id, role=feed.role, status=status,  # type: ignore[arg-type]
+            reason=reason, score=score, trace_id=trace.run_id if trace else None,
+            cost_rub=round(trace.cost_rub, 6) if trace else 0.0, at=datetime.now(UTC),
+        )
+        self.deep_log.append(run)
+        if status in ("failed", "dropped"):
+            log.warning("глубокий разбор %s для %s/%s: %s (%s)", story_id, feed.company_id, feed.role,
+                        status, reason)
+
+    def deep_runs(self, company_id: str) -> list[DeepRun]:
+        with self._lock:
+            return [r for r in self.deep_log if r.company_id == company_id]
+
+    def _drop(self, feed: _Feed, story_id: str) -> None:
+        """Разбор показал, что сюжет клиенту не важен: убрать его карточку из ленты."""
+        old = feed.cards.pop(story_id, None)
+        if old:
+            self._cards.pop(old, None)
+        feed.scores.pop(story_id, None)
+
     def _run_deep(self, feed: _Feed, story_id: str) -> None:
         feed.attempted.add(story_id)
         if self._handlers is None:
@@ -249,16 +291,33 @@ class PipelineCardStore:
             )
         except Exception as e:
             log.warning("конвейер для %s/%s/%s упал: %r", story_id, feed.company_id, feed.role, e)
-            self._degraded(feed, story_id, e)
+            failed = self._degraded(feed, story_id, e)
+            reason = f"{type(e).__name__}: {str(e)[:200]}"
+            self._log_run(feed, story_id, "failed", reason=reason, trace=failed)
+            return
+        self._traces[trace.run_id] = trace
+        if _is_degraded(trace):
+            self._log_run(feed, story_id, "failed", reason="pipeline_failed", trace=trace)
+        if card.relevance.score < self._min_score():
+            self._drop(feed, story_id)
+            self._log_run(
+                feed, story_id, "dropped", reason="значимость после разбора ниже порога ленты",
+                trace=trace, score=card.relevance.score,
+            )
             return
         self._put_deep(feed, story_id, card)
-        self._traces[trace.run_id] = trace
+        if not _is_degraded(trace):
+            self._log_run(feed, story_id, card.review_status, trace=trace, score=card.relevance.score)
         # в общий кеш — только настоящие результаты, не деградацию
         if self._redis is not None and not _is_degraded(trace):
             self._redis.put_card(story_id, feed.company_id, feed.role, card, trace.run_id)
             self._redis.put_trace(trace)
 
-    def _degraded(self, feed: _Feed, story_id: str, exc: Exception) -> None:
+    @staticmethod
+    def _min_score() -> float:
+        return _env_float("FEED_MIN_SCORE", DEFAULT_FEED_MIN_SCORE)
+
+    def _degraded(self, feed: _Feed, story_id: str, exc: Exception) -> RunTrace:
         trace = getattr(exc, "trace", None)
         if trace is None:
             now = datetime.now(UTC)
@@ -279,8 +338,9 @@ class PipelineCardStore:
                 self._cards.pop(old, None)
             self._cards[degraded.card_id] = degraded
             feed.cards[story_id] = degraded.card_id
+        return trace
 
-    def _ensure(self, company_id: str, role: str) -> None:
+    def _ensure(self, company_id: str, role: str, *, upgrade: bool = True) -> None:
         with self._lock:
             feed = self._feeds.get((company_id, role))
             if feed is None:
@@ -288,14 +348,18 @@ class PipelineCardStore:
                 if feed is None:
                     return
                 self._feeds[(company_id, role)] = feed
-            self._upgrade(feed)
+            if upgrade:
+                self._upgrade(feed)
 
     def _ensure_demo(self) -> None:
+        """Ленты демо-пар для /card и /trace. Глубокий разбор отсюда — только на фикстуре (бесплатно):
+        на живых моделях его запускает только /feed пары из сессии, иначе лимит K за запрос не работает."""
         with self._lock:
             if self._demo_done:
                 return
+            fixture = get_client().settings.llm_mode == "fixture"
             for company_id, role in DEMO_PAIRS:
-                self._ensure(company_id, role)
+                self._ensure(company_id, role, upgrade=fixture)
             self._demo_done = True
 
     # --- протокол CardStore ---

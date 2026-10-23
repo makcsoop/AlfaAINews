@@ -168,3 +168,57 @@ def test_enrich_without_db_tables_skips_with_flag():
     assert flags == ["r1:bank_market:skipped:OperationalError", "r1:statistician:skipped:OperationalError"]
     assert d.items == []
     _ = timedelta
+
+
+# --- лимит глубоких за запрос, отбрасывание по значимости, журнал разборов ---
+
+
+def test_card_and_trace_lookups_do_not_start_deep_runs_on_live_models(monkeypatch):
+    import backend.api.store as store_mod
+
+    store, calls = make_store(k=1)
+    live = SimpleNamespace(settings=SimpleNamespace(llm_mode="live"), budget=store_mod.get_client().budget)
+    monkeypatch.setattr(store_mod, "get_client", lambda: live)
+    store.get_trace("нет такой")
+    store.card_owner("нет такой")
+    store.get_card("нет такой", BORROWER)
+    assert calls == []  # глубокий разбор запускает только /feed пары из сессии
+    store.list_cards(DEPOSITOR, "treasurer")
+    assert len(calls) == 1  # ровно K за запрос, без добора из демо-пар
+
+
+def test_deep_card_below_threshold_dropped_from_feed_and_logged(monkeypatch):
+    def runner(story_id, company_id, role, *, sector, story_version, handlers):
+        fast = store._cards[f"card_{story_id}_{company_id}_{role}"]
+        now = datetime.now(UTC)
+        trace = RunTrace(run_id=f"run_{story_id}", story_id=story_id, company_id=company_id,
+                         started_at=now, finished_at=now, cost_rub=0.4)
+        low = fast.relevance.model_copy(update={"score": 0.0, "deep_analysis": True})
+        return fast.model_copy(update={"relevance": low, "trace_id": trace.run_id}), trace
+
+    monkeypatch.setenv("FEED_MIN_SCORE", "0.01")
+    store = PipelineCardStore(source=MultiSource(), runner=runner, deep_per_request=1)
+    cards = store.list_cards(BORROWER, "cfo")
+    (run,) = store.deep_runs(BORROWER)
+    assert cards and not any(c.relevance.deep_analysis for c in cards)
+    assert run.story_id not in {c.event.story_id for c in cards}  # отброшенный сюжет убран из ленты
+    assert run.status == "dropped" and run.score == 0.0 and run.cost_rub == 0.4
+    assert store.get_trace(run.trace_id) is not None  # трасса разбора остаётся для журнала
+    assert all(r.company_id == DEPOSITOR for r in store.deep_runs(DEPOSITOR))  # журнал только своей компании
+
+
+def test_failed_deep_run_logged_with_reason():
+    def boom(*a, **kw):
+        raise RuntimeError("модель недоступна")
+
+    store = PipelineCardStore(source=MultiSource(), runner=boom, deep_per_request=1)
+    store.list_cards(BORROWER, "cfo")
+    (run,) = store.deep_runs(BORROWER)
+    assert run.status == "failed" and "модель недоступна" in run.reason and run.trace_id
+
+
+def test_published_run_logged():
+    store, _ = make_store(k=1)
+    store.list_cards(BORROWER, "cfo")
+    (run,) = store.deep_runs(BORROWER)
+    assert run.status == "published" and run.trace_id

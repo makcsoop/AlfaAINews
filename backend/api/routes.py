@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agents.qa import answer_question
-from backend.api.store import CardStore, get_store
+from backend.api.store import CardStore, DeepRun, get_store
 from backend.llm import get_client
 from backend.schemas.common import UserRole
 from backend.schemas.insight import InsightCard, RunTrace
@@ -127,6 +127,19 @@ def feed(
         raise HTTPException(status_code=403, detail="Роль берётся только из сессии")
     cards = store.list_cards(cid, session.role)
     return sorted(cards, key=lambda c: c.relevance.score, reverse=True)
+
+
+@router.get(
+    "/feed/runs",
+    response_model=list[DeepRun],
+    tags=["cards"],
+    summary="Журнал глубоких разборов ленты компании",
+    responses=ERRORS,
+)
+def feed_runs(session: SessionDep, store: StoreDep) -> list[DeepRun]:
+    """Глубокие разборы ленты компании из сессии: опубликованные, отброшенные по значимости, неудачные; ₽."""
+    runs = getattr(store, "deep_runs", None)
+    return runs(session.company_id) if runs else []
 
 
 @router.get(
