@@ -43,7 +43,7 @@ from backend.schemas import (
     Story,
 )
 from backend.schemas.common import BANK_SOURCE_PREFIX, Confidence, Polarity, UserRole
-from backend.schemas.insight import CardEvent, StorySource, Surprise
+from backend.schemas.insight import CardEvent, Condition, StorySource, Surprise
 
 MARKET_SOURCE_PREFIX = "mk_"
 
@@ -233,14 +233,14 @@ def _event(
     )
     out = []
     for sid in ordered:
-        it = news.get(sid)
-        tier = tiers.get(sid, it.data.get("tier") if it else None)
+        found = news.get(sid)
+        tier = tiers.get(sid, found.data.get("tier") if found else None)
         out.append(
             StorySource(
                 source_id=sid,
                 tier=tier if tier in (0, 1, 2, 3) else 3,
-                url=it.data.get("url") if it else None,
-                title=it.title if it else None,
+                url=found.data.get("url") if found else None,
+                title=found.title if found else None,
             )
         )
     return CardEvent(
@@ -510,24 +510,27 @@ def assemble_card(
         where = f"actions[{n}]"
         _scan(a.text, where)
         b.resolve(a.refs, where)
-        actions.append(Action(type=a.type, text=a.text))
-    would_change: list[str] = []
+        # вопрос и сценарий — вывод модели; ссылки — проверенные id досье (инвариант 4)
+        refs = list(dict.fromkeys(a.refs))
+        actions.append(Action(type=a.type, text=a.text, kind="model_inference", refs=refs))
+    conditions: list[Condition] = []
     for n, it in enumerate(draft.what_would_change):
         where = f"what_would_change[{n}]"
         _scan(it.text, where)
         b.resolve(it.refs, where)
-        would_change.append(it.text)
+        conditions.append(Condition(text=it.text, kind="model_inference", refs=list(dict.fromkeys(it.refs))))
 
     # 5. предложение банка — только по триггеру, кодом
     if with_offer:
         offer = find_offer(profile=profile, relevance=relevance, analyses=analyses, story_status=story.status)
         if offer is not None:
+            offer_id = b.new_id("O")
             based_on: dict[str, list[str]] = {"client_features": list(offer.client_features)}
             if what_happened:
                 based_on["facts"] = what_happened[:1]
             b.claims.append(
                 Claim(
-                    claim_id=b.new_id("O"),
+                    claim_id=offer_id,
                     type="bank_offer",
                     text=offer.text,
                     based_on=based_on,
@@ -535,7 +538,15 @@ def assemble_card(
                     trigger=offer.trigger_id,
                 )
             )
-            actions.append(Action(type="bank_product", text=offer.text, is_advertising=True))
+            actions.append(
+                Action(
+                    type="bank_product",
+                    text=offer.text,
+                    is_advertising=True,
+                    kind="bank_offer",
+                    refs=[offer_id],
+                )
+            )
 
     bank_models = list(bank_positions) if bank_positions is not None else _bank_from_dossier(dossier)
     market_models = list(market) if market is not None else _market_from_dossier(dossier)
@@ -567,6 +578,7 @@ def assemble_card(
         version=story.version,
         stage="deep",
         analysis_ref=f"{story.id}:{dossier.sector}:{story.version}",
+        headline=draft.headline[:200],
         event=event,
         relevance=relevance.model_copy(update={"deep_analysis": True}),
         what_happened=what_happened,
@@ -574,7 +586,8 @@ def assemble_card(
         consequences=cons_ids,
         actions=actions,
         bank_and_market=bank_and_market,
-        what_would_change=would_change,
+        what_would_change=[c.text for c in conditions],
+        conditions=conditions,
         surprise=surprise,
         claims=b.claims,
         confidence=confidence,

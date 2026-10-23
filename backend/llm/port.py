@@ -82,7 +82,7 @@ class ClientJsonLLM:
         if not model:
             return step, None
         spec = self.client.config.step(step)
-        allowed = {spec.model, spec.fallback} - {None}
+        allowed = {m for m in (spec.model, spec.fallback) if m}
         names = {m: self.client.config.model(m).provider_name for m in allowed}
         if model in allowed or model in names.values():
             return step, None

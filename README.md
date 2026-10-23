@@ -14,7 +14,7 @@ docker compose up --build
 - `init` создаёт таблицы и расширение `vector`, загружает CSV кейса из `data/case/` (если они там лежат) и фикстуру «ставка 14%».
 - `ingest` опрашивает RSS из `config/sources.yaml` и пишет материалы в `raw_items`.
 - `backend` (FastAPI) работает на http://localhost:8000, документация в `/docs`:
-  - `/session`, `/feed`, `/feed/runs`, `/card/{id}`, `/trace/{id}`, `/ask`, `POST /feedback` — карточки для клиента из сессии;
+  - `/session`, `/feed`, `/feed/runs`, `/card/{id}`, `/trace/{id}`, `/ask`, `POST /feedback`, `POST /analyze` (вставить ссылку или текст) — карточки для клиента из сессии;
   - `/stories?business_only=true` — свежие сюжеты с типом события и статусом подтверждения;
   - `/stories/{id}` — сюжет, факты с цитатами и материалы; `/stories/{id}/bank_market`, `/stories/{id}/statistician`;
   - `/labeling` — разметка пар «сюжет × клиент» (только при `LABELING_ENABLED=true`, на демо — 404);
@@ -103,7 +103,8 @@ cd frontend && npm run dev                                          # http://loc
 | `LLM_MODE` | `live` / `fixture` | настоящие модели или записанные ответы (`backend/llm/fixtures/`), тесты — всегда `fixture` |
 | `CARD_STORE` | `pipeline` (по умолчанию) / `fixture` | карточки из конвейера или готовые из фикстуры |
 | `TOOL_SOURCE` | `fixture` (по умолчанию) / `db` | откуда агенты и скоринг читают данные: фикстура или таблицы Р1 (JSONB `data`) |
-| `FEED_DEEP_PER_REQUEST`, `FEED_MIN_SCORE` | `1`, `0.05` | лента: глубоких разборов за обращение (остальное — быстрые карточки) и порог значимости сюжета для ленты |
+| `FEED_DEEP_PER_REQUEST`, `FEED_MIN_SCORE` | из `config/scoring.yaml` (`feed`: `1`, `0.05`) | переопределение настроек ленты: глубоких разборов за обращение (остальное — быстрые карточки) и порог значимости сюжета |
+| `SESSION_SECRET` | случайная строка (`openssl rand -hex 32`) | подпись сессий; на стенде задать обязательно, в git не хранить |
 | `FEEDBACK_STORE` | `db` / `memory` (по умолчанию `db` при `TOOL_SOURCE=db`) | куда пишет `POST /feedback`: таблица `feedback` или память |
 | `CACHE_BACKEND`, `CACHE_TTL_S` | `memory` / `redis`, секунды (24 ч) | кеш разбора, карточек и трасс |
 | `CRITIC_LLM_ENABLED` | `true` / `false` | LLM-критик DeepSeek по сомнительным утверждениям |

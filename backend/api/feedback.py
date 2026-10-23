@@ -9,11 +9,12 @@
 import logging
 import os
 import threading
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.schemas import Feedback
+from backend.schemas import Feedback, InsightCard
 
 log = logging.getLogger(__name__)
 
@@ -114,3 +115,19 @@ def reset_feedback_store() -> None:
     global _store
     with _store_lock:
         _store = None
+
+
+def rank_with_feedback(cards: Sequence[InsightCard], rows: Iterable[Mapping[str, Any]]) -> list[InsightCard]:
+    """Порядок ленты с учётом явных отметок компании (`apply_feedback` Р2): «не про нас» опускает сюжеты
+    того же типа и главного фактора, «полезно» — поднимает. Значимость в карточке не меняется, только порядок.
+    """
+    from backend.ranking.feedback import apply_feedback
+
+    event_type_of = {c.event.story_id: c.event.event_type for c in cards}
+    try:
+        adjusted = apply_feedback([c.relevance for c in cards], list(rows), event_type_of)
+    except Exception as e:  # отклик — улучшение порядка, не повод уронить ленту
+        log.warning("отклик в ленте не применён: %r", e)
+        adjusted = [c.relevance for c in cards]
+    score = {r.story_id: r.score for r in adjusted}
+    return sorted(cards, key=lambda c: score.get(c.event.story_id, c.relevance.score), reverse=True)

@@ -1,13 +1,21 @@
-"""Эндпоинты /session /feed /card /trace /ask /feedback. company_id и роль — только из сессии."""
+"""Эндпоинты /session /feed /card /trace /ask /feedback /analyze. company_id и роль — только из сессии."""
 
+import logging
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agents.qa import answer_question
-from backend.api.feedback import FeedbackRequest, FeedbackResponse, FeedbackStore, get_feedback_store
+from backend.api.analyze import AnalyzeRequest, Paster, get_paster
+from backend.api.feedback import (
+    FeedbackRequest,
+    FeedbackResponse,
+    FeedbackStore,
+    get_feedback_store,
+    rank_with_feedback,
+)
 from backend.api.store import CardStore, DeepRun, get_store
 from backend.llm import get_client
 from backend.schemas import Feedback
@@ -15,7 +23,7 @@ from backend.schemas.common import UserRole
 from backend.schemas.insight import InsightCard, RunTrace
 from backend.security.audit import AuditLog, get_audit
 from backend.security.guard import audit_foreign, enforce_company, trace_id_of
-from backend.security.ratelimit import ask_limiter, feedback_limiter
+from backend.security.ratelimit import analyze_limiter, ask_limiter, feedback_limiter
 from backend.security.session import (
     COOKIE_NAME,
     Session,
@@ -25,14 +33,16 @@ from backend.security.session import (
     ttl_seconds,
 )
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 SessionDep = Annotated[Session, Depends(current_session)]
 StoreDep = Annotated[CardStore, Depends(get_store)]
 AuditDep = Annotated[AuditLog, Depends(get_audit)]
 FeedbackDep = Annotated[FeedbackStore, Depends(get_feedback_store)]
+PasterDep = Annotated[Paster | None, Depends(get_paster)]
 
-ERRORS = {
+ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"description": "Нет сессии или токен недействителен"},
     403: {"description": "Запрошены данные другой компании"},
 }
@@ -117,6 +127,7 @@ def feed(
     session: SessionDep,
     store: StoreDep,
     audit: AuditDep,
+    feedback_store: FeedbackDep,
     role: Annotated[
         UserRole | None, Query(description="Только роль сессии; другая даёт 403 (роль берётся из сессии)")
     ] = None,
@@ -124,13 +135,18 @@ def feed(
         str | None, Query(description="Только своя компания из сессии; чужая даёт 403")
     ] = None,
 ) -> list[InsightCard]:
-    """Карточки компании из сессии, по убыванию значимости (relevance.score)."""
+    """Карточки компании из сессии по убыванию значимости; явные отметки компании («полезно» / «не про нас»)
+    поднимают или опускают похожие сюжеты (тот же тип события или главный фактор)."""
     cid = enforce_company(session, company_id, request, audit)
     if role is not None and role != session.role:
         audit_foreign(audit, request, session, None, requested_role=role)
         raise HTTPException(status_code=403, detail="Роль берётся только из сессии")
     cards = store.list_cards(cid, session.role)
-    return sorted(cards, key=lambda c: c.relevance.score, reverse=True)
+    try:
+        rows = feedback_store.list(cid)
+    except Exception:  # хранилище отметок недоступно — лента без учёта отклика
+        rows = []
+    return rank_with_feedback(cards, rows)
 
 
 @router.get(
@@ -304,3 +320,40 @@ def feedback(
     )
     extra = {"company_id": session.company_id, "user_id": session.user_id, "story_id": card.event.story_id}
     return FeedbackResponse(id=feedback_store.add(fb, extra))
+
+
+@router.post(
+    "/analyze",
+    response_model=InsightCard,
+    tags=["cards"],
+    summary="Вставить ссылку или текст: быстрая карточка сразу, глубокий разбор — в ленте",
+    responses={
+        **ERRORS,
+        400: {"description": "Материал не принят: плохая ссылка, страница не скачалась, пустой текст"},
+        429: {"description": "Слишком много вставок за минуту"},
+        503: {"description": "Вставка недоступна: стенд без базы или сбой разбора"},
+    },
+)
+def analyze(body: AnalyzeRequest, session: SessionDep, store: StoreDep, paster: PasterDep) -> InsightCard:
+    """Материал пользователя → сюжет → быстрая карточка для компании и роли из сессии (`stage="fast"`)."""
+    from backend.ingest.paste import PasteError
+
+    if not analyze_limiter.allow(analyze_limiter.key_of(session)):
+        raise HTTPException(status_code=429, detail="Слишком много вставок, попробуйте через минуту")
+    add_story = getattr(store, "add_story", None)
+    if paster is None or add_story is None:
+        raise HTTPException(status_code=503, detail="Вставка доступна только на стенде с базой новостей")
+    url = (body.url or "").strip() or None
+    text = (body.text or "").strip() or None
+    try:
+        story_id = paster(url, text, body.title)
+    except PasteError as e:
+        raise HTTPException(status_code=400, detail=str(e)[:200]) from None
+    except Exception as e:
+        log.warning("вставка не разобрана: %r", e)
+        detail = "Материал не удалось разобрать, попробуйте позже"
+        raise HTTPException(status_code=503, detail=detail) from None
+    card = add_story(story_id, session.company_id, session.role)
+    if card is None:
+        raise HTTPException(status_code=503, detail="Материал сохранён, но карточку собрать не удалось")
+    return card

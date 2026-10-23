@@ -155,7 +155,7 @@ def retry_feedback(failures: Sequence[CardFailure | str]) -> str:
 
 def _fixture_exists(client: LLMClient, key: str) -> bool:
     root = getattr(getattr(client, "settings", None), "llm_fixtures_dir", None)
-    return bool(root) and (Path(root) / "card" / f"{key}.json").exists()
+    return root is not None and (Path(root) / "card" / f"{key}.json").exists()
 
 
 def check_result(
@@ -194,7 +194,7 @@ def write_verified_card(
         "trace_id": trace_id, "analyses": analyses, "graph": graph, "sources": sources, "client": cl,
         "facts": facts, "analysis": analysis, "bank_positions": bank_positions, "market": market,
     }
-    chk = {
+    chk: dict[str, Any] = {
         "dossier": dossier, "profile": profile, "graph": graph, "relevance": relevance, "analyses": analyses,
     }
 

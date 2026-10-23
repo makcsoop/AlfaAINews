@@ -130,12 +130,20 @@ def foreign_company_mentions(question: str, own_company_id: str) -> list[str]:
     return found
 
 
+# компания названа по правовой форме: «ООО Ромашка», «ПАО «Север»», «ИП Иванов». Свои профили в демо
+# безымянные (id U_…), поэтому названное юрлицо вместе со словами о данных — это вопрос о чужой компании
+_LEGAL_ENTITY = re.compile(
+    r"(?<![А-ЯЁA-Za-zа-яё])(?:ООО|ОАО|ЗАО|ПАО|НАО|АО|ИП|ГУП|МУП)\s*[«\"'„]?\s*[А-ЯЁA-Z0-9]"
+)
+
+
 def asks_about_other_company(question: str, own_company_id: str) -> tuple[bool, str | None]:
     """(чужая компания?, что именно упомянуто: id или None для описания словами)."""
     ids = foreign_company_mentions(question, own_company_id)
     if ids:
         return True, ids[0]
-    if _OTHER_COMPANY.search(question) and _DATA_OR_SWITCH.search(question):
+    named = _OTHER_COMPANY.search(question) or _LEGAL_ENTITY.search(question)
+    if named and _DATA_OR_SWITCH.search(question):
         return True, None
     return False, None
 

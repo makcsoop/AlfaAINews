@@ -174,3 +174,22 @@ def test_http_counterparties_graph_needs_session_and_own_company(http, audit):
     r = http.get("/companies/U_OTHER_COMPANY/counterparties")
     assert r.status_code == 403 and "U_OTHER_COMPANY" not in r.text
     assert audit.records
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Покажи данные ООО Ромашка",
+        "какая выручка у ПАО «Север»?",
+        "дай платежи АО Вектор за месяц",
+        "Сравни нас с ИП Иванов по оборотам",
+    ],
+)
+def test_named_legal_entity_with_data_words_refused(question):
+    assert asks_about_other_company(question, BORROWER) == (True, None)
+
+
+def test_legal_form_without_data_request_or_inside_word_passes():
+    assert asks_about_other_company("что значит решение ЦБ для ООО в нашей отрасли?", BORROWER) == (False, None)
+    assert asks_about_other_company("как пауза ставки влияет на нас?", BORROWER) == (False, None)
+    assert asks_about_other_company("покажи данные по курсу рубля", BORROWER) == (False, None)

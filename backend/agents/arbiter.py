@@ -92,7 +92,7 @@ def arbitrate(
         res.on_review = bool(res.disputes)
 
     positions = [p for p in bank_positions_in_dossier if p.kind == "bank_position"]
-    for ch in dict.fromkeys(p.data.get("channel") for p in positions if p.data.get("channel")):
+    for ch in dict.fromkeys(str(p.data["channel"]) for p in positions if p.data.get("channel")):
         bank = _bank_direction(ch, positions)
         mean = channel_mean(analyst_reports, ch)
         if bank is None or mean is None:

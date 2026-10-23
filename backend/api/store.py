@@ -3,23 +3,35 @@
 import logging
 import os
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel
 
 from backend.agents.cache import KV, RedisJsonStore, cache_ttl_s, make_kv
+from backend.agents.pipeline import PipelineContext, State
 from backend.agents.steps import AnalysisCache, get_tool_source, make_handlers, profile_v1, run_for_client
 from backend.agents.tools import FixtureDataSource, ToolDataSource
 from backend.fixtures import load_bundle
 from backend.llm import get_client
+from backend.ranking.config import FeedCfg, load_scoring
 from backend.ranking.fast_card import fast_card
 from backend.ranking.score import score_pair
 from backend.ranking.select import select_deep
 from backend.ranking.surprise import find_surprise
-from backend.schemas import RelevanceScore
+from backend.schemas import (
+    BankPosition,
+    CompanyProfile,
+    CounterpartyGraph,
+    EventFacts,
+    MarketKnowledge,
+    RawItem,
+    RelevanceScore,
+    Source,
+    Story,
+)
 from backend.schemas.common import UserRole
 from backend.schemas.insight import InsightCard, RunTrace
 
@@ -45,8 +57,8 @@ class CardStore(Protocol):
 class FixtureCardStore:
     def __init__(self, bundle_name: str = "rate_14") -> None:
         bundle = load_bundle(bundle_name)
-        self._cards: dict[str, InsightCard] = {c.card_id: c for c in bundle["insight_card"]}  # type: ignore[attr-defined]
-        self._traces: dict[str, RunTrace] = {t.run_id: t for t in bundle["run_trace"]}  # type: ignore[attr-defined]
+        self._cards: dict[str, InsightCard] = {c.card_id: c for c in bundle["insight_card"]}  # type: ignore[attr-defined,misc]
+        self._traces: dict[str, RunTrace] = {t.run_id: t for t in bundle["run_trace"]}  # type: ignore[attr-defined,misc]
 
     def list_cards(self, company_id: str, role: UserRole | None) -> list[InsightCard]:
         own = [c for c in self._cards.values() if c.company_id == company_id]
@@ -71,8 +83,28 @@ log = logging.getLogger(__name__)
 # демо-пары «компания × роль», для которых есть фикстуры ответов модели
 DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_DEPOSITOR", "treasurer"))
 
+# запасные значения, если в config/scoring.yaml (раздел feed, зона Р2) их нет;
+# переменные окружения — переопределение для стенда
 DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
+
+
+def _feed_cfg() -> FeedCfg | None:
+    try:
+        return load_scoring().feed
+    except Exception as e:  # битый или старый scoring.yaml — не роняем ленту
+        log.warning("scoring.yaml: раздел feed не прочитан (%r), запасные значения", e)
+        return None
+
+
+def feed_deep_per_request() -> int:
+    cfg = _feed_cfg()
+    return _env_int("FEED_DEEP_PER_REQUEST", getattr(cfg, "deep_per_request", DEFAULT_DEEP_PER_REQUEST))
+
+
+def feed_min_score() -> float:
+    cfg = _feed_cfg()
+    return _env_float("FEED_MIN_SCORE", getattr(cfg, "min_score", DEFAULT_FEED_MIN_SCORE))
 
 
 def _is_degraded(trace: RunTrace) -> bool:
@@ -105,6 +137,20 @@ class DeepRun(BaseModel):
     trace_id: str | None = None
     cost_rub: float = 0.0
     at: datetime
+
+
+@dataclass
+class _Ctx:
+    """Данные для оценки сюжетов одной компании: профиль, факты, материалы, источники, граф, банк и рынок."""
+
+    profile: CompanyProfile
+    facts: dict[str, EventFacts]
+    items: dict[str, RawItem]
+    sources: dict[str, Source]
+    graph: CounterpartyGraph | None
+    positions: list[BankPosition]
+    market: list[MarketKnowledge]
+    fixture_mode: bool
 
 
 @dataclass
@@ -150,11 +196,11 @@ class PipelineCardStore:
         self._deep_per_request = (
             deep_per_request
             if deep_per_request is not None
-            else _env_int("FEED_DEEP_PER_REQUEST", DEFAULT_DEEP_PER_REQUEST)
+            else feed_deep_per_request()
         )
         self.deep_log: list[DeepRun] = []  # журнал глубоких разборов, в т. ч. неудачных и отброшенных
         self._fallback = FixtureCardStore(bundle_name)
-        self._handlers = None
+        self._handlers: Mapping[State, Callable[[PipelineContext], Any]] | None = None
         self.analysis_cache = AnalysisCache(backend=self._redis)
         self._cards: dict[str, InsightCard] = {}
         self._traces: dict[str, RunTrace] = {}
@@ -174,47 +220,82 @@ class PipelineCardStore:
 
     # --- вычисление ---
 
-    def _build_feed(self, company_id: str, role: str) -> _Feed | None:
+    def _context(self, company_id: str) -> _Ctx | None:
         src = self._src()
         profile = profile_v1(src, company_id)
         if profile is None:
             return None
-        facts_by_story = {f.story_id: f for f in src.event_facts()}
-        items = {i.id: i for i in src.raw_items()}
-        sources = {s.id: s for s in src.sources()}
-        graph = src.counterparties(company_id)
-        positions, market = src.bank_positions(), src.market_knowledge()
+        return _Ctx(
+            profile=profile,
+            facts={f.story_id: f for f in src.event_facts()},
+            items={i.id: i for i in src.raw_items()},
+            sources={s.id: s for s in src.sources()},
+            graph=src.counterparties(company_id),
+            positions=src.bank_positions(),
+            market=src.market_knowledge(),
+            fixture_mode=os.environ.get("LLM_MODE", "").strip().lower() == "fixture",
+        )
+
+    def _score_story(self, ctx: _Ctx, role: str, story: Story) -> tuple[RelevanceScore, InsightCard]:
+        facts = ctx.facts.get(story.id)
+        surprise = find_surprise(story, facts, bank_positions=ctx.positions, market=ctx.market)
+        rel = score_pair(
+            story, ctx.profile, now=story.last_seen if ctx.fixture_mode else datetime.now(UTC),
+            facts=facts, graph=ctx.graph, sources=ctx.sources, surprise=surprise,
+            role=role,  # type: ignore[arg-type]
+        )
+        card = fast_card(
+            story, rel, role,  # type: ignore[arg-type]
+            facts=facts, items=ctx.items, sources=ctx.sources,
+            bank_positions=ctx.positions, profile=ctx.profile, market=ctx.market,
+        )
+        return rel, card
+
+    def _put_fast(self, feed: _Feed, ctx: _Ctx, story: Story, rel: RelevanceScore, card: InsightCard) -> None:
+        feed.scores[story.id] = rel
+        feed.story_version[story.id] = story.version
+        self._cards[card.card_id] = card
+        feed.cards[story.id] = card.card_id
+        if ctx.facts.get(story.id) is None:
+            feed.attempted.add(story.id)  # без фактов глубокий разбор не запускаем
+        elif self._load_cached(feed, story.id):
+            feed.attempted.add(story.id)
+
+    def _build_feed(self, company_id: str, role: str) -> _Feed | None:
+        ctx = self._context(company_id)
+        if ctx is None:
+            return None
         min_score = self._min_score()
-        fixture_mode = os.environ.get("LLM_MODE", "").strip().lower() == "fixture"
-        feed = _Feed(company_id, role, profile.sector or "")
-        for story in src.stories():
-            facts = facts_by_story.get(story.id)
+        feed = _Feed(company_id, role, ctx.profile.sector or "")
+        for story in self._src().stories():
             try:
-                surprise = find_surprise(story, facts, bank_positions=positions, market=market)
-                rel = score_pair(
-                    story, profile, now=story.last_seen if fixture_mode else datetime.now(UTC),
-                    facts=facts, graph=graph, sources=sources, surprise=surprise,
-                    role=role,  # type: ignore[arg-type]
-                )
-                if rel.score < min_score:
-                    continue
-                card = fast_card(
-                    story, rel, role,  # type: ignore[arg-type]
-                    facts=facts, items=items, sources=sources,
-                    bank_positions=positions, profile=profile, market=market,
-                )
+                rel, card = self._score_story(ctx, role, story)
             except Exception as e:  # один плохой сюжет не ломает ленту
                 log.warning("сюжет %s для %s/%s пропущен: %r", story.id, company_id, role, e)
                 continue
-            feed.scores[story.id] = rel
-            feed.story_version[story.id] = story.version
-            self._cards[card.card_id] = card
-            feed.cards[story.id] = card.card_id
-            if facts is None:
-                feed.attempted.add(story.id)  # без фактов глубокий разбор не запускаем
-            elif self._load_cached(feed, story.id):
-                feed.attempted.add(story.id)
+            if rel.score >= min_score:
+                self._put_fast(feed, ctx, story, rel, card)
         return feed
+
+    def add_story(self, story_id: str, company_id: str, role: str) -> InsightCard | None:
+        """Сюжет, который прислал пользователь («вставить ссылку или текст»): быстрая карточка сразу и в ленту
+        пары из сессии — даже ниже порога ленты (пользователь сам попросил). Глубокий разбор — как у ленты,
+        из `/feed` по очереди значимости. None — сюжета нет в источнике или нет профиля компании."""
+        with self._lock:
+            self._ensure(company_id, role, upgrade=False)
+            feed = self._feeds.get((company_id, role))
+            ctx = self._context(company_id)
+            story = next((s for s in self._src().stories() if s.id == story_id), None)
+            if feed is None or ctx is None or story is None:
+                return None
+            rel, card = self._score_story(ctx, role, story)
+            old = feed.cards.get(story_id)
+            if old and story_id in feed.deep:
+                return self._cards.get(old, card)  # глубокая карточка уже есть — её и отдаём
+            if old and old != card.card_id:
+                self._cards.pop(old, None)
+            self._put_fast(feed, ctx, story, rel, card)
+            return self._cards.get(feed.cards[story_id], card)
 
     def _load_cached(self, feed: _Feed, story_id: str) -> bool:
         if self._redis is None:
@@ -315,7 +396,7 @@ class PipelineCardStore:
 
     @staticmethod
     def _min_score() -> float:
-        return _env_float("FEED_MIN_SCORE", DEFAULT_FEED_MIN_SCORE)
+        return feed_min_score()
 
     def _degraded(self, feed: _Feed, story_id: str, exc: Exception) -> RunTrace:
         trace = getattr(exc, "trace", None)

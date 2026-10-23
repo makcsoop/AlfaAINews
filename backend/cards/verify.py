@@ -258,13 +258,13 @@ def verify_card(
         # (c) числа и даты (и в тексте предложения банка тоже)
         pool = _claim_pool(c, by_id, dossier)
         dates, rest = extract_dates(c.text)
-        for key in sorted(dates, key=str):
-            if not pool.has_date(key):
-                d, m, y = key
+        for when in sorted(dates, key=str):
+            if not pool.has_date(when):
+                d, m, y = when
                 fail("date_not_in_source", f"дата {d:02d}.{m:02d}{f'.{y}' if y else ''}", c.claim_id)
-        for n in sorted(extract_numbers(rest)):
-            if n not in pool.numbers:
-                fail("number_not_in_source", f"число {n} не найдено в цитатах и данных", c.claim_id)
+        for num in sorted(extract_numbers(rest)):
+            if num not in pool.numbers:
+                fail("number_not_in_source", f"число {num} не найдено в цитатах и данных", c.claim_id)
 
         # (d) голос банка вне bank_view
         if c.type != "bank_view" and _BANK_VOICE.search(c.text):
@@ -282,6 +282,16 @@ def verify_card(
     for n, text in enumerate(card.what_would_change):
         if _BANK_VOICE.search(text):
             fail("bank_voice", f"what_would_change[{n}]: {text[:80]!r}")
+
+    # ссылки у действий и условий (схемы 0.2.1): id утверждения карточки или материала досье
+    linked = [(f"actions[{n}]", a.refs) for n, a in enumerate(card.actions)]
+    linked += [(f"conditions[{n}]", c.refs) for n, c in enumerate(card.conditions)]
+    for where, refs in linked:
+        if not refs:
+            fail("no_support", f"{where}: нет ссылок")
+        for ref in refs:
+            if ref not in by_id and dossier.get(ref) is None:
+                fail("unknown_source", f"{where}: нет {ref!r} ни в карточке, ни в досье")
 
     # (e) шесть вопросов
     for name in ("what_happened", "why_it_matters", "consequences", "actions", "what_would_change"):

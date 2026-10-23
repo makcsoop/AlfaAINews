@@ -80,7 +80,15 @@ class DbDataSource:
         return self._load(EventFacts, "SELECT data FROM event_facts")
 
     def sources(self) -> list[Source]:
-        # реестра источников в БД нет: он в config/sources.yaml (Р1)
+        # реестр config/sources.yaml (Р1) с выученными весами из таблицы source_weights
+        # (без пересчёта — стартовые)
+        try:
+            from backend.ingest.source_weights import learned_sources
+
+            with self._engine.connect() as conn:
+                return learned_sources(conn)
+        except Exception as e:
+            log.warning("выученные веса источников недоступны (%s): стартовые веса", e)
         try:
             from backend.ingest.registry import load_sources
 

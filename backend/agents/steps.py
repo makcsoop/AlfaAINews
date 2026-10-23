@@ -350,8 +350,26 @@ def rescored_arbiter_step(
             ctx.story.id, ctx.sector, ctx.story_version, ctx.reports, on_review=ctx.on_review,
             trace_id=ctx.trace_id,
         )
+        _save_analysis(ctx, src)
         _score(ctx, src, now, with_analysis=True)
     return ctx
+
+
+def _save_analysis(ctx: PipelineContext, src: ToolDataSource) -> None:
+    """Разбор — строкой таблицы `analyses` Р1 (ключ = `InsightCard.analysis_ref`); только при источнике из БД.
+    """
+    engine = getattr(src, "engine", None)
+    if engine is None or ctx.analysis is None:
+        return
+    try:
+        from backend.db.analyses import save_analysis
+
+        with engine.begin() as conn:
+            ref = save_analysis(conn, ctx.analysis)
+        if ctx.trace is not None:
+            ctx.trace.steps.append(f"analysis:saved:{ref}")
+    except Exception as e:  # хранение разбора не должно ронять карточку
+        ctx.flags.append(f"analysis_save_failed:{type(e).__name__}")
 
 
 # --- карточка -------------------------------------------------------------------------------------
@@ -427,7 +445,7 @@ def card_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> Pip
 
 def _retry_fixture(client: LLMClient, key: str) -> bool:
     root = getattr(getattr(client, "settings", None), "llm_fixtures_dir", None)
-    return bool(root) and (Path(root) / "card" / f"{key}_retry.json").exists()
+    return root is not None and (Path(root) / "card" / f"{key}_retry.json").exists()
 
 
 def card_verify_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> PipelineContext:
