@@ -301,7 +301,7 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
     if llm_channels:  # каналы модели с цитатами точнее правил
         # но факторы самого типа события (ставка у решения ЦБ), найденные правилами, не теряем:
         # в длинном материале модель может взять фактор из соседнего абзаца
-        own = next((t.channels for t in rules._config()[0] if t.name == facts.event_type), [])
+        own: list[str] = next((t.channels for t in rules._config()[0] if t.name == facts.event_type), [])
         got = {c.channel for c in llm_channels}
         facts.channels = llm_channels + [
             c for c in facts.channels if c.channel in own and c.channel not in got
