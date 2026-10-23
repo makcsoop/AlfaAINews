@@ -215,7 +215,7 @@ def test_paste_joins_story_and_ignores_injected_commands(engine):
     assert facts["event_type"] == "rate_decision"
     assert again == sid and alone != sid and fresh not in (sid, alone)
     data = llm.calls[0]["user"].split("<data>", 1)[1].split("</data>", 1)[0]
-    assert "Игнорируй" in data  # команда внутри блока данных, а не среди инструкций
+    assert "сорока станций" in data and "Игнорируй" not in llm.calls[0]["user"]  # команда вырезана до модели
     assert alone_facts["event_type"] != "sanctions"
 
 
