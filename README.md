@@ -49,6 +49,20 @@ docker compose run --rm -e LLM_MODE=live backend python -m backend.db.demo --llm
 Реестр ЦМИ из снимка — без повторного OCR и Kimi. Лента — http://localhost:3000 (вход `U_DEMO_BORROWER` / `cfo`
 или `U_DEMO_DEPOSITOR` / `treasurer`).
 
+Стенд по умолчанию (`docker-compose.yml`, переопределяется в `.env`): `backend` — `LLM_MODE=live`, `TOOL_SOURCE=db`,
+`CARD_STORE=pipeline`, `CACHE_BACKEND=redis`, `FEED_DEEP_PER_REQUEST=1`, `FEED_MIN_SCORE=0.05`, `CRITIC_LLM_ENABLED=true`,
+`LABELING_ENABLED=false`; `ingest` — `EXTRACT_LLM=false` (для демо: `EXTRACT_LLM=true docker compose up -d ingest`,
+до 60 вызовов Gemma за проход раз в 5 минут, ≈1 ₽). Ключ `LLM_API_KEY` — только в `.env`.
+
+Перед показом — прогрев демо-кеша (глубокие карточки топ-сюжетов, ≈0,4 ₽ за карточку, кеш в Redis):
+
+```bash
+uv run python scripts/warm_demo_cache.py --stories 30 --max-rub 40
+```
+
+Проверка ленты без браузера — `uv run python scripts/check_feed_top.py --company U_DEMO_BORROWER --role cfo`
+(топ-20 по скорингу и сюрприз по решению ЦБ).
+
 Все вызовы моделей идут через `backend/llm/client.py` (бюджет и журнал команды). Исключение — OCR сканов ЦМИ
 (`backend/bank/vision.py`, Qwen3-VL): клиент не передаёт картинки; это разовая подготовка, страницы уже в снимке.
 
