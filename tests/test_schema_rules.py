@@ -46,7 +46,7 @@ def test_claim_label_rules(claim, msg):
 def test_valid_claims_pass():
     Claim.model_validate(_claim(type="bank_view", evidence=[{"source_id": "cmi_keyrate_2026_09#p1#c1"}]))
     Claim.model_validate(_claim(type="market_view", evidence=[{"source_id": "mk_consensus"}]))
-    Claim.model_validate(_claim(type="bank_offer", is_advertising=True, trigger="loa+rate_up"))
+    Claim.model_validate(_claim(type="bank_offer", is_advertising=True, trigger="fix_rate"))
     Claim.model_validate(_claim(type="model_inference", based_on={"facts": ["F1"]}))
 
 
@@ -86,4 +86,27 @@ def test_card_duplicate_claim_ids(card):
 def test_card_relevance_for_other_client(card):
     card["relevance"]["company_id"] = "U_OTHER"
     with pytest.raises(ValidationError, match="другой паре"):
+        InsightCard.model_validate(card)
+
+
+def test_trigger_is_offer_id_not_free_text():
+    # Б3: формат триггера — id из таблицы триггеров Р3 (fix_rate, long_deposit, fx_hedge)
+    with pytest.raises(ValidationError):
+        Claim.model_validate(_claim(type="bank_offer", is_advertising=True, trigger="loa+rate_up"))
+
+
+def test_action_refs_and_offer_kind():
+    Action.model_validate({"type": "scenario", "text": "проверить план", "kind": "model_inference", "refs": ["I1"]})
+    with pytest.raises(ValidationError, match="bank_offer"):
+        Action.model_validate({"type": "bank_product", "text": "депозит", "is_advertising": True, "kind": "fact"})
+    with pytest.raises(ValidationError, match="bank_offer"):
+        Action.model_validate({"type": "scenario", "text": "депозит", "kind": "bank_offer"})
+
+
+def test_conditions_fill_and_match_what_would_change(card):
+    card["what_would_change"] = []
+    filled = InsightCard.model_validate(card)
+    assert filled.what_would_change == [c.text for c in filled.conditions] and filled.conditions[0].refs
+    card["what_would_change"] = ["другой текст"]
+    with pytest.raises(ValidationError, match="расходится"):
         InsightCard.model_validate(card)

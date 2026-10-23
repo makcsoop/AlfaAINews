@@ -51,6 +51,10 @@ class AnalystReport(Schema):
     open_questions: list[str] = Field(default_factory=list)
 
 
+# Формат триггера предложения банка: id из таблицы триггеров Р3 (snake_case), а не «продукт+фактор»
+TRIGGER_ID = r"^[a-z][a-z0-9_]*$"
+
+
 class Claim(Schema):
     """10. Утверждение с меткой (kind в контракте) и обоснованием (refs)."""
 
@@ -65,7 +69,11 @@ class Claim(Schema):
     horizon: str | None = None
     verified: dict[str, bool | str] = Field(default_factory=dict)
     is_advertising: bool = False
-    trigger: str | None = Field(default=None, description="продуктовый триггер предложения: 'loa+rate_up'")
+    trigger: str | None = Field(
+        default=None,
+        pattern=TRIGGER_ID,
+        description="id продуктового триггера из backend/cards/offers.py: fix_rate, long_deposit, fx_hedge",
+    )
 
     @model_validator(mode="after")
     def _label_rules(self) -> Self:
@@ -105,15 +113,31 @@ class Analysis(Schema):
 
 
 class Action(Schema):
+    """Действие в карточке. refs — claim_id или id источников, на которые опирается (инвариант 4)."""
+
     type: Literal["analysis_question", "scenario", "bank_product"]
     text: str
     is_advertising: bool = False
+    kind: ClaimType | None = Field(default=None, description="метка: bank_product — только bank_offer")
+    refs: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _ads_marked(self) -> Self:
         if self.type == "bank_product" and not self.is_advertising:
             raise ValueError("продукт банка в действиях должен быть помечен как реклама")
+        if self.type == "bank_product" and self.kind not in (None, "bank_offer"):
+            raise ValueError("продукт банка в действиях — только с меткой bank_offer")
+        if self.type != "bank_product" and self.kind == "bank_offer":
+            raise ValueError("метка bank_offer — только у продукта банка")
         return self
+
+
+class Condition(Schema):
+    """«Что изменит вывод»: условие с меткой и ссылками (инвариант 4)."""
+
+    text: str
+    kind: ClaimType | None = None
+    refs: list[str] = Field(default_factory=list)
 
 
 class StorySource(Schema):
@@ -158,6 +182,9 @@ class InsightCard(Schema):
         default="fast", description="быстрая карточка без LLM или с догруженным глубоким разбором"
     )
     analysis_ref: str | None = Field(default=None, description="'story_id:sector:version' разбора")
+    headline: str | None = Field(
+        default=None, max_length=200, description="заголовок карточки от модели; нет — event.title"
+    )
     event: CardEvent
     relevance: RelevanceScore
     what_happened: list[str] = Field(description="claim_id типа fact")
@@ -167,7 +194,10 @@ class InsightCard(Schema):
     bank_and_market: list[str] = Field(
         default_factory=list, description="claim_id bank_view и консенсус рынка"
     )
-    what_would_change: list[str] = Field(default_factory=list)
+    what_would_change: list[str] = Field(default_factory=list, description="тексты условий из conditions")
+    conditions: list[Condition] = Field(
+        default_factory=list, description="что изменит вывод — с меткой и ссылками (инвариант 4)"
+    )
     surprise: Surprise | None = None
     claims: list[Claim]
     confidence: Confidence
@@ -192,6 +222,12 @@ class InsightCard(Schema):
                     raise ValueError(f"{name}: нет утверждения {ref}")
                 if allowed and by_id[ref].type not in allowed:
                     raise ValueError(f"{name}: {ref} имеет метку {by_id[ref].type}, ожидается {allowed}")
+        if self.conditions:  # тексты условий дублируются строками для старых потребителей
+            texts = [c.text for c in self.conditions]
+            if not self.what_would_change:
+                self.what_would_change = texts
+            elif self.what_would_change != texts:
+                raise ValueError("what_would_change расходится с conditions")
         if self.relevance.company_id != self.company_id or self.relevance.story_id != self.event.story_id:
             raise ValueError("relevance относится к другой паре «сюжет × клиент»")
         return self

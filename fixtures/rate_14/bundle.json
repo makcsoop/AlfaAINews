@@ -612,12 +612,21 @@
       "actions": [
         {
           "type": "analysis_question",
-          "text": "Какая доля долга и лизинга компании привязана к плавающей ставке?"
+          "text": "Какая доля долга и лизинга компании привязана к плавающей ставке?",
+          "kind": "model_inference",
+          "refs": [
+            "F1",
+            "I1"
+          ]
         },
         {
           "type": "bank_product",
           "text": "Обсудить фиксацию ставки по кредитному портфелю",
-          "is_advertising": true
+          "is_advertising": true,
+          "kind": "bank_offer",
+          "refs": [
+            "I1"
+          ]
         }
       ],
       "bank_and_market": [
@@ -698,7 +707,17 @@
       "trace_id": "run_fixture_rate14",
       "version": 1,
       "stage": "deep",
-      "analysis_ref": "st_2026-09-11_keyrate:46:1"
+      "analysis_ref": "st_2026-09-11_keyrate:46:1",
+      "headline": "Ставка 14% сохранена: кредиты и лизинг не подешевеют до конца года",
+      "conditions": [
+        {
+          "text": "Снижение ставки 23.10 вернёт удешевление рефинансирования; ЦМИ сейчас ждёт паузы до конца года.",
+          "kind": "bank_view",
+          "refs": [
+            "B1"
+          ]
+        }
+      ]
     },
     {
       "card_id": "card_st_2026-09-11_keyrate_U_DEMO_DEPOSITOR_treasurer",
@@ -762,16 +781,30 @@
       "actions": [
         {
           "type": "analysis_question",
-          "text": "Не сокращать сроки размещения в расчёте на скорое снижение ставки?"
+          "text": "Не сокращать сроки размещения в расчёте на скорое снижение ставки?",
+          "kind": "model_inference",
+          "refs": [
+            "F1",
+            "I1"
+          ]
         },
         {
           "type": "scenario",
-          "text": "Проверить план продажи валютной выручки при крепком рубле."
+          "text": "Проверить план продажи валютной выручки при крепком рубле.",
+          "kind": "model_inference",
+          "refs": [
+            "F1",
+            "I1"
+          ]
         },
         {
           "type": "bank_product",
           "text": "Депозит на более длинный срок по текущей ставке",
-          "is_advertising": true
+          "is_advertising": true,
+          "kind": "bank_offer",
+          "refs": [
+            "I1"
+          ]
         }
       ],
       "bank_and_market": [
@@ -856,7 +889,17 @@
       ],
       "review_status": "published",
       "version": 1,
-      "stage": "fast"
+      "stage": "fast",
+      "headline": "Ставка 14% сохранена: время зафиксировать доходность депозитов",
+      "conditions": [
+        {
+          "text": "Данные о валюте выручки клиента уточнят эффект курса.",
+          "kind": "model_inference",
+          "refs": [
+            "I1"
+          ]
+        }
+      ]
     }
   ],
   "run_trace": [
