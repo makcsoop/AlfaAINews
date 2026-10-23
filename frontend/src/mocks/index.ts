@@ -3,7 +3,7 @@
 import bundle from "@fixtures/rate_14/bundle.json";
 import type { Api } from "../api";
 import { HttpError } from "../api";
-import type { Claim, InsightCard, SessionInfo } from "../types";
+import type { Claim, DeepRun, InsightCard, RunTrace, SessionInfo, TraceCost } from "../types";
 
 // В фикстуре поля со значением по умолчанию опущены, а API (Pydantic) отдаёт их всегда — дополняем
 type Raw = Partial<InsightCard> & Pick<InsightCard, "card_id" | "company_id" | "user_role" | "event">;
@@ -21,6 +21,7 @@ function withDefaults(c: Raw): InsightCard {
     claims: (c.claims ?? []).map((x) => ({
       evidence: [],
       based_on: {},
+      verified: {},
       is_advertising: false,
       ...(x as Partial<Claim>),
     })),
@@ -84,5 +85,76 @@ export const mockApi: Api = {
     const found = cards.find((c) => c.card_id === cardId && c.company_id === s.company_id);
     if (!found) throw new HttpError(404, "Карточка не найдена");
     return delay(asOfNow(found));
+  },
+  async ask(question, cardId) {
+    const s = requireSession();
+    const card = cards.find((c) => c.card_id === cardId && c.company_id === s.company_id);
+    // как у Р3: вопрос про чужую компанию — отказ, компания берётся только из сессии
+    if (/(^|[\s«"])(ООО|АО|ПАО|ЗАО)[\s«"]|чуж/i.test(question)) {
+      return delay({
+        answer: "Могу отвечать только по данным вашей компании и этой карточке.",
+        refs: [],
+        tools_used: [],
+        trace_id: "mock_ask",
+        status: "refused" as const,
+      });
+    }
+    if (/контрагент|поставщик|покупател/i.test(question)) {
+      return delay({
+        answer: "Крупнейший поставщик — 35% закупок (ОКВЭД 24), второй — 12% (ОКВЭД 49, логистика). " +
+          "Зависимость от одного поставщика высокая.",
+        refs: ["cp:supplier:1", "cp:supplier:2"],
+        tools_used: ["get_counterparties"],
+        trace_id: "mock_ask",
+        status: "ok" as const,
+      });
+    }
+    const facts = (card?.claims ?? []).filter((c) => c.type === "fact" || c.type === "bank_view");
+    return delay({
+      answer: facts.map((c) => c.text).join(" "),
+      refs: facts.map((c) => c.claim_id),
+      tools_used: [],
+      trace_id: "mock_ask",
+      status: card ? ("ok" as const) : ("degraded" as const),
+    });
+  },
+  async trace(traceId) {
+    requireSession();
+    const t = (bundle.run_trace as unknown as RunTrace[]).find((x) => x.run_id === traceId);
+    if (!t) throw new HttpError(404, "Трассировка не найдена");
+    return delay({ verify_failures: [], tool_calls: [], llm_calls: [], ...(t as Partial<RunTrace>) } as RunTrace);
+  },
+  async traceCost(traceId) {
+    const t = await this.trace(traceId);
+    const by: TraceCost["cost_by_step"] = {};
+    for (const c of t.llm_calls) {
+      const b = (by[c.purpose] ??= { calls: 0, tokens_in: 0, tokens_out: 0, cost_rub: 0 });
+      b.calls += 1;
+      b.tokens_in += c.tokens_in;
+      b.tokens_out += c.tokens_out;
+      b.cost_rub += c.cost_rub;
+    }
+    return { trace_id: t.run_id, cost_rub: t.cost_rub, cost_by_step: by, budget: { daily_limit_rub: 500, spent_rub: 12.4, remaining_rub: 487.6, mode: "normal" } };
+  },
+  async runs() {
+    const s = requireSession();
+    const out: DeepRun[] = cards
+      .filter((c) => c.company_id === s.company_id && c.stage === "deep")
+      .map((c) => ({
+        story_id: c.event.story_id, company_id: c.company_id, role: c.user_role, status: c.review_status,
+        reason: null, score: c.relevance.score, trace_id: c.trace_id, cost_rub: 0.71, at: c.event.first_seen,
+      }));
+    return delay(out);
+  },
+  async feedback(cardId) {
+    const s = requireSession();
+    if (!cards.some((c) => c.card_id === cardId && c.company_id === s.company_id)) {
+      throw new HttpError(404, "Карточка не найдена");
+    }
+    await delay(null);
+  },
+  async analyze() {
+    // как сейчас на бэкенде: эндпоинта ещё нет
+    throw new HttpError(404, "");
   },
 };

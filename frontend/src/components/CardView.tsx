@@ -1,4 +1,6 @@
-// Персональная карточка: разделы по 6 вопросам ТЗ, у каждого утверждения метка и источник.
+// Персональная карточка: разделы по 6 вопросам ТЗ, у каждого утверждения метка, источник и итог проверки кодом.
+import { createContext, useContext, useState } from "react";
+import type { Api } from "../api";
 import {
   CLAIM_LABELS,
   CONFIDENCE_LABELS,
@@ -7,7 +9,8 @@ import {
   sourceLabel,
   sourceName,
 } from "../labels";
-import type { Claim, InsightCard, Surprise } from "../types";
+import type { Claim, ClaimChecks, Evidence, FeedbackKind, InsightCard, Surprise } from "../types";
+import { AskPanel } from "./AskPanel";
 import {
   ClaimTag,
   ContributionRow,
@@ -17,8 +20,19 @@ import {
   safeUrl,
   topContributions,
 } from "./bits";
+import { FeedbackBar } from "./FeedbackBar";
 
-export function CardView({ card, onBack }: { card: InsightCard; onBack: () => void }) {
+// Отметки из глубины карточки (клик по источнику, «неверно» у утверждения) — без проброса через все уровни
+const Mark = createContext<(kind: FeedbackKind, claimId?: string) => void>(() => {});
+
+interface Props {
+  card: InsightCard;
+  api: Api;
+  onBack: () => void;
+  onTrace: (traceId: string) => void;
+}
+
+export function CardView({ card, api, onBack, onTrace }: Props) {
   const byId = new Map(card.claims.map((c) => [c.claim_id, c]));
   const pick = (ids: string[], skip: Set<string> = new Set()) =>
     ids.filter((id) => !skip.has(id)).flatMap((id) => byId.get(id) ?? []);
@@ -26,106 +40,122 @@ export function CardView({ card, onBack }: { card: InsightCard; onBack: () => vo
   const consequences = pick(card.consequences, new Set(card.why_it_matters));
   const contribs = topContributions(card);
   const max = Math.max(...contribs.map((c) => Math.abs(c.value)), 0);
+  // отметка пишется в журнал; ошибка отметки не мешает читать карточку
+  const mark = (kind: FeedbackKind, claimId?: string) => {
+    api.feedback(card.card_id, kind, claimId).catch(() => {});
+  };
 
   return (
-    <article className="card">
-      <button className="link back" onClick={onBack}>
-        ← К ленте
-      </button>
-      <header className="card-head">
-        <div className="feed-meta">
-          <PolarityChip polarity={card.relevance.polarity} />
-          <ReviewChip card={card} />
-          <span className="muted small">
-            {formatDate(card.event.first_seen)} · {STORY_STATUS_LABELS[card.event.status] ?? card.event.status}
-          </span>
+    <Mark.Provider value={mark}>
+      <article className="card">
+        <div className="card-top">
+          <button className="link back" onClick={onBack}>
+            ← К ленте
+          </button>
+          {card.trace_id && (
+            <button className="link" onClick={() => onTrace(card.trace_id!)}>
+              Как это получено →
+            </button>
+          )}
         </div>
-        <h1>{card.event.title}</h1>
-        <Sources card={card} />
-        {card.stage === "fast" && (
-          <div className="banner" role="status">
-            {card.relevance.deep_analysis
-              ? "Идёт глубокий разбор: аналитики оценивают событие для вашей отрасли. Карточка обновится сама."
-              : "Быстрая оценка по профилю компании. Глубокий разбор для этого события не запускался."}
+        <header className="card-head">
+          <div className="feed-meta">
+            <PolarityChip polarity={card.relevance.polarity} />
+            <ReviewChip card={card} />
+            <span className="muted small">
+              {formatDate(card.event.first_seen)} · {STORY_STATUS_LABELS[card.event.status] ?? card.event.status}
+            </span>
           </div>
-        )}
-        {card.review_status === "on_review" && (
-          <div className="banner banner-review" role="status">
-            Аналитики разошлись в оценке — вывод на проверке у эксперта банка. Факты и источники проверены.
-          </div>
-        )}
-      </header>
-
-      <Section title="Что произошло" claims={pick(card.what_happened)} byId={byId} />
-
-      <section className="sec">
-        <h2>Почему важно вам</h2>
-        <ClaimList claims={why} byId={byId} />
-        {contribs.length > 0 && (
-          <div className="why-box">
-            <div className="muted small">
-              Почему вы это видите · значимость {Math.round(card.relevance.score * 100)} из 100
+          <h1>{card.event.title}</h1>
+          <Sources card={card} />
+          {card.stage === "fast" && (
+            <div className="banner" role="status">
+              Быстрая оценка по профилю компании. Если событие окажется среди самых значимых, глубокий разбор
+              догрузится в эту карточку сам.
             </div>
-            <ul className="contribs">
-              {contribs.map((c) => (
-                <ContributionRow key={c.factor} c={c} max={max} />
+          )}
+          {card.review_status === "on_review" && (
+            <div className="banner banner-review" role="status">
+              Аналитики разошлись в оценке — вывод на проверке у эксперта банка. Факты и источники проверены.
+            </div>
+          )}
+        </header>
+
+        <Section title="Что произошло" claims={pick(card.what_happened)} byId={byId} />
+
+        <section className="sec">
+          <h2>Почему важно вам</h2>
+          <ClaimList claims={why} byId={byId} />
+          {contribs.length > 0 && (
+            <div className="why-box">
+              <div className="muted small">
+                Почему вы это видите · значимость {Math.round(card.relevance.score * 100)} из 100
+              </div>
+              <ul className="contribs">
+                {contribs.map((c) => (
+                  <ContributionRow key={c.factor} c={c} max={max} />
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+
+        {consequences.length > 0 && <Section title="Последствия" claims={consequences} byId={byId} />}
+
+        {card.actions.length > 0 && (
+          <section className="sec">
+            <h2>Что сделать</h2>
+            <ul className="actions">
+              {card.actions.map((a) => (
+                <li key={a.text} className={a.is_advertising ? "claim offer" : "claim"}>
+                  {a.is_advertising && <span className="tag tag-bank_offer">{CLAIM_LABELS.bank_offer}</span>}
+                  <span>{a.text}</span>
+                </li>
               ))}
             </ul>
-          </div>
+          </section>
         )}
-      </section>
 
-      {consequences.length > 0 && <Section title="Последствия" claims={consequences} byId={byId} />}
+        {(card.bank_and_market.length > 0 || card.surprise) && (
+          <section className="sec">
+            <h2>Как оценивают банк и рынок</h2>
+            {card.surprise && <SurpriseLine s={card.surprise} />}
+            <ClaimList claims={pick(card.bank_and_market)} byId={byId} />
+          </section>
+        )}
 
-      {card.actions.length > 0 && (
         <section className="sec">
-          <h2>Что сделать</h2>
-          <ul className="actions">
-            {card.actions.map((a) => (
-              <li key={a.text} className={a.is_advertising ? "claim offer" : "claim"}>
-                {a.is_advertising && <span className="tag tag-bank_offer">{CLAIM_LABELS.bank_offer}</span>}
-                <span>{a.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {(card.bank_and_market.length > 0 || card.surprise) && (
-        <section className="sec">
-          <h2>Как оценивают банк и рынок</h2>
-          {card.surprise && <SurpriseLine s={card.surprise} />}
-          <ClaimList claims={pick(card.bank_and_market)} byId={byId} />
-        </section>
-      )}
-
-      <section className="sec">
-        <h2>На чём основан вывод</h2>
-        <p>
-          <strong>{CONFIDENCE_LABELS[card.confidence]}</strong>
-        </p>
-        <ul className="reasons">
-          {card.confidence_reasons.map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
-      </section>
-
-      {card.what_would_change.length > 0 && (
-        <section className="sec">
-          <h2>Что изменит вывод</h2>
+          <h2>На чём основан вывод</h2>
+          <p>
+            <strong>{CONFIDENCE_LABELS[card.confidence]}</strong>
+          </p>
           <ul className="reasons">
-            {card.what_would_change.map((w) => (
-              <li key={w}>{w}</li>
+            {card.confidence_reasons.map((r) => (
+              <li key={r}>{r}</li>
             ))}
           </ul>
         </section>
-      )}
-    </article>
+
+        {card.what_would_change.length > 0 && (
+          <section className="sec">
+            <h2>Что изменит вывод</h2>
+            <ul className="reasons">
+              {card.what_would_change.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <FeedbackBar key={card.card_id} onMark={mark} />
+        <AskPanel key={`ask-${card.card_id}`} api={api} card={card} />
+      </article>
+    </Mark.Provider>
   );
 }
 
 function Sources({ card }: { card: InsightCard }) {
+  const mark = useContext(Mark);
   return (
     <div className="sources small">
       <span className="muted">Источники:</span>
@@ -133,7 +163,7 @@ function Sources({ card }: { card: InsightCard }) {
         const href = safeUrl(s.url);
         const label = sourceName(s.source_id, s.title);
         return href ? (
-          <a key={s.source_id} href={href} target="_blank" rel="noopener noreferrer">
+          <a key={s.source_id} href={href} target="_blank" rel="noopener noreferrer" onClick={() => mark("click_source")}>
             {label}
           </a>
         ) : (
@@ -165,7 +195,31 @@ function ClaimList({ claims, byId }: { claims: Claim[]; byId: Map<string, Claim>
   );
 }
 
+const CHECK_NAMES: Record<string, string> = {
+  refs: "ссылки",
+  label: "метка",
+  numbers: "числа",
+  dates: "даты",
+  entailment: "вывод из цитаты",
+};
+
+// Итог проверки кодом: все проверки пройдены — «проверено», иначе — что именно не прошло
+export function CheckBadge({ checks }: { checks: ClaimChecks }) {
+  const entries = Object.entries(checks ?? {});
+  if (entries.length === 0) return <span className="check check-no">не проверено</span>;
+  const failed = entries.filter(([, v]) => !(v === true || v === "yes")).map(([k]) => CHECK_NAMES[k] ?? k);
+  return failed.length === 0 ? (
+    <span className="check check-ok" title={entries.map(([k]) => CHECK_NAMES[k] ?? k).join(", ")}>
+      ✓ проверено кодом
+    </span>
+  ) : (
+    <span className="check check-no">не проверено: {failed.join(", ")}</span>
+  );
+}
+
 function ClaimItem({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) {
+  const mark = useContext(Mark);
+  const [wrong, setWrong] = useState(false);
   const facts = [...(claim.based_on.facts ?? []), ...(claim.based_on.bank_views ?? [])];
   const features = claim.based_on.client_features ?? [];
   return (
@@ -173,24 +227,9 @@ function ClaimItem({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) 
       <ClaimTag type={claim.type} />
       <div className="claim-body">
         <p>{claim.text}</p>
-        {claim.evidence.map((e) => {
-          const href = safeUrl(e.url);
-          return (
-            <blockquote key={e.source_id + (e.quote ?? "")}>
-              {e.quote && <span>«{e.quote}»</span>}{" "}
-              <cite>
-                {href ? (
-                  <a href={href} target="_blank" rel="noopener noreferrer">
-                    {sourceLabel(e.source_id)}
-                  </a>
-                ) : (
-                  sourceLabel(e.source_id)
-                )}
-                {e.doc_date && `, ${formatDate(e.doc_date)}`}
-              </cite>
-            </blockquote>
-          );
-        })}
+        {claim.evidence.map((e, i) => (
+          <Quote key={`${e.source_id}-${i}`} e={e} />
+        ))}
         {(facts.length > 0 || features.length > 0) && (
           <div className="muted small">
             На основе:{" "}
@@ -203,9 +242,47 @@ function ClaimItem({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) 
             ].join(" · ")}
           </div>
         )}
-        {claim.horizon && <div className="muted small">Горизонт: {claim.horizon}</div>}
+        <div className="claim-foot small">
+          {claim.horizon && <span className="muted">Горизонт: {claim.horizon}</span>}
+          <CheckBadge checks={claim.verified} />
+          {wrong ? (
+            <span className="muted">отмечено как неверное</span>
+          ) : (
+            <button
+              className="link link-quiet"
+              onClick={() => {
+                setWrong(true);
+                mark("wrong", claim.claim_id);
+              }}
+            >
+              неверно?
+            </button>
+          )}
+        </div>
       </div>
     </li>
+  );
+}
+
+function Quote({ e }: { e: Evidence }) {
+  const mark = useContext(Mark);
+  const href = safeUrl(e.url);
+  return (
+    <blockquote>
+      {e.quote && <span>«{e.quote}»</span>}{" "}
+      <cite>
+        {href ? (
+          <a href={href} target="_blank" rel="noopener noreferrer" onClick={() => mark("click_source")}>
+            {sourceLabel(e.source_id)} ↗
+          </a>
+        ) : (
+          sourceLabel(e.source_id)
+        )}
+        {e.doc_date && `, ${formatDate(e.doc_date)}`}
+      </cite>
+      {e.verified === true && <span className="check check-ok"> · цитата найдена в источнике</span>}
+      {e.verified === false && <span className="check check-no"> · цитата не найдена</span>}
+    </blockquote>
   );
 }
 
