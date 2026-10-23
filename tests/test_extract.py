@@ -280,3 +280,28 @@ def test_version_ignores_incidental_numbers_but_not_the_rate():
         update={"numbers": [NumberFact(value=16.0, unit="%", quote="ключевую ставку до 16%", verified=True)]}
     )
     assert material_change(old, other_rate) == ["значение: ключевая ставка"]
+
+
+@pytest.mark.parametrize(
+    ("title", "text"),
+    [
+        ("Иноагентом объявлен журналист Максим Курников", "Минюст признал иностранными агентами журналиста."),
+        ("Президент Кубы назвал ордер на арест Рауля Кастро «цирком в Майами»", "Президент Кубы высмеял ордер."),
+        (
+            "Захарова сравнила планы стран ЕС по санкциям с «мышами, грызущими кактус»",
+            "Захарова ответила на намерение Еврокомиссии ввести новые санкции. Каллас хочет принять 20-й пакет санкций.",
+        ),
+    ],
+)
+def test_llm_sanctions_type_needs_measure_in_text(title, text):
+    # живой прогон воркера 23.10: модель ставила sanctions политике — тип-мера от модели сверяется с текстом
+    item = _item(title=title, text=text)
+    ans = {**GOOD, "event_type": "sanctions", "summary_quote": title[:30], "numbers": [], "channels": []}
+    facts = extract(_story(), [item], FixtureLLM(ans))
+    assert facts.event_type == "other"
+
+
+def test_llm_sanctions_type_kept_with_measure():
+    item = _item(title="США ввели санкции против «Роснефти» и «Лукойла»", text=SANCTIONS_TEXT)
+    ans = {**GOOD, "event_type": "sanctions", "summary_quote": "США ввели санкции", "numbers": [], "channels": []}
+    assert extract(_story(), [item], FixtureLLM(ans)).event_type == "sanctions"

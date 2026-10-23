@@ -119,6 +119,22 @@ def _negated(part: str, start: int) -> bool:
     return bool(_NEG.search(part[max(0, start - 30) : start]))
 
 
+def has_measure(etype: str, text: str) -> bool:
+    """Есть ли в тексте мера этого типа (санкции: ввели / продлили / сняли…) — проверка типа от модели."""
+    types, _ = _config()
+    et = next((t for t in types if t.name == etype), None)
+    if et is None or not et.patterns:
+        return True
+    for part in sentences(text):
+        for rx in et.patterns:
+            m = rx.search(part)
+            if not m or (etype == "sanctions" and _EXEMPT.search(part)):
+                continue
+            if not (etype in NEGATABLE and _negated(part, m.start())):
+                return True
+    return False
+
+
 def event_type(title: str, lead: str | None) -> tuple[str, str | None]:
     """Тип события и фрагмент, на котором сработал паттерн. Заголовок важнее лида."""
     types, _ = _config()
