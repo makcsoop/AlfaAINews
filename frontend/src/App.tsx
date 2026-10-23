@@ -1,24 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Api } from "./api";
-import { getApi } from "./api";
+import { errorText, getApi } from "./api";
 import { DEMO_CLIENTS } from "./clients";
 import { CardView } from "./components/CardView";
 import { Feed } from "./components/Feed";
 import { Home } from "./components/Home";
 import { Layout } from "./components/Layout";
+import { PasteBox } from "./components/PasteBox";
+import { RunsView } from "./components/RunsView";
+import { TraceView } from "./components/TraceView";
 import { DEMO_ROLES } from "./labels";
 import type { InsightCard, UserRole } from "./types";
 
-// Глубокий разбор занимает до нескольких минут (метрика «время до глубокой карточки» — до 15 мин)
-const DEEP_POLL_MS = 8000;
-const DEEP_POLL_TRIES = 110;
+// Догрузка глубоких разборов: перечитывать ленту раз в 10 с, не больше 6 раз за открытие ленты
+const FEED_REFRESH_MS = 10000;
+const FEED_REFRESH_TRIES = 6;
 
-type View ={ name: "home" } | { name: "feed" } | { name: "card"; id: string };
+type View =
+  | { name: "home" }
+  | { name: "feed" }
+  | { name: "runs" }
+  | { name: "card"; id: string }
+  | { name: "trace"; id: string };
 
 function parseHash(): View {
   const h = location.hash.replace(/^#\/?/, "");
   if (h === "feed") return { name: "feed" };
+  if (h === "runs") return { name: "runs" };
   if (h.startsWith("card/")) return { name: "card", id: decodeURIComponent(h.slice(5)) };
+  if (h.startsWith("trace/")) return { name: "trace", id: decodeURIComponent(h.slice(6)) };
   return { name: "home" };
 }
 
@@ -89,7 +99,7 @@ export function App() {
       .login(companyId, role)
       .then(() => api.feed())
       .then((c) => alive && setCards(c))
-      .catch((e: Error) => alive && (setError(e.message), setCards([])));
+      .catch((e) => alive && (setError(errorText(e)), setCards([])));
     return () => {
       alive = false;
     };
@@ -104,7 +114,7 @@ export function App() {
       setOpened(local);
     } else {
       setOpened(null);
-      api.card(cardId).then(setOpened, (e: Error) => setError(e.message));
+      api.card(cardId).then(setOpened, (e) => setError(errorText(e)));
     }
     setSeen((prev) => {
       const next = new Set(prev).add(cardId);
@@ -113,23 +123,26 @@ export function App() {
     });
   }, [api, cardId, cards, seenKey]);
 
-  // Быстрая карточка, отобранная на глубокий разбор, перечитывается, пока разбор не догрузится
-  const waitingDeep = opened?.stage === "fast" && opened.relevance.deep_analysis;
+  // Глубокий разбор API делает по одному за запрос ленты (FEED_DEEP_PER_REQUEST): пока в ленте есть быстрые
+  // карточки, ленту перечитываем — разборы догружаются, открытая карточка обновляется вместе с лентой.
+  // Попыток немного: на живых моделях каждый запрос ленты — это ₽.
+  const hasFast = !!cards?.some((c) => c.stage === "fast");
   useEffect(() => {
-    if (!api || !waitingDeep || !opened) return;
+    if (!api || !hasFast) return;
     let tries = 0;
-    const id = opened.card_id;
     const timer = setInterval(() => {
       tries += 1;
-      api.card(id).then((fresh) => {
-        if (fresh.stage !== "deep" && tries < DEEP_POLL_TRIES) return;
-        clearInterval(timer);
-        setOpened((cur) => (cur?.card_id === id ? fresh : cur));
-        setCards((list) => list?.map((c) => (c.card_id === id ? fresh : c)) ?? list);
-      }, () => clearInterval(timer));
-    }, DEEP_POLL_MS);
+      api.feed().then(
+        (fresh) => {
+          setCards(fresh);
+          setOpened((cur) => (cur ? (fresh.find((c) => c.card_id === cur.card_id) ?? cur) : cur));
+          if (!fresh.some((c) => c.stage === "fast") || tries >= FEED_REFRESH_TRIES) clearInterval(timer);
+        },
+        () => clearInterval(timer),
+      );
+    }, FEED_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [api, waitingDeep, opened?.card_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [api, hasFast, companyId, role]);
 
   const unseen = useMemo(
     () => new Set((cards ?? []).map((c) => c.card_id).filter((id) => !seen.has(id))),
@@ -146,6 +159,16 @@ export function App() {
     if (parseHash().name === "card") go("feed");
   }, []);
   const open = useCallback((id: string) => go(`card/${encodeURIComponent(id)}`), []);
+  const openTrace = useCallback((id: string) => go(`trace/${encodeURIComponent(id)}`), []);
+  // вставленная новость: быстрая карточка сразу в начало ленты и открывается, разбор догрузится
+  const onAnalyzed = useCallback(
+    (c: InsightCard) => {
+      setCards((list) => [c, ...(list ?? []).filter((x) => x.card_id !== c.card_id)]);
+      open(c.card_id);
+    },
+    [open],
+  );
+  const titles = useMemo(() => new Map((cards ?? []).map((c) => [c.event.story_id, c.event.title])), [cards]);
 
   return (
     <Layout companyId={companyId} role={role} onCompany={onCompany} onRole={onRole} onHome={() => go("")}>
@@ -155,10 +178,23 @@ export function App() {
         </div>
       )}
       {view.name === "home" && <Home cards={cards} unseen={unseen} onOpen={open} onFeed={() => go("feed")} />}
+      {(view.name === "feed" || view.name === "runs") && (
+        <nav className="tabs" aria-label="Разделы">
+          <button className={view.name === "feed" ? "tab on" : "tab"} onClick={() => go("feed")}>
+            Лента
+          </button>
+          <button className={view.name === "runs" ? "tab on" : "tab"} onClick={() => go("runs")}>
+            Журнал разборов
+          </button>
+        </nav>
+      )}
+      {view.name === "feed" && api && <PasteBox api={api} onCard={onAnalyzed} />}
       {view.name === "feed" && <Feed cards={cards} unseen={unseen} onOpen={open} />}
+      {view.name === "runs" && api && <RunsView api={api} onTrace={openTrace} titles={titles} />}
+      {view.name === "trace" && api && <TraceView api={api} traceId={view.id} onBack={() => history.back()} />}
       {view.name === "card" &&
-        (opened?.card_id === view.id ? (
-          <CardView card={opened} onBack={() => go("feed")} />
+        (opened?.card_id === view.id && api ? (
+          <CardView card={opened} api={api} onBack={() => go("feed")} onTrace={openTrace} />
         ) : (
           !error && <div className="muted">Загрузка…</div>
         ))}

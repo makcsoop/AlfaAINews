@@ -105,6 +105,13 @@ class DeepCfg(_Cfg):
     stop_at: float
 
 
+class FeedCfg(_Cfg):
+    min_score: float
+    deep_per_request: int
+    feedback_weight: float
+    feedback_cap: float
+
+
 class ScoringConfig(_Cfg):
     version: str
     profile: ProfileCfg
@@ -116,10 +123,13 @@ class ScoringConfig(_Cfg):
     roles: dict[str, RoleCfg]
     confidence: ConfidenceCfg
     off_sector: float
+    prior_unscoped: float
+    prior_unscoped_types: list[str]
     saturation: float
     min_contribution: float
     polarity: PolarityCfg
     deep: DeepCfg
+    feed: FeedCfg
 
 
 def role_weight(cfg: "ScoringConfig", role: str | None, channel: str) -> float:

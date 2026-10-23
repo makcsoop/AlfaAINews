@@ -8,10 +8,14 @@ export type Confidence = "high" | "medium" | "low";
 export interface Evidence {
   source_id: string;
   quote?: string | null;
+  span?: [number, number] | null;
   url?: string | null;
   doc_date?: string | null;
-  verified?: boolean | null;
+  verified?: boolean | null; // цитата найдена в тексте источника
 }
+
+// Итог проверки утверждения кодом: refs, label, numbers, dates — true, если прошло
+export type ClaimChecks = Record<string, boolean | string>;
 
 export interface Claim {
   claim_id: string;
@@ -21,7 +25,9 @@ export interface Claim {
   based_on: Record<string, string[]>;
   polarity?: Polarity | null;
   horizon?: string | null;
+  verified: ClaimChecks;
   is_advertising: boolean;
+  trigger?: string | null;
 }
 
 export interface Contribution {
@@ -82,6 +88,7 @@ export interface InsightCard {
   company_id: string;
   user_role: UserRole;
   version?: number;
+  updated_at?: string | null;
   stage: "fast" | "deep";
   analysis_ref?: string | null;
   event: CardEvent;
@@ -109,3 +116,71 @@ export interface SessionInfo {
 export interface ApiError {
   error: { code: string; message: string; trace_id: string };
 }
+
+export interface ToolCall {
+  tool: string;
+  args: Record<string, unknown>;
+  result_hash?: string | null;
+  ok: boolean;
+  at: string;
+}
+
+export interface LlmCall {
+  model: string;
+  purpose: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_rub: number;
+  at: string;
+  cached: boolean;
+}
+
+export interface RunTrace {
+  run_id: string;
+  story_id: string;
+  company_id?: string | null;
+  steps: string[];
+  tool_calls: ToolCall[];
+  llm_calls: LlmCall[];
+  verify_rounds: number;
+  verify_failures: string[];
+  cost_rub: number;
+  started_at: string;
+  finished_at?: string | null;
+}
+
+export interface StepCost {
+  calls: number;
+  tokens_in: number;
+  tokens_out: number;
+  cost_rub: number;
+}
+
+export interface TraceCost {
+  trace_id: string;
+  cost_rub: number;
+  cost_by_step: Record<string, StepCost>;
+  budget: { daily_limit_rub?: number; spent_rub?: number; remaining_rub?: number; mode?: string };
+}
+
+export interface DeepRun {
+  story_id: string;
+  company_id: string;
+  role: string;
+  status: "published" | "on_review" | "dropped" | "failed";
+  reason?: string | null;
+  score?: number | null;
+  trace_id?: string | null;
+  cost_rub: number;
+  at: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  refs: string[];
+  tools_used: string[];
+  trace_id: string;
+  status: "ok" | "refused" | "degraded";
+}
+
+export type FeedbackKind = "useful" | "not_relevant" | "wrong" | "click_source";

@@ -22,7 +22,9 @@ class _Acc:
     def __init__(self) -> None:
         self.value: dict[str, float] = defaultdict(float)
         self.drivers: dict[str, list[str]] = defaultdict(list)
-        self.assumed: dict[str, bool] = defaultdict(bool)
+        # фактор — предположение, только если у него нет ни одной твёрдой причины (поле CSV или продукт):
+        # кредит делает ставку прямым каналом, даже если к нему добавились отрасли контрагентов
+        self.firm: dict[str, bool] = defaultdict(bool)
 
     def add(self, row: dict[str, float], k: float, driver: str, *, assumption: bool = False) -> None:
         for channel, v in row.items():
@@ -31,7 +33,7 @@ class _Acc:
             self.value[channel] += v * k
             if driver not in self.drivers[channel]:
                 self.drivers[channel].append(driver)
-            self.assumed[channel] |= assumption
+            self.firm[channel] |= not assumption
 
     def exposures(self) -> list[ChannelExposure]:
         out = [
@@ -39,7 +41,7 @@ class _Acc:
                 channel=ch,
                 sensitivity=round(max(-1.0, min(1.0, v)), 3),
                 drivers=self.drivers[ch],
-                is_assumption=self.assumed[ch],
+                is_assumption=not self.firm[ch],
             )
             for ch, v in self.value.items()
             if abs(v) >= 0.01

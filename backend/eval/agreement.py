@@ -1,9 +1,8 @@
 """Согласие разметчиков на общих парах «сюжет × клиент».
 
-Разметка — значимость 0…3 (0 — не про нас, 3 — важно сегодня). По плану каждый размечает 20 пар из 60,
-10 пар общие у всех: на них проверяем, что разметчики понимают шкалу одинаково, прежде чем считать nDCG.
-
-Вход — CSV с колонками pair_id, labeler, relevance (экспорт инструмента Р1 приводится к нему).
+Разметка — «важно / неважно» (колонка important инструмента Р1, /labeling/export.csv) или значимость 0…3
+(колонка relevance). По плану каждый размечает 20 пар из 60, 10 пар общие у всех: на них проверяем, что
+разметчики понимают шкалу одинаково, прежде чем считать nDCG.
 `python -m backend.eval.agreement labels.csv`
 """
 
@@ -38,16 +37,18 @@ class PairAgreement:
 class Report:
     pairs: list[PairAgreement]
     mean_kappa: float | None
-    disputed: list[tuple[str, dict[str, int]]]  # пары, где оценки расходятся на 2 и больше
+    disputed: list[tuple[str, dict[str, int]]]  # пары с расхождением: бинарно — любым, по шкале — от 2
 
 
 def read_labels(path: Path) -> list[Label]:
+    """CSV инструмента Р1 (important 0/1) или своя шкала (relevance 0…3)."""
     with path.open(encoding="utf-8-sig", newline="") as f:
-        return [
-            Label(r["pair_id"].strip(), r["labeler"].strip(), int(r["relevance"]))
-            for r in csv.DictReader(f)
-            if r.get("relevance", "").strip()
-        ]
+        out = []
+        for r in csv.DictReader(f):
+            value = (r.get("relevance") or r.get("important") or "").strip()
+            if value:
+                out.append(Label(r["pair_id"].strip(), r["labeler"].strip(), int(value)))
+        return out
 
 
 def weighted_kappa(x: list[int], y: list[int], scale: tuple[int, ...] = SCALE) -> float | None:
@@ -71,6 +72,9 @@ def agreement(labels: Iterable[Label]) -> Report:
     for lb in labels:
         by_pair[lb.pair_id][lb.labeler] = lb.relevance
     labelers = sorted({lb for votes in by_pair.values() for lb in votes})
+    # бинарная разметка (важно / неважно) — обычная каппа, шкала 0…3 — с квадратичными весами
+    binary = all(v in (0, 1) for votes in by_pair.values() for v in votes.values())
+    scale = (0, 1) if binary else SCALE
     result = []
     for a, b in combinations(labelers, 2):
         common = [p for p, v in by_pair.items() if a in v and b in v]
@@ -79,10 +83,11 @@ def agreement(labels: Iterable[Label]) -> Report:
         x = [by_pair[p][a] for p in common]
         y = [by_pair[p][b] for p in common]
         exact = sum(i == j for i, j in zip(x, y, strict=True)) / len(common)
-        result.append(PairAgreement(a, b, len(common), round(exact, 3), weighted_kappa(x, y)))
+        result.append(PairAgreement(a, b, len(common), round(exact, 3), weighted_kappa(x, y, scale)))
     kappas = [p.kappa for p in result if p.kappa is not None]
+    gap = 1 if binary else 2
     disputed = sorted(
-        (p, v) for p, v in by_pair.items() if len(v) > 1 and max(v.values()) - min(v.values()) >= 2
+        (p, v) for p, v in by_pair.items() if len(v) > 1 and max(v.values()) - min(v.values()) >= gap
     )
     return Report(result, round(sum(kappas) / len(kappas), 3) if kappas else None, disputed)
 

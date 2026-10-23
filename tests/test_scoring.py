@@ -131,7 +131,8 @@ def test_products_give_sign():
     assert sd["key_rate"].sensitivity > 0 and "CL_PRODUCT_DEP_MARK=1" in sd["key_rate"].drivers
     # импортёр выигрывает от крепкого рубля, экспортёр проигрывает; это предположение по отрасли
     assert sb["fx_rub"].sensitivity > 0 and sd["fx_rub"].sensitivity < 0
-    assert sd["fx_rub"].is_assumption and "ОКВЭД 24: скорее экспортёр" in sd["fx_rub"].drivers
+    # курс у металлурга — и строка отрасли (твёрдо), и догадка «экспортёр»: канал не предположение
+    assert not sd["fx_rub"].is_assumption and "ОКВЭД 24: скорее экспортёр" in sd["fx_rub"].drivers
     assert all(-1 <= e.sensitivity <= 1 for e in [*borrower.exposures, *depositor.exposures])
 
 
@@ -293,3 +294,21 @@ def test_off_sector_event_is_damped():
     farmer = _company("AG", "01.11", fts=True)
     r_farm = score_pair(grain, farmer, now=NOW, facts=_facts(grain, **kw))
     assert r_farm.score > 2 * r_steel.score
+
+
+def test_assumption_only_without_firm_driver():
+    # у заёмщика ставка — прямой канал через кредит, даже если к ней добавились отрасли контрагентов
+    p = CompanyProfile(company_id="L", okved_code="46.69", sector="46", products={"loans": True})
+    graph = CounterpartyGraph(company_id="L", sector_shares_buyers={"41": 0.5})
+    ex = {e.channel: e for e in compute_exposures(p, graph)}
+    assert not ex["key_rate"].is_assumption and any(d.startswith("payments:") for d in ex["key_rate"].drivers)
+    assert ex["tax_burden"].is_assumption  # общий фактор без признака компании
+
+
+def test_unscoped_sanctions_prior_is_damped():
+    p = _company("IMP", "46.69", fts=True)
+    s = _story("pol", "sanctions", "Политик заявил о новых санкциях")
+    vague = score_pair(s, p, now=NOW, facts=_facts(s))
+    named = score_pair(s, p, now=NOW, facts=_facts(s, sectors=["46"]))
+    explicit = score_pair(s, p, now=NOW, facts=_facts(s, channels=[("trade_restrictions", "up", 0.8)]))
+    assert vague.score < named.score and vague.score < explicit.score

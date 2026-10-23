@@ -256,8 +256,13 @@ def score_pair(
     profile должен быть v1 (с exposures, см. backend.profile.exposures.with_exposures)."""
     cfg = cfg or load_scoring()
     matrix = load_matrix()
+    drivers = story_drivers(story, facts, analysis)
     scope = sector_scope(profile, facts, graph, cfg, matrix)
-    contribs = channel_contributions(story_drivers(story, facts, analysis), profile, cfg, scope, role)
+    event_type = (facts.event_type if facts else None) or story.event_type
+    only_prior = bool(drivers) and all(d.origin == "prior" for d in drivers)
+    if only_prior and event_type in cfg.prior_unscoped_types and not (facts and facts.sectors_okved):
+        scope *= cfg.prior_unscoped
+    contribs = channel_contributions(drivers, profile, cfg, scope, role)
     contribs += direct_contributions(profile, facts, story, graph, cfg, matrix)
     if (s := surprise_contribution(surprise, cfg)) is not None:
         contribs.append(s)

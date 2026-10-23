@@ -202,3 +202,32 @@ def test_agreement_report_on_shared_pairs():
     assert len(rep.pairs) == 3 and all(p.n == 10 for p in rep.pairs)
     assert rep.disputed == [("p9", {"r1": 1, "r2": 1, "r3": 3})]
     assert verdict(rep.mean_kappa) == "хорошее"
+
+
+# ---------- отклик пользователя ----------
+
+
+def test_not_relevant_lowers_similar_stories_only():
+    from backend.ranking.feedback import apply_feedback
+
+    p = _company("FB", "46.69", loans=True, fts=True)
+    sanctions, kw = STORIES["sanctions_oil"]
+    other = sanctions.model_copy(update={"id": "sanctions_2", "title": "Новые санкции против банков"})
+    rate, rate_kw = STORIES["rate"]
+    scores = [
+        score_pair(sanctions, p, now=NOW, facts=_facts(sanctions, **kw)),
+        score_pair(other, p, now=NOW, facts=_facts(other, **kw)),
+        score_pair(rate, p, now=NOW, facts=_facts(rate, **rate_kw)),
+    ]
+    types = {"sanctions_oil": "sanctions", "sanctions_2": "sanctions", "rate": "rate_decision"}
+    rows = [
+        {"company_id": "FB", "story_id": "sanctions_oil", "kind": "not_relevant"},
+        {"company_id": "FB", "story_id": "rate", "kind": "click_source"},
+    ]  # клик в скоринг не идёт
+    after = {r.story_id: r.score for r in apply_feedback(scores, rows, types)}
+    before = {r.story_id: r.score for r in scores}
+    assert after["sanctions_2"] == pytest.approx(before["sanctions_2"] * 0.7, abs=0.002)  # вес 0,3
+    assert after["rate"] == before["rate"]
+    useful = apply_feedback(scores, [{"story_id": "rate", "kind": "useful"}], types)
+    assert next(r.score for r in useful if r.story_id == "rate") > before["rate"]
+    assert apply_feedback(scores, [], types) == scores
