@@ -252,3 +252,18 @@ def test_other_type_gets_no_factors_even_from_llm():
 )
 def test_liquidation_means_a_company(title, etype):
     assert rules.event_type(title, None)[0] == etype
+
+
+def test_llm_factors_keep_event_type_own_factor():
+    # живой прогон 23.10: у сюжета о решении ЦБ модель дала только consumer_demand из соседнего абзаца,
+    # и ключевая ставка пропала из факторов
+    text = TEXT + " Продажи автомобилей вырастут по итогам года на 66%."
+    ans = {
+        **GOOD,
+        "channels": [
+            {"channel": "consumer_demand", "direction": "up", "strength": 0.7, "quote": "Продажи автомобилей вырастут"}
+        ],
+    }
+    facts = extract(_story(), [_item(text=text)], FixtureLLM(ans))
+    chans = {(c.channel, c.direction) for c in facts.channels}
+    assert ("consumer_demand", "up") in chans and ("key_rate", "flat") in chans
