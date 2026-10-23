@@ -37,3 +37,4 @@ class RateLimiter:
 
 
 ask_limiter = RateLimiter(limit=20, window_s=60.0)
+feedback_limiter = RateLimiter(limit=60, window_s=60.0)

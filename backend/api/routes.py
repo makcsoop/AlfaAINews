@@ -1,18 +1,21 @@
-"""Эндпоинты /session /feed /card /trace /ask. company_id и роль — только из сессии."""
+"""Эндпоинты /session /feed /card /trace /ask /feedback. company_id и роль — только из сессии."""
 
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agents.qa import answer_question
+from backend.api.feedback import FeedbackRequest, FeedbackResponse, FeedbackStore, get_feedback_store
 from backend.api.store import CardStore, DeepRun, get_store
 from backend.llm import get_client
+from backend.schemas import Feedback
 from backend.schemas.common import UserRole
 from backend.schemas.insight import InsightCard, RunTrace
 from backend.security.audit import AuditLog, get_audit
 from backend.security.guard import audit_foreign, enforce_company, trace_id_of
-from backend.security.ratelimit import ask_limiter
+from backend.security.ratelimit import ask_limiter, feedback_limiter
 from backend.security.session import (
     COOKIE_NAME,
     Session,
@@ -27,6 +30,7 @@ router = APIRouter()
 SessionDep = Annotated[Session, Depends(current_session)]
 StoreDep = Annotated[CardStore, Depends(get_store)]
 AuditDep = Annotated[AuditLog, Depends(get_audit)]
+FeedbackDep = Annotated[FeedbackStore, Depends(get_feedback_store)]
 
 ERRORS = {
     401: {"description": "Нет сессии или токен недействителен"},
@@ -258,3 +262,45 @@ def ask(
         audit=audit,
     )
     return AskResponse(**result.model_dump(include={"answer", "refs", "tools_used", "status", "trace_id"}))
+
+
+@router.post(
+    "/feedback",
+    response_model=FeedbackResponse,
+    tags=["feedback"],
+    summary="Отметка по карточке: полезно, не про нас, неверно, клик по источнику",
+    responses={
+        **ERRORS,
+        404: {"description": "Карточки или утверждения нет, либо карточка не принадлежит компании"},
+        429: {"description": "Слишком много отметок за минуту"},
+    },
+)
+def feedback(
+    body: FeedbackRequest,
+    request: Request,
+    session: SessionDep,
+    store: StoreDep,
+    audit: AuditDep,
+    feedback_store: FeedbackDep,
+) -> FeedbackResponse:
+    """Отметка пользователя: компания, пользователь и роль — только из сессии, карточка — только своя."""
+    if not feedback_limiter.allow(feedback_limiter.key_of(session)):
+        raise HTTPException(status_code=429, detail="Слишком много отметок, попробуйте через минуту")
+    card = store.get_card(body.card_id, session.company_id)
+    if card is None:
+        owner = store.card_owner(body.card_id)
+        if owner is not None and owner != session.company_id:
+            audit_foreign(audit, request, session, owner)
+        raise HTTPException(status_code=404, detail="Карточка не найдена")
+    if body.claim_id is not None and body.claim_id not in {c.claim_id for c in card.claims}:
+        raise HTTPException(status_code=404, detail="Утверждение не найдено")
+    fb = Feedback(
+        card_id=card.card_id,
+        user_role=session.role,
+        kind=body.kind,
+        comment=body.comment,
+        claim_id=body.claim_id,
+        at=datetime.now(UTC),
+    )
+    extra = {"company_id": session.company_id, "user_id": session.user_id, "story_id": card.event.story_id}
+    return FeedbackResponse(id=feedback_store.add(fb, extra))
