@@ -155,3 +155,18 @@ def test_snapshot_roundtrip(engine, tmp_path, monkeypatch):
         got = demo.load(conn)
         after = conn.execute(select(m.bank_positions.c.id, m.bank_positions.c.data)).all()
     assert got["bank_positions"] == len(before) and sorted(after) == sorted(before)
+
+
+def test_analysis_saved_by_card_ref(engine):
+    # Б4: разбор хранится отдельно и находится по analysis_ref карточки
+    from backend.db.analyses import get_analysis, save_analysis
+    from backend.fixtures import load_bundle
+
+    b = load_bundle("rate_14")
+    a = b["analysis"][0]
+    card = b["insight_card"][0]
+    with engine.begin() as conn:
+        ref = save_analysis(conn, a.model_copy(update={"status": "on_review"}))
+        ref = save_analysis(conn, a)  # повторная запись — обновление, не дубль
+        got = get_analysis(conn, card.analysis_ref)
+    assert ref == card.analysis_ref and got == a

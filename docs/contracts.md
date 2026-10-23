@@ -34,7 +34,7 @@
     {"kind": "bank_view", "text": "ЦМИ: риторика стала жестче", "refs": ["bp_017"]},
     {"kind": "market_view", "text": "Рынок ждал снижения", "refs": ["mk_cons_2026-09-11"]},
     {"kind": "model_inference", "text": "Обслуживание вашего кредита в ближайший квартал не подешевеет", "refs": ["profile:c_00731:loa", "analysis:st_4812:G46"]},
-    {"kind": "bank_offer", "text": "Фиксация ставки по новым траншам", "trigger": "loa+rate_up"}
+    {"kind": "bank_offer", "text": "Фиксация ставки по новым траншам", "trigger": "fix_rate"}
   ],
   "trace_id": "tr_9f2c"
 }
