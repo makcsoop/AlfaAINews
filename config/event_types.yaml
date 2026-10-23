@@ -138,6 +138,7 @@ event_types:
   windfall_tax:
     channels: ["tax_burden"]
     prior: {"tax_burden": 0.8}
+    patterns: ['налог\w* на (сверхдоход|сверхприбыл|непредвиденн\w+ (доход|прибыл))', '\bсверхприбыл', '\bwindfall']
   foreign_demand_data:
     channels: ["export_demand"]
   equity_market_move:

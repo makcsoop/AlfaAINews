@@ -58,9 +58,10 @@ services:
       TOOL_SOURCE: ${TOOL_SOURCE:-db}
       CARD_STORE: ${CARD_STORE:-pipeline}
       CACHE_BACKEND: ${CACHE_BACKEND:-redis}
-      FEED_DEEP_PER_REQUEST: ${FEED_DEEP_PER_REQUEST:-1}
-      FEED_MIN_SCORE: ${FEED_MIN_SCORE:-0.05}
+      # порог ленты и число глубоких разборов — в config/scoring.yaml (feed); FEED_* в .env только переопределяют
       CRITIC_LLM_ENABLED: ${CRITIC_LLM_ENABLED:-true}
+      # подпись сессий: без секрета стенд не поднимется (в git не хранить; openssl rand -hex 32)
+      SESSION_SECRET: ${SESSION_SECRET:?задайте SESSION_SECRET в .env — openssl rand -hex 32}
     ports:
       - "8000:8000"
     depends_on:

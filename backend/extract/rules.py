@@ -30,6 +30,13 @@ NEGATABLE = {"sanctions", "secondary_sanctions", "sanctions_relief"}
 # отрицание и условие: «не ввели», «нужно, чтобы сняли», «если продлят»
 _NEG = re.compile(r"\b(не|чтобы|если|когда|пока)(\s+\w+){0,2}\s*$", re.IGNORECASE)
 _EXEMPT = re.compile(r"\bисключени\w*\b|\bиз-под санкци\w*", re.IGNORECASE)
+# ставка иностранного регулятора — не решение Банка России: «Центробанк Турции снизил ставку», «ФРС сохранила»
+MONETARY = {"rate_decision", "monetary_signal"}
+_FOREIGN_CB = re.compile(
+    r"\b((?i:центробанк\w*|центральн\w+ банк\w*|нацбанк\w*|национальн\w+ банк\w*)|ЦБ)\s+"
+    r"(?!России\b|РФ\b|Российской\b)[А-ЯЁ][а-яё]+(и|а|ы|ии)\b"
+    r"|\b(ФРС|ЕЦБ|Банк Англии|Банк Японии|Народный банк Китая|Резервный банк|Федеральн\w+ резервн\w+)",
+)
 
 # Число + единица. Порядок важен: сначала длинные единицы.
 _UNITS = [
@@ -131,6 +138,8 @@ def has_measure(etype: str, text: str) -> bool:
             m = rx.search(part)
             if not m or (etype == "sanctions" and _EXEMPT.search(part)):
                 continue
+            if etype in MONETARY and _FOREIGN_CB.search(part):
+                continue
             if not (etype in NEGATABLE and _negated(part, m.start())):
                 return True
     return False
@@ -139,12 +148,15 @@ def has_measure(etype: str, text: str) -> bool:
 def event_type(title: str, lead: str | None) -> tuple[str, str | None]:
     """Тип события и фрагмент, на котором сработал паттерн. Заголовок важнее лида."""
     types, _ = _config()
+    foreign_cb = bool(_FOREIGN_CB.search(title))  # чужой регулятор в заголовке — и лид про его политику
     for part in (title, lead or ""):
         for et in types:
             for rx in et.patterns:
                 m = rx.search(part)
                 if m and et.name == "sanctions" and _EXEMPT.search(part):
                     continue  # исключение из пакета, вывод из-под санкций — не новая мера
+                if m and et.name in MONETARY and (foreign_cb or _FOREIGN_CB.search(part)):
+                    continue  # ставка чужого регулятора
                 if m and not (et.name in NEGATABLE and _negated(part, m.start())):
                     return et.name, part
     return "other", None

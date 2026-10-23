@@ -8,6 +8,7 @@
 
 ```bash
 cp .env.example .env
+echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env   # без него compose не стартует
 docker compose up --build
 ```
 

@@ -315,3 +315,41 @@ def test_conditional_relief_and_background_measure():
     item = _item(title="Президент Кубы назвал ордер на арест Рауля Кастро «цирком в Майами»", text=text)
     ans = {**GOOD, "event_type": "sanctions", "summary_quote": "Президент Кубы", "numbers": [], "channels": []}
     assert extract(_story(), [item], FixtureLLM(ans)).event_type == "other"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Центробанк Турции снизил ключевую ставку до 36%",
+        "Нацбанк Казахстана снизил базовую ставку",
+        "Центральный банк Бразилии повысил ключевую ставку",
+        "ЦБ Турции повысил ключевую ставку",
+    ],
+)
+def test_foreign_central_bank_is_not_rate_decision(title):
+    from backend.extract.rules import event_type, has_measure
+
+    assert event_type(title, None)[0] == "other"
+    assert not has_measure("rate_decision", title)
+
+
+def test_bank_of_russia_rate_decision_kept():
+    from backend.extract.rules import event_type
+
+    for title in ("Банк России сохранил ключевую ставку на уровне 14,00% годовых",
+                  "Центробанк России оставил ключевую ставку без изменений", "ЦБ сохранил ключевую ставку на уровне 14%"):
+        assert event_type(title, None)[0] == "rate_decision"
+
+
+def test_foreign_central_bank_in_title_excludes_monetary_lead():
+    from backend.extract.rules import event_type
+
+    lead = "Регулятор продолжает смягчение денежно-кредитной политики на фоне замедления инфляции."
+    assert event_type("Нацбанк Казахстана снизил базовую ставку", lead)[0] != "monetary_signal"
+
+
+def test_windfall_tax_not_bankruptcy():
+    from backend.extract.rules import event_type
+
+    title = "Минфин заявил о готовности обсудить налог на сверхдоходы"
+    assert event_type(title, "Отдельно обсуждали риск дефолтов эмитентов.")[0] == "windfall_tax"
