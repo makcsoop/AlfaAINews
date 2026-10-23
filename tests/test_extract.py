@@ -267,3 +267,16 @@ def test_llm_factors_keep_event_type_own_factor():
     facts = extract(_story(), [_item(text=text)], FixtureLLM(ans))
     chans = {(c.channel, c.direction) for c in facts.channels}
     assert ("consumer_demand", "up") in chans and ("key_rate", "flat") in chans
+
+
+def test_version_ignores_incidental_numbers_but_not_the_rate():
+    from backend.extract.run import material_change
+    from backend.schemas import NumberFact
+
+    old = extract_rules(_story(), [_item()])
+    extra = old.model_copy(update={"numbers": [*old.numbers, NumberFact(value=2.0, unit="%", quote="на 2%", verified=True)]})
+    assert material_change(old, extra) == []  # новый материал принёс своё число — не новая версия
+    other_rate = old.model_copy(
+        update={"numbers": [NumberFact(value=16.0, unit="%", quote="ключевую ставку до 16%", verified=True)]}
+    )
+    assert material_change(old, other_rate) == ["значение: ключевая ставка"]

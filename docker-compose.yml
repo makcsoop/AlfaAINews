@@ -66,8 +66,9 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-newsai}:${POSTGRES_PASSWORD:-newsai}@db:5432/${POSTGRES_DB:-newsai}
       REDIS_URL: redis://redis:6379/0
       # true — подтверждённые сюжеты типирует модель (шаг extract общего клиента, до 60 вызовов за проход);
-      # нужен LLM_MODE=live и ключ в .env
+      # нужен ключ LLM_API_KEY в .env; модель воркер зовёт только при EXTRACT_LLM=true
       EXTRACT_LLM: ${EXTRACT_LLM:-false}
+      LLM_MODE: live
     depends_on:
       init:
         condition: service_completed_successfully

@@ -39,22 +39,23 @@ def stories_to_extract(conn: Connection, since: datetime, force: bool = False) -
 def material_change(old: EventFacts | None, new: EventFacts) -> list[str]:
     """Что существенно изменилось в фактах сюжета — повод для новой версии (разбор Р3 кешируется по версии).
 
-    Существенно: тип события, слух / намерение, проверенные числа, направления факторов, отрасли.
-    Новые материалы с теми же фактами, другая формулировка сводки или участники — нет.
+    Существенно: тип события, слух / намерение, главное число события (ставка, инфляция, курс — метрика
+    сюрприза из config/scoring.yaml), направления факторов, отрасли. Новые материалы с теми же фактами,
+    прочие числа (новый материал приносит свои), формулировка сводки или участники — нет.
     """
     if old is None:
         return []
+    from backend.ranking.config import load_scoring
+    from backend.ranking.surprise import actual_value
+
     reasons = []
     if old.event_type != new.event_type:
         reasons.append(f"тип {old.event_type} → {new.event_type}")
     if (old.is_rumor, old.is_intent) != (new.is_rumor, new.is_intent):
         reasons.append("статус: слух / намерение")
-    nums = (
-        {(n.value, n.unit) for n in old.numbers if n.verified},
-        {(n.value, n.unit) for n in new.numbers if n.verified},
-    )
-    if nums[0] != nums[1]:
-        reasons.append("числа")
+    metric = load_scoring().surprise.metrics.get(new.event_type)
+    if metric and actual_value(old, metric) != actual_value(new, metric):
+        reasons.append(f"значение: {metric.metric}")
     dirs = {(c.channel, c.direction) for c in old.channels}, {(c.channel, c.direction) for c in new.channels}
     if dirs[0] != dirs[1]:
         reasons.append("направления факторов")
