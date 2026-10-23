@@ -2,10 +2,12 @@
 
 import logging
 import uuid
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.security.audit import get_audit
@@ -22,7 +24,25 @@ CODES = {
     405: "method_not_allowed",
     422: "validation_error",
     429: "too_many_requests",
+    503: "service_unavailable",
 }
+
+
+class ErrorDetail(BaseModel):
+    code: str = Field(description="Машинный код: unauthorized, forbidden, not_found, validation_error, …")
+    message: str = Field(description="Короткое сообщение для пользователя, без внутренностей")
+    trace_id: str = Field(description="Id запроса для журнала (также в заголовке X-Trace-Id)")
+
+
+class ErrorResponse(BaseModel):
+    """Единый формат ошибки API."""
+
+    error: ErrorDetail
+
+
+def error_doc(description: str) -> dict[str, Any]:
+    """Описание ответа-ошибки для `responses=` эндпоинта (OpenAPI)."""
+    return {"description": description, "model": ErrorResponse}
 
 
 def error_response(request: Request, status: int, code: str, message: str) -> JSONResponse:

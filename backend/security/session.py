@@ -7,8 +7,10 @@ import json
 import logging
 import os
 import time
+from typing import Annotated
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Security
+from fastapi.security import APIKeyCookie, HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from backend.schemas.common import UserRole
@@ -103,7 +105,18 @@ def optional_session(request: Request) -> Session | None:
         return None
 
 
-def current_session(request: Request) -> Session:
+# только для описания в OpenAPI (/docs): сам токен читает token_from_request
+_cookie_scheme = APIKeyCookie(
+    name=COOKIE_NAME, auto_error=False, description="Cookie, которую ставит POST /session"
+)
+_bearer_scheme = HTTPBearer(auto_error=False, description="Токен из ответа POST /session")
+
+
+def current_session(
+    request: Request,
+    _cookie: Annotated[str | None, Security(_cookie_scheme)] = None,
+    _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_bearer_scheme)] = None,
+) -> Session:
     """Зависимость FastAPI: сессия из cookie или Bearer, иначе 401."""
     token = token_from_request(request)
     if not token:

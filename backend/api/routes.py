@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agents.qa import answer_question
 from backend.api.analyze import AnalyzeRequest, Paster, get_paster
+from backend.api.errors import error_doc
 from backend.api.feedback import (
     FeedbackRequest,
     FeedbackResponse,
@@ -43,8 +44,9 @@ FeedbackDep = Annotated[FeedbackStore, Depends(get_feedback_store)]
 PasterDep = Annotated[Paster | None, Depends(get_paster)]
 
 ERRORS: dict[int | str, dict[str, Any]] = {
-    401: {"description": "Нет сессии или токен недействителен"},
-    403: {"description": "Запрошены данные другой компании"},
+    401: error_doc("Нет сессии или токен недействителен"),
+    403: error_doc("Запрошены данные другой компании"),
+    422: error_doc("Некорректный запрос (лишние или неверные поля)"),
 }
 
 
@@ -167,7 +169,7 @@ def feed_runs(session: SessionDep, store: StoreDep) -> list[DeepRun]:
     response_model=InsightCard,
     tags=["cards"],
     summary="Карточка",
-    responses={**ERRORS, 404: {"description": "Карточки нет или она не принадлежит компании"}},
+    responses={**ERRORS, 404: error_doc("Карточки нет или она не принадлежит компании")},
 )
 def card(
     card_id: str, request: Request, session: SessionDep, store: StoreDep, audit: AuditDep
@@ -186,7 +188,7 @@ def card(
     response_model=RunTrace,
     tags=["cards"],
     summary="Журнал разбора",
-    responses={**ERRORS, 404: {"description": "Трассировки нет или она не принадлежит компании"}},
+    responses={**ERRORS, 404: error_doc("Трассировки нет или она не принадлежит компании")},
 )
 def trace(trace_id: str, request: Request, session: SessionDep, store: StoreDep, audit: AuditDep) -> RunTrace:
     found = store.get_trace(trace_id)
@@ -231,7 +233,7 @@ def _cost_by_step(found: RunTrace) -> dict[str, StepCost]:
     response_model=TraceCost,
     tags=["cards"],
     summary="Стоимость разбора по шагам",
-    responses={**ERRORS, 404: {"description": "Трассировки нет или она не принадлежит компании"}},
+    responses={**ERRORS, 404: error_doc("Трассировки нет или она не принадлежит компании")},
 )
 def trace_cost(
     trace_id: str, request: Request, session: SessionDep, store: StoreDep, audit: AuditDep
@@ -253,8 +255,8 @@ def trace_cost(
     summary="Вопрос по карточке и своей компании",
     responses={
         **ERRORS,
-        404: {"description": "Карточка не найдена"},
-        429: {"description": "Слишком много вопросов за минуту"},
+        404: error_doc("Карточка не найдена"),
+        429: error_doc("Слишком много вопросов за минуту"),
     },
 )
 def ask(
@@ -287,8 +289,8 @@ def ask(
     summary="Отметка по карточке: полезно, не про нас, неверно, клик по источнику",
     responses={
         **ERRORS,
-        404: {"description": "Карточки или утверждения нет, либо карточка не принадлежит компании"},
-        429: {"description": "Слишком много отметок за минуту"},
+        404: error_doc("Карточки или утверждения нет, либо карточка не принадлежит компании"),
+        429: error_doc("Слишком много отметок за минуту"),
     },
 )
 def feedback(
@@ -329,9 +331,9 @@ def feedback(
     summary="Вставить ссылку или текст: быстрая карточка сразу, глубокий разбор — в ленте",
     responses={
         **ERRORS,
-        400: {"description": "Материал не принят: плохая ссылка, страница не скачалась, пустой текст"},
-        429: {"description": "Слишком много вставок за минуту"},
-        503: {"description": "Вставка недоступна: стенд без базы или сбой разбора"},
+        400: error_doc("Материал не принят: плохая ссылка, страница не скачалась, пустой текст"),
+        429: error_doc("Слишком много вставок за минуту"),
+        503: error_doc("Вставка недоступна: стенд без базы или сбой разбора"),
     },
 )
 def analyze(body: AnalyzeRequest, session: SessionDep, store: StoreDep, paster: PasterDep) -> InsightCard:

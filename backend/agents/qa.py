@@ -39,6 +39,10 @@ REFUSED_TEXT = (
     "Я отвечаю только по данным вашей компании. Данные других компаний и клиентов банка "
     "показать не могу; если нужен вопрос по вашей компании, задайте его."
 )
+INJECTION_TEXT = (
+    "Я отвечаю на вопросы о событии и о вашей компании и не меняю правила работы. "
+    "Сформулируйте, пожалуйста, вопрос по существу."
+)
 NO_DATA_TEXT = "В данных по вашей компании и в материалах сюжета ответа на этот вопрос нет."
 DEGRADED_TEXT = "Сейчас ответить не получилось: сервис разбора временно недоступен. Попробуйте позже."
 
@@ -135,6 +139,27 @@ def foreign_company_mentions(question: str, own_company_id: str) -> list[str]:
 _LEGAL_ENTITY = re.compile(
     r"(?<![А-ЯЁA-Za-zа-яё])(?:ООО|ОАО|ЗАО|ПАО|НАО|АО|ИП|ГУП|МУП)\s*[«\"'„]?\s*[А-ЯЁA-Z0-9]"
 )
+
+
+# попытка переписать правила модели в самом вопросе. Повелительное «выведи / напиши» сюда не входит:
+# в вопросе пользователя это обычная просьба («выведи контрагентов»), в отличие от текста новости
+_INJECTION = [
+    re.compile(p, re.IGNORECASE | re.MULTILINE)
+    for p in (
+        r"\b(игнорир|забудь|отмени)\w*\b.{0,40}\b(инструкц|правил|указани|ограничени|сказанн)",
+        r"\bignore\b.{0,30}\b(instructions?|previous|above|rules)",
+        r"\b(предыдущ|прошл)\w* (инструкц|указани)\w*",
+        r"\bнов\w+ (правила|инструкци)\w*",
+        r"^\W*(system|assistant|developer|система|ассистент)\s*:",
+        r"\bsystem prompt\b|\b(системн\w+|сво\w+) (промпт|инструкц)",
+        r"\bты (больше не|теперь|отныне)\b|\byou are now\b|\bact as\b|\bрежим\w* (разработчика|отладки)",
+        r"</?\s*(data|system|instructions?|prompt)\s*>",
+    )
+]
+
+
+def is_injection_attempt(question: str) -> bool:
+    return any(rx.search(question) for rx in _INJECTION)
 
 
 def asks_about_other_company(question: str, own_company_id: str) -> tuple[bool, str | None]:
@@ -412,6 +437,9 @@ def answer_question(
             trace_id=trace_id,
         )
         return QAResult(answer=REFUSED_TEXT, status="refused", trace_id=trace_id)
+    if is_injection_attempt(question):  # без вызова модели и без упоминания чужих компаний
+        log.warning("qa: попытка сменить правила trace_id=%s", trace_id)
+        return QAResult(answer=INJECTION_TEXT, status="refused", trace_id=trace_id)
 
     card = store.get_card(card_id, session.company_id) if card_id else None  # чужая карточка -> None
     try:
