@@ -34,6 +34,7 @@ async def poll_feed(fetcher: Fetcher, src: Source, etag: str | None, last_modifi
         headers["If-None-Match"] = etag
     if last_modified:
         headers["If-Modified-Since"] = last_modified
+    assert src.url, f"{src.id}: у ленты нет url"
     resp = await fetcher.get(src.url, headers=headers)
     if resp.status_code == 304:
         return FeedResult(304, [], etag, last_modified)

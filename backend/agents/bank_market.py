@@ -154,12 +154,13 @@ def report(conn: Connection, story_id: str, index: BankIndex | None = None, k: i
                 None,
             )
             exp = market.expected_value if market else None
-            ref = exp if exp is not None else (bank.forecast["value"] if bank else None)
+            bank_value = bank.forecast["value"] if bank and bank.forecast else None
+            ref = exp if exp is not None else bank_value
             surprise = Surprise(
                 metric="key_rate",
                 actual=actual,
                 market_expected=exp,
-                bank_expected=bank.forecast["value"] if bank else None,
+                bank_expected=bank_value,
                 bank_ref=bank.position_id if bank else None,
                 market_ref=f"mk_consensus_{market.meeting.isoformat()}" if market else None,
                 direction=None

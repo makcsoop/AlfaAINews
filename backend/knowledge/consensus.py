@@ -109,9 +109,10 @@ def label_post(
         # направление при названной ставке считает код, а не модель: «ждёт 14,25%» при ставке 14,25% — пауза
         expectation = "hold" if abs(rate - rate_before) < 1e-9 else "cut" if rate < rate_before else "hike"
     else:
-        expectation = check_direction(ans["expectation"], quote)
-        if expectation is None:
+        checked = check_direction(ans["expectation"], quote)
+        if checked is None:
             return None
+        expectation = checked
     return {"expectation": expectation, "expected_rate": rate, "quote": quote}
 
 
@@ -187,7 +188,7 @@ def build(conn: Connection, meeting: dict, llm: JsonLLM) -> dict:
         "actual": meeting.get("actual"),
     }
     if n:
-        top = max(counts, key=counts.get)
+        top = max(counts, key=lambda k: counts[k])
         statement = f"{counts[top]} из {n} каналов ждали {RU[top]}" + (
             f"; медиана ожидаемой ставки {summary['median_rate']:g}%" if rates else ""
         )

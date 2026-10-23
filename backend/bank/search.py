@@ -84,6 +84,7 @@ class BankIndex:
     ) -> list[Hit]:
         if not self.positions:
             return []
+        assert self.bm25 is not None and self.matrix is not None  # есть позиции — индексы построены
         n = len(self.positions)
         bm = self.bm25.get_scores(tokens(query))
         dense = (self.matrix @ self.vec.transform([query]).T).toarray().ravel()

@@ -3,6 +3,7 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Connection, text
 from sqlalchemy.dialects.postgresql import insert
@@ -49,7 +50,7 @@ def _upsert(conn: Connection, table, rows: list[dict]) -> None:
 
 
 def load_fixtures(conn: Connection, name: str = "rate_14") -> None:
-    b = load_bundle(name)
+    b: dict[str, list[Any]] = load_bundle(name)  # type: ignore[assignment]  # объекты разных схем
     dump = lambda o: o.model_dump(mode="json")  # noqa: E731
     _upsert(
         conn,

@@ -76,7 +76,7 @@ def message_to_item(src: Source, channel: str, msg, fetched_at: datetime) -> Raw
         peer = getattr(f, "from_id", None)
         fwd = (
             f.from_name
-            or (f"channel:{peer.channel_id}" if getattr(peer, "channel_id", None) else None)
+            or (f"channel:{getattr(peer, 'channel_id', '')}" if getattr(peer, "channel_id", None) else None)
             or "unknown"
         )
     metrics = {k: v for k, v in (("views", msg.views), ("forwards", msg.forwards)) if v is not None}

@@ -49,10 +49,11 @@ def drop_reason(item: RawItem, rules: tuple[Rule, ...] | None = None) -> str | N
     for rule in rules or load_rules():
         if rule.sources and item.source_id not in rule.sources:
             continue
+        hit: bool
         if rule.where == "title":
-            hit = rule.pattern.search(item.title)
+            hit = bool(rule.pattern.search(item.title))
         elif rule.where == "body":
-            hit = rule.pattern.search(" ".join(filter(None, (item.title, item.lead, item.text))))
+            hit = bool(rule.pattern.search(" ".join(filter(None, (item.title, item.lead, item.text)))))
         elif rule.where == "tags":
             hit = any(rule.pattern.search(t) for t in item.source_tags)
         else:

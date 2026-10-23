@@ -171,7 +171,7 @@ def extract_rules(story: Story, items: list[RawItem]) -> EventFacts:
                 break
     st, intent, rumor = rules.status(text)
     types, _ = rules._config()
-    channels = next((t.channels for t in types if t.name == etype), [])
+    channels: list[str] = next((t.channels for t in types if t.name == etype), [])
     participants, geo, currencies, commodities, names = _participants(text)
     summary = _summary(rep)
     return EventFacts(
@@ -295,7 +295,7 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
         if str(x.get("okved", ""))[:2] in _okved() and quote_in_text(x.get("quote"), text)
     ]
     if facts.event_type != rule_type and not llm_channels:  # тип сменился — факторы нового типа
-        ch = next((t.channels for t in rules._config()[0] if t.name == facts.event_type), [])
+        ch: list[str] = next((t.channels for t in rules._config()[0] if t.name == facts.event_type), [])
         facts.channels = rules.channel_directions(text, ch)
     if facts.event_type == "other":  # вне таксономии (политика, происшествия) — факторов не ставим
         facts.channels = []

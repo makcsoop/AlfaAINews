@@ -75,7 +75,9 @@ def extract_positions(
     if not ans:
         return [], ["модель не вернула JSON"]
     doc_date = doc["date"] if isinstance(doc["date"], date) else date.fromisoformat(str(doc["date"]))
-    out, dropped, per_page = [], [], {}
+    out: list[BankPosition] = []
+    dropped: list[str] = []
+    per_page: dict[int, int] = {}
     for raw in ans.get("positions") or []:
         page, quote = raw.get("page"), raw.get("quote") or ""
         if page not in pages or not quote_in_text(quote, pages[page]):
@@ -156,7 +158,8 @@ def run(only: list[str] | None = None) -> dict:
 
     llm = ClientJsonLLM(max_calls=20)  # шаг бюджета bank_registry, Kimi без рассуждения
     engine = get_engine()
-    all_positions, stats = [], {"docs": 0, "positions": 0, "dropped": 0}
+    all_positions: list[BankPosition] = []
+    stats: dict[str, float] = {"docs": 0, "positions": 0, "dropped": 0}
     with engine.connect() as conn:
         texts = {d["id"]: doc_text(conn, d["id"]) for d in bank_docs()}
     for doc in bank_docs():
