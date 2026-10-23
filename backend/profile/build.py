@@ -92,7 +92,7 @@ def profile_from_row(row: Mapping[str, str | None]) -> CompanyProfile:
 
 
 def completeness(p: CompanyProfile) -> float:
-    filled = sum(getattr(p, f) is not None for f in KEY_FIELDS)
+    filled: float = sum(getattr(p, f) is not None for f in KEY_FIELDS)
     filled += len(p.products) / len(PRODUCT_COLUMNS)  # все продуктовые флаги считаются за одно поле
     return round(filled / (len(KEY_FIELDS) + 1), 2)
 

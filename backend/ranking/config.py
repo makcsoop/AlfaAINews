@@ -105,6 +105,13 @@ class DeepCfg(_Cfg):
     stop_at: float
 
 
+class RateLevelCfg(_Cfg):
+    types: list[str]
+    neutral: float
+    full_at: float
+    strength: float
+
+
 class FeedCfg(_Cfg):
     min_score: float
     deep_per_request: int
@@ -130,6 +137,7 @@ class ScoringConfig(_Cfg):
     polarity: PolarityCfg
     deep: DeepCfg
     feed: FeedCfg
+    rate_level: RateLevelCfg | None = None
 
 
 def role_weight(cfg: "ScoringConfig", role: str | None, channel: str) -> float:

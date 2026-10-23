@@ -10,6 +10,7 @@ raw = Σ вкладов каналов + прямые совпадения + с�
 """
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,6 +31,7 @@ from backend.schemas.common import ChannelImpact, Polarity, UserRole
 from backend.schemas.insight import Surprise
 
 DIRECTION = {"up": 1, "down": -1, "flat": 0}
+_RATE_QUOTE = re.compile(r"ставк|годовых", re.IGNORECASE)  # «ключевую ставку … 14%», «на уровне 14% годовых»
 
 
 @dataclass(frozen=True)
@@ -39,7 +41,7 @@ class Driver:
     channel: str
     direction: int
     strength: float
-    origin: str  # analysis | facts | prior
+    origin: str  # analysis | facts | prior | level
 
 
 def story_drivers(
@@ -61,6 +63,26 @@ def story_drivers(
     if not et:
         return []
     return [Driver(ch, 1 if v > 0 else -1, abs(v), "prior") for ch, v in et.prior.items() if v]
+
+
+def rate_level_driver(
+    drivers: Sequence[Driver], facts: EventFacts | None, event_type: str | None, cfg: ScoringConfig
+) -> Driver | None:
+    """Пауза ЦБ: сдвига ставки нет (key_rate flat не даёт драйвера), но её уровень из фактов важен клиенту.
+    Ставка выше нейтральной — фактор «ставка ↑» с силой по высоте; знак для клиента ставит экспозиция."""
+    rl = cfg.rate_level
+    if rl is None or facts is None or event_type not in rl.types:
+        return None
+    if any(d.channel == "key_rate" for d in drivers):
+        return None
+    rates = [
+        n.value for n in facts.numbers if n.unit == "%" and 0 < n.value < 40 and _RATE_QUOTE.search(n.quote)
+    ]
+    rate = rates[0] if rates else None
+    if rate is None:
+        return None
+    level = max(0.0, min(1.0, (rate - rl.neutral) / rl.full_at))
+    return Driver("key_rate", 1, round(level * rl.strength, 3), "level") if level > 0 else None
 
 
 def quality(
@@ -259,6 +281,8 @@ def score_pair(
     drivers = story_drivers(story, facts, analysis)
     scope = sector_scope(profile, facts, graph, cfg, matrix)
     event_type = (facts.event_type if facts else None) or story.event_type
+    if (level := rate_level_driver(drivers, facts, event_type, cfg)) is not None:
+        drivers.append(level)
     only_prior = bool(drivers) and all(d.origin == "prior" for d in drivers)
     if only_prior and event_type in cfg.prior_unscoped_types and not (facts and facts.sectors_okved):
         scope *= cfg.prior_unscoped

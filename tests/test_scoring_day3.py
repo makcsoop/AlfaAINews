@@ -231,3 +231,32 @@ def test_not_relevant_lowers_similar_stories_only():
     useful = apply_feedback(scores, [{"story_id": "rate", "kind": "useful"}], types)
     assert next(r.score for r in useful if r.story_id == "rate") > before["rate"]
     assert apply_feedback(scores, [], types) == scores
+
+
+def _flat_hold(rate: float):
+    """Пауза ЦБ, совпавшая с ожиданием: key_rate flat (как у живых аналитиков 23.10), ставка в фактах."""
+    from backend.schemas.common import ChannelImpact, NumberFact
+
+    channels = [ChannelImpact(channel="key_rate", direction="flat", strength=0.0)]
+    numbers = [NumberFact(value=rate, unit="%", quote=f"сохранил ключевую ставку на уровне {rate:g}% годовых")]
+    return FACTS.model_copy(update={"channels": channels, "numbers": numbers})
+
+
+def test_rate_hold_at_high_level_matters_for_borrower_and_depositor():
+    from backend.profile.exposures import with_exposures
+
+    now = STORY.last_seen
+    b = score_pair(STORY, with_exposures(BORROWER), now=now, facts=_flat_hold(14.0), sources=SOURCES, role="cfo")
+    d = score_pair(STORY, with_exposures(DEPOSITOR), now=now, facts=_flat_hold(14.0), sources=SOURCES,
+                   role="treasurer")
+    assert b.score > 0.05 and d.score > 0.05
+    kr_b = next(c for c in b.contributions if c.factor == "key_rate")
+    kr_d = next(c for c in d.contributions if c.factor == "key_rate")
+    assert kr_b.sign == -1 and kr_d.sign == 1  # заёмщику дорогой долг, вкладчику доходность
+
+
+def test_rate_hold_at_neutral_level_adds_nothing():
+    from backend.profile.exposures import with_exposures
+
+    r = score_pair(STORY, with_exposures(BORROWER), now=STORY.last_seen, facts=_flat_hold(7.5), sources=SOURCES)
+    assert not any(c.factor == "key_rate" for c in r.contributions)

@@ -72,7 +72,10 @@ def evaluate(pairs: Sequence[PairEval], *, k: int = K, cfg: ScoringConfig | None
     by_client: dict[str, list[PairEval]] = defaultdict(list)
     for p in pairs:
         by_client[p.company_id].append(p)
-    nd, nd_b, pr, pr_b = [], [], [], []
+    nd: list[float] = []
+    nd_b: list[float] = []
+    pr: list[float] = []
+    pr_b: list[float] = []
     misses = {True: [0, 0], False: [0, 0]}
     for group in by_client.values():
         sys_order = sorted(group, key=lambda p: (-p.system, p.story_id))
