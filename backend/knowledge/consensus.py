@@ -25,7 +25,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from backend.db import models as m
 from backend.db.engine import get_engine
-from backend.extract.llm_adapter import OpenAIJsonLLM
+from backend.extract.llm_port import JsonLLM
 from backend.extract.verify import number_in_quote, quote_in_text
 from backend.ingest.registry import load_sources
 from backend.schemas import Evidence, MarketKnowledge
@@ -84,7 +84,7 @@ def candidate_posts(conn: Connection, meeting: date) -> list[dict]:
 
 
 def label_post(
-    llm: OpenAIJsonLLM, post: dict, meeting: date, rate_before: float | None = None
+    llm: JsonLLM, post: dict, meeting: date, rate_before: float | None = None
 ) -> dict | None:
     ans = llm.complete_json(
         model=MODEL,
@@ -145,7 +145,7 @@ def check_direction(expectation: str, quote: str) -> str | None:
 RU = {"hold": "паузу", "cut": "снижения", "hike": "повышения"}
 
 
-def build(conn: Connection, meeting: dict, llm: OpenAIJsonLLM) -> dict:
+def build(conn: Connection, meeting: dict, llm: JsonLLM) -> dict:
     day = meeting["date"] if isinstance(meeting["date"], date) else date.fromisoformat(str(meeting["date"]))
     posts = candidate_posts(conn, day)
     per_channel: dict[str, tuple[dict, dict]] = {}
@@ -231,13 +231,15 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--meeting", help="только это заседание, YYYY-MM-DD")
     args = ap.parse_args()
-    llm = OpenAIJsonLLM(max_calls=400)
+    from backend.llm.port import ClientJsonLLM
+
+    llm = ClientJsonLLM(max_calls=400)  # шаг бюджета knowledge_archive (общий клиент Р3)
     with get_engine().begin() as conn:
         for mt in meetings():
             if args.meeting and str(mt["date"]) != args.meeting:
                 continue
             log.info("консенсус: %s", json.dumps(build(conn, mt, llm), ensure_ascii=False, default=str))
-    log.info("LLM: вызовов %d, ошибок %d, cost %.3f", llm.usage.calls, llm.usage.failures, llm.usage.cost)
+    log.info("LLM: вызовов %d, ошибок %d, %.3f ₽", llm.usage.calls, llm.usage.failures, llm.usage.cost)
 
 
 if __name__ == "__main__":

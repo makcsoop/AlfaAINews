@@ -14,7 +14,6 @@ import logging
 import os
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 
 from telethon import TelegramClient
 from telethon.errors import (
@@ -38,14 +37,8 @@ TITLE_MAX = 200
 
 
 def _env(key: str) -> str:
-    """Переменная окружения, а при запуске с хоста — из .env (в Docker её передаёт compose)."""
-    if os.environ.get(key):
-        return os.environ[key]
-    path = Path(__file__).resolve().parents[2] / ".env"
-    if path.exists():
-        m = re.search(rf"^{key}=(.*)$", path.read_text(encoding="utf-8"), re.MULTILINE)
-        return m.group(1).strip() if m else ""
-    return ""
+    """Только переменные окружения (инвариант 9): в Docker их передаёт compose, с хоста — export."""
+    return os.environ.get(key, "").strip()
 
 
 def credentials() -> tuple[int, str, str] | None:

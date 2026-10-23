@@ -5,7 +5,8 @@
 `uv run python scripts/compare_extract_models.py [--n 10] [--max-calls 50]`
 
 Метрики на модель: валидный JSON, доля проверенных полей (цитата в тексте, число в цитате), сколько полей
-отброшено проверкой, тип события (совпадение с правилами), время, токены, стоимость по полю usage.cost.
+отброшено проверкой, тип события (совпадение с правилами), время, токены,
+стоимость в ₽ по журналу общего LLM-клиента.
 """
 
 import argparse
@@ -21,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.db import models as m
 from backend.db.engine import get_engine
 from backend.extract.extractor import extract, extract_rules
-from backend.extract.llm_adapter import OpenAIJsonLLM
+from backend.llm.port import ClientJsonLLM
 from backend.schemas import RawItem, Story
 
 MODELS = ["google/gemma-4-26b-a4b-it", "qwen/qwen3.6-35b-a3b"]
@@ -65,7 +66,7 @@ def main() -> None:
     print(f"сюжетов: {len(sample)}; типы по правилам: {[extract_rules(s, i).event_type for s, i in sample]}")
     report = {}
     for model in MODELS:
-        llm = OpenAIJsonLLM(max_calls=args.max_calls)
+        llm = ClientJsonLLM(max_calls=args.max_calls)
         t0 = time.monotonic()
         agree = changed = verified_numbers = channels = unverified = with_llm = 0
         type_changes = []
@@ -83,10 +84,9 @@ def main() -> None:
             channels += sum(1 for c in facts.channels if c.evidence)
             unverified += len(facts.unverified_fields)
         u = llm.usage
-        json_ok = sum(1 for e in u.log if e["json_ok"])
         report[model] = {
             "вызовов": u.calls,
-            "валидный JSON": f"{json_ok}/{len(u.log)}",
+            "валидный JSON": f"{len(u.log)}/{u.calls}",
             "сюжетов с ответом модели": f"{with_llm}/{len(sample)}",
             "повторов из-за провалов проверки": u.calls - len(sample),
             "отброшено полей проверкой": unverified,
@@ -95,7 +95,7 @@ def main() -> None:
             "тип совпал с правилами": agree,
             "тип уточнён моделью": changed,
             "токены вход/выход": f"{u.tokens_in}/{u.tokens_out}",
-            "стоимость (usage.cost)": round(u.cost, 5),
+            "стоимость, ₽ (журнал клиента)": round(u.cost, 5),
             "секунд": round(time.monotonic() - t0, 1),
             "смены типа": type_changes,
         }

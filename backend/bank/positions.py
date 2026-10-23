@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 from backend.bank.ocr import DOCS, bank_docs
 from backend.db import models as m
 from backend.db.engine import get_engine
-from backend.extract.llm_adapter import OpenAIJsonLLM
+from backend.extract.llm_port import JsonLLM
 from backend.extract.verify import number_in_quote, quote_in_text
 from backend.schemas import BankPosition
 
@@ -60,7 +60,7 @@ def doc_text(conn: Connection, doc_id: str) -> dict[int, str]:
 
 
 def extract_positions(
-    doc: dict, pages: dict[int, str], llm: OpenAIJsonLLM
+    doc: dict, pages: dict[int, str], llm: JsonLLM
 ) -> tuple[list[BankPosition], list[str]]:
     channels = _channels()
     body = "\n\n".join(f"=== Страница {p} ===\n{t}" for p, t in pages.items())
@@ -152,7 +152,9 @@ def save(conn: Connection, positions: list[BankPosition], docs: set[str]) -> Non
 
 
 def run(only: list[str] | None = None) -> dict:
-    llm = OpenAIJsonLLM(max_calls=20, timeout=240)
+    from backend.llm.port import ClientJsonLLM
+
+    llm = ClientJsonLLM(max_calls=20)  # шаг бюджета bank_registry, Kimi без рассуждения
     engine = get_engine()
     all_positions, stats = [], {"docs": 0, "positions": 0, "dropped": 0}
     with engine.connect() as conn:

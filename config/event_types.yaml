@@ -27,10 +27,20 @@ event_types:
   fx_move:
     channels: ["fx_rub"]
     patterns: ['курс\w* (доллар|евро|юан|рубл)', '(доллар|евро|юань|рубль)\w* (подорожал|подешевел|укрепил|ослаб|вырос|упал)', 'официальн\w+ курс', '(покупк|продаж)\w* (юан|валют)\w*.{0,40}(ЦБ|Минфин|бюджетн)', '(ЦБ|Минфин)\w*.{0,40}(покупк|продаж)\w* (юан|валют)']
+  # Санкции — только мера (ввели / расширили / продлили / сняли, пакет, SDN), а не слово «санкции»:
+  # заявления политиков и переговоры без меры остаются other. «Не ввели» отсекает код (rules.NEGATABLE).
+  sanctions_relief:
+    channels: ["trade_restrictions", "logistics_costs"]
+    prior: {"trade_restrictions": -0.6, "logistics_costs": -0.4}
+    patterns: ['\b(снял|сняли|сняло|снимает|снимают|отменил|отменили|отменяет|ослабил|ослабили|смягчил|смягчили|исключил|исключили|исключен|исключён|исключена)\b\s(\S+\s){0,6}?(санкци|SDN)', 'санкци\w*\s(\S+\s){0,4}?(сняты|снят|отменены|отменен|ослаблены|приостановлен\w*)\b']
+  secondary_sanctions:
+    channels: ["trade_restrictions", "logistics_costs", "capital_controls"]
+    prior: {"trade_restrictions": 0.8, "logistics_costs": 0.7, "capital_controls": 0.4}
+    patterns: ['\b(ввел|ввёл|ввели|ввело|вводит|вводят|введут|наложил|наложили|применил|применили)\b\s(\S+\s){0,4}?вторичн\w+ санкци', 'вторичн\w+ санкци\w*\s(\S+\s){0,4}?(введен\w*|введён\w*|наложен\w*)\b']
   sanctions:
     channels: ["trade_restrictions", "logistics_costs", "fx_rub"]
     prior: {"trade_restrictions": 0.8, "logistics_costs": 0.5, "counterparty_defaults": 0.3}
-    patterns: ['санкци', 'ограничительн\w+ мер', '\bOFAC\b', 'черн\w+ спис']
+    patterns: ['\b(ввел|ввёл|ввели|ввело|вводит|вводят|введут|расширил|расширили|расширяет|расширят|продлил|продлили|продлевает|продлит|продлят|утвердил|утвердили|одобрил|одобрили|наложил|наложили|включил|включили|внес|внёс|внесли|принял|приняли)\b\s(\S+\s){0,6}?(санкци|ограничительн\w+ мер|в санкционн\w+ спис|в черн\w+ спис|в SDN)', 'санкци\w*\s(\S+\s){0,4}?(введен\w*|введён\w*|вступ\w* в силу|вступил\w*|расширен\w*|продлен\w*|продлён\w*|утвержден\w*|утверждён\w*|одобрен\w*)\b', '\b\d+-?(й|го|м)? пакет\w* санкци', '\bнов\w+ пакет\w* санкци', '\bSDN\b', '\bOFAC\b', '\bпопал\w* под (санкци|ограничени)', '\bпод (санкци|ограничени)\w* (попал|попали|попадут|попадает)']
   tariff_duty:
     channels: ["trade_restrictions"]
     prior: {"trade_restrictions": 0.6}
@@ -98,12 +108,6 @@ event_types:
     channels: []
 
   # ---------- расширение до 40 (паттернов пока нет: тип ставит LLM-экстрактор) ----------
-  secondary_sanctions:
-    channels: ["trade_restrictions", "logistics_costs", "capital_controls"]
-    prior: {"trade_restrictions": 0.8, "logistics_costs": 0.7, "capital_controls": 0.4}
-  sanctions_relief:
-    channels: ["trade_restrictions", "logistics_costs"]
-    prior: {"trade_restrictions": -0.6, "logistics_costs": -0.4}
   export_duty:
     channels: ["trade_restrictions", "fx_rub"]
     prior: {"trade_restrictions": 0.7, "tax_burden": 0.4}

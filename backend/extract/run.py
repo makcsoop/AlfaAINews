@@ -19,6 +19,8 @@ from backend.schemas import EventFacts, RawItem, Story
 
 log = logging.getLogger(__name__)
 
+LLM_MIN_CORROBORATION = 2  # модель — для confirmed и для сюжетов из 2+ независимых источников
+
 
 def stories_to_extract(conn: Connection, since: datetime, force: bool = False) -> list[Story]:
     rows = conn.execute(
@@ -66,15 +68,20 @@ def run(
 ) -> dict:
     since = datetime.now(UTC) - timedelta(hours=hours)
     stories = [s for s in stories_to_extract(conn, since, force) if s.corroboration >= min_corroboration]
-    if limit:  # для LLM: сначала самые подтверждённые
-        stories = sorted(stories, key=lambda s: (-s.corroboration, s.first_seen))[:limit]
+    # модель типирует подтверждённые сюжеты (их видит лента), остальные — правила;
+    # сначала самые подтверждённые
+    for_llm = sorted(
+        (s for s in stories if s.status == "confirmed" or s.corroboration >= LLM_MIN_CORROBORATION),
+        key=lambda s: (-s.corroboration, s.first_seen),
+    )
+    llm_ids = {s.id for s in for_llm[:limit]} if llm else set()
     stats = {"stories": len(stories), "llm": 0, "unverified": 0}
     for story in stories:
         rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(story.item_ids))).scalars()
         items = [RawItem.model_validate(r) for r in rows]
         if not items:
             continue
-        facts = extract(story, items, llm)
+        facts = extract(story, items, llm if story.id in llm_ids else None)
         save_facts(conn, facts)
         stats["llm"] += facts.extractor_model is not None and not facts.extractor_model.startswith("rules")
         stats["unverified"] += bool(facts.unverified_fields)
@@ -92,15 +99,15 @@ def main() -> None:
     ap.add_argument(
         "--force", action="store_true", help="пересчитать и уже извлечённые (после правки правил)"
     )
-    ap.add_argument("--llm", action="store_true", help="уточнять факты моделью (Gemma, временный адаптер)")
-    ap.add_argument("--limit", type=int, help="не больше N сюжетов (самые подтверждённые)")
+    ap.add_argument("--llm", action="store_true", help="уточнять факты моделью (шаг extract общего клиента)")
+    ap.add_argument("--limit", type=int, help="моделью не больше N сюжетов (самые подтверждённые)")
     ap.add_argument("--min-corroboration", type=int, default=0)
     args = ap.parse_args()
     llm = None
     if args.llm:
-        from backend.extract.llm_adapter import OpenAIJsonLLM
+        from backend.llm.port import ClientJsonLLM
 
-        llm = OpenAIJsonLLM(max_calls=2 * (args.limit or 50))
+        llm = ClientJsonLLM(max_calls=2 * (args.limit or 150))  # шаг бюджета extract
     t0 = time.monotonic()
     with get_engine().begin() as conn:
         stats = run(

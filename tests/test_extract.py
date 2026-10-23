@@ -53,6 +53,45 @@ def test_event_type(title, etype):
     assert rules.event_type(title, None)[0] == etype
 
 
+# живой прогон 23.10: политика со словом «санкции» без меры занимала топ ленты как sanctions
+@pytest.mark.parametrize(
+    ("title", "lead"),
+    [
+        (
+            "Уиткофф передал Москве предложения США по урегулированию на Украине",
+            "План предусматривает поэтапное снятие санкций и гарантии безопасности.",
+        ),
+        (
+            "Россия и Черногория обсудили отношения",
+            "Подгорица присоединилась к антироссийским санкциям ЕС в 2022 году.",
+        ),
+        ("ЕС не стал вводить санкции на мех соболя", "Мех соболя исключили из проекта ограничений."),
+        (
+            "Водолацкий: США и Европа переходят к диалогу",
+            "Депутат считает, что санкции больше не работают и Запад ищет компромисс.",
+        ),
+    ],
+)
+def test_political_statements_are_not_sanctions(title, lead):
+    assert not rules.event_type(title, lead)[0].endswith("sanctions")
+
+
+@pytest.mark.parametrize(
+    ("title", "etype"),
+    [
+        ("США ввели санкции против «Роснефти» и «Лукойла»", "sanctions"),
+        ("Евросоюз утвердил 21-й пакет санкций против России", "sanctions"),
+        ("Минфин США внес «Газпром нефть» в список SDN", "sanctions"),
+        ("Санкции против российских банков продлены до 2027 года", "sanctions"),
+        ("ЕС не ввел новые санкции против банков", "other"),
+        ("США сняли санкции с «Белавиа»", "sanctions_relief"),
+        ("Минфин США ввел вторичные санкции против китайских банков", "secondary_sanctions"),
+    ],
+)
+def test_sanctions_need_a_measure(title, etype):
+    assert rules.event_type(title, None)[0] == etype
+
+
 @pytest.mark.parametrize(
     ("text", "status"),
     [
@@ -118,7 +157,7 @@ def test_llm_verified_fields_applied():
     assert facts.summary == "ЦБ сохранил ставку 14%" and facts.unverified_fields == []
     assert facts.channels[0].strength == 0.7 and facts.channels[0].evidence[0].verified
     assert len(llm.calls) == 1
-    assert '<untrusted_source id="it1">' in llm.calls[0]["user"]  # новость — только как данные
+    assert "<data>\n[материал it1]" in llm.calls[0]["user"]  # новость — только как данные (data_block)
 
 
 def test_llm_hallucinations_dropped_after_one_retry():
@@ -136,3 +175,42 @@ def test_llm_hallucinations_dropped_after_one_retry():
     assert not any(n.value == 16 for n in facts.numbers)
     assert all(c.channel != "weather" for c in facts.channels)
     assert facts.summary != "ЦБ сохранил ставку 14%"  # сводка осталась от правил
+
+
+SANCTIONS_TEXT = (
+    "США ввели санкции против «Роснефти» и «Лукойла». Ограничения касаются экспорта нефти "
+    "и операций в долларах."
+)
+
+
+def test_rules_put_okved_on_sector_events_only():
+    oil = extract_rules(_story(), [_item(title="США ввели санкции против «Роснефти» и «Лукойла»", text=SANCTIONS_TEXT)])
+    assert oil.event_type == "sanctions" and oil.sectors_okved == ["06"]
+    rate = extract_rules(_story(), [_item()])
+    assert rate.event_type == "rate_decision" and rate.sectors_okved == []  # макрособытие — без отрасли
+
+
+def test_llm_other_overrides_rule_type_and_its_channels():
+    # правила видят меру, модель — нет (условная проверка приоритета): «other» модели побеждает
+    item = _item(title="США ввели санкции против «Роснефти» и «Лукойла»", text=SANCTIONS_TEXT)
+    llm = FixtureLLM({**GOOD, "event_type": "other", "channels": [], "summary_quote": "США ввели санкции"})
+    facts = extract(_story(), [item], llm)
+    assert facts.event_type == "other" and facts.sectors_okved == [] and facts.channels == []
+
+
+def test_llm_sectors_need_a_quote():
+    item = _item(title="США ввели санкции против «Роснефти» и «Лукойла»", text=SANCTIONS_TEXT)
+    ans = {
+        **GOOD,
+        "event_type": "sanctions",
+        "summary_quote": "США ввели санкции",
+        "channels": [],
+        "numbers": [],
+        "sectors": [
+            {"okved": "06", "quote": "Ограничения касаются экспорта нефти"},
+            {"okved": "64", "quote": "санкции против банков"},  # цитаты нет в тексте
+            {"okved": "99", "quote": "США ввели санкции"},  # такого ОКВЭД нет в матрице
+        ],
+    }
+    facts = extract(_story(), [item], FixtureLLM(ans))
+    assert facts.sectors_okved == ["06"]
