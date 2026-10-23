@@ -109,7 +109,7 @@ def test_both_analysts_answer_on_rate14(tmp_path, dossier):
     for name in ("business", "finance"):
         r = res[name]
         assert r.failure is None and r.report is not None
-        assert r.prompt_version == f"analyst_{name}@3"
+        assert r.prompt_version == f"analyst_{name}@4"
         assert r.notes == [] and r.check_failures == 0
         assert r.drivers_total == len(r.report.channels) >= 3
         assert r.cost_rub == 0.0
@@ -285,8 +285,8 @@ def test_missing_fixture_is_unavailable_not_crash(tmp_path, dossier):
 def test_prompt_versions_in_headers():
     for step in ("analyst_business", "analyst_finance"):
         text, version = load_prompt(step)
-        assert version == f"{step}@3"
-        assert text.startswith(f"<!-- version: {step}@3 -->")
+        assert version == f"{step}@4"
+        assert text.startswith(f"<!-- version: {step}@4 -->")
         assert "<data>" in text  # правило про блок данных
         assert "refs" in text
 
@@ -340,7 +340,7 @@ def test_journal_has_prompt_version(tmp_path, dossier):
     run_analysts_detailed(dossier, client=client, trace_id="t10")
     entries = client.journal._entries
     versions = {e.step: e.prompt_version for e in entries}
-    assert versions == {"analyst_business": "analyst_business@3", "analyst_finance": "analyst_finance@3"}
+    assert versions == {"analyst_business": "analyst_business@4", "analyst_finance": "analyst_finance@4"}
     assert all(e.cost_rub == 0.0 for e in entries)
 
 

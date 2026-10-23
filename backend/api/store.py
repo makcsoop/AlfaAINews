@@ -165,6 +165,7 @@ class _Feed:
     cards: dict[str, str] = field(default_factory=dict)  # story_id -> card_id (сейчас в ленте)
     deep: set[str] = field(default_factory=set)  # сюжеты с глубокой карточкой
     attempted: set[str] = field(default_factory=set)  # по ним глубокий разбор уже запускали или он не нужен
+    pinned: set[str] = field(default_factory=set)  # прислал пользователь (/analyze): из ленты не убираем
 
 
 class PipelineCardStore:
@@ -295,6 +296,7 @@ class PipelineCardStore:
             if old and old != card.card_id:
                 self._cards.pop(old, None)
             self._put_fast(feed, ctx, story, rel, card)
+            feed.pinned.add(story_id)
             return self._cards.get(feed.cards[story_id], card)
 
     def _load_cached(self, feed: _Feed, story_id: str) -> bool:
@@ -379,7 +381,7 @@ class PipelineCardStore:
         self._traces[trace.run_id] = trace
         if _is_degraded(trace):
             self._log_run(feed, story_id, "failed", reason="pipeline_failed", trace=trace)
-        if card.relevance.score < self._min_score():
+        if card.relevance.score < self._min_score() and story_id not in feed.pinned:
             self._drop(feed, story_id)
             self._log_run(
                 feed, story_id, "dropped", reason="значимость после разбора ниже порога ленты",

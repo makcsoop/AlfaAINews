@@ -138,3 +138,24 @@ def test_not_relevant_lowers_same_event_type(monkeypatch):
     assert ranked[1].relevance.score == 0.5  # значимость в карточке не меняется, только порядок
     useful = [{"company_id": BORROWER, "story_id": "c", "kind": "useful"}]
     assert rank_with_feedback([rate, rate2, duty], useful)[0].card_id == "c_c"  # 0,4 × 1,3 = 0,52
+
+
+def test_pasted_story_kept_after_deep_below_threshold(store):
+    """Сюжет, который прислал пользователь, остаётся в ленте и после разбора с низкой значимостью."""
+    from datetime import UTC, datetime
+
+    from backend.schemas import RunTrace
+
+    def runner(story_id, company_id, role, *, sector, story_version, handlers):
+        fast = store._cards[f"card_{story_id}_{company_id}_{role}"]
+        now = datetime.now(UTC)
+        trace = RunTrace(run_id=f"run_{story_id}", story_id=story_id, company_id=company_id,
+                         started_at=now, finished_at=now)
+        rel = fast.relevance.model_copy(update={"score": 0.0, "deep_analysis": True})
+        return fast.model_copy(update={"trace_id": trace.run_id, "relevance": rel, "stage": "deep"}), trace
+
+    store._runner = runner
+    card = store.add_story(PASTED, BORROWER, "cfo")
+    store._run_deep(store._feeds[(BORROWER, "cfo")], PASTED)
+    assert [c.event.story_id for c in store.list_cards(BORROWER, "cfo")] == [PASTED]
+    assert store.deep_runs(BORROWER)[-1].status == "published" and card is not None
