@@ -214,3 +214,41 @@ def test_llm_sectors_need_a_quote():
     }
     facts = extract(_story(), [item], FixtureLLM(ans))
     assert facts.sectors_okved == ["06"]
+
+
+@pytest.mark.parametrize(
+    ("title", "lead", "etype"),
+    [
+        ("Еврокомиссия сохранит исключение на соболиный мех из России даже в самом жестком пакете санкций", None, "other"),
+        ("Модники из Евросоюза захотели российских шуб", "ЕС вывел из-под санкций российский соболиный мех.", "sanctions_relief"),
+    ],
+)
+def test_sanctions_exemptions_are_not_new_measures(title, lead, etype):
+    assert rules.event_type(title, lead)[0] == etype
+
+
+def test_other_type_gets_no_factors_even_from_llm():
+    # политика и происшествия вне таксономии: факторы с цитатами от модели не должны поднимать их в ленте
+    item = _item(title="Воздушная тревога объявлена в аэропорту Шереметьево", text="Аэропорт закрыт на два часа, рейсы задерживаются.")
+    ans = {
+        **GOOD,
+        "event_type": "other",
+        "summary_quote": "Аэропорт закрыт на два часа",
+        "numbers": [],
+        "channels": [{"channel": "logistics_costs", "direction": "up", "strength": 0.5, "quote": "рейсы задерживаются"}],
+    }
+    facts = extract(_story(), [item], FixtureLLM(ans))
+    assert facts.event_type == "other" and facts.channels == []
+
+
+@pytest.mark.parametrize(
+    ("title", "etype"),
+    [
+        ("Задействованную в ликвидации последствий стихии в Ялте группировку увеличили", "other"),
+        ("Кадыров заявил о ликвидации подозреваемого в диверсиях в районе Гудермеса", "other"),
+        ("Суд начал ликвидацию компании «Ромашка» по иску ФНС", "default_bankruptcy"),
+        ("ЦБ отозвал лицензию у московского банка", "default_bankruptcy"),
+    ],
+)
+def test_liquidation_means_a_company(title, etype):
+    assert rules.event_type(title, None)[0] == etype

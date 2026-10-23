@@ -12,12 +12,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.stdout.reconfigure(encoding="utf-8")  # консоль Windows — cp1251
 
-from backend.agents.steps import profile_v1
-from backend.agents.tools.db_source import DbDataSource
-from backend.db.engine import get_engine
-from backend.ranking.score import score_pair
-from backend.ranking.surprise import find_surprise
+from backend.agents.steps import profile_v1  # noqa: E402
+from backend.agents.tools.db_source import DbDataSource  # noqa: E402
+from backend.db.engine import get_engine  # noqa: E402
+from backend.ranking.score import score_pair  # noqa: E402
+from backend.ranking.surprise import find_surprise  # noqa: E402
 
 
 def main() -> None:

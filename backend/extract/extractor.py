@@ -18,6 +18,7 @@ from functools import lru_cache
 from backend.extract import rules
 from backend.extract.entities import extract_entities, regulators
 from backend.extract.llm_port import JsonLLM, NoLLM
+from backend.extract.sanitize import strip_injections
 from backend.extract.verify import number_in_quote, quote_in_text
 from backend.ingest.registry import load_sources
 from backend.llm.client import data_block
@@ -115,8 +116,9 @@ def representative(items: list[RawItem]) -> RawItem:
 
 
 def full_text(item: RawItem) -> str:
+    """Заголовок, лид и текст без предложений-команд для модели (внедрённые инструкции)."""
     parts = [item.title, item.lead or "", item.text or ""]
-    return "\n".join(p for p in parts if p)[:MAX_TEXT]
+    return strip_injections("\n".join(p for p in parts if p)[:MAX_TEXT])[0]
 
 
 def _participants(text: str) -> tuple[list[Participant], list[str], list[str], list[str], list[str]]:
@@ -145,7 +147,7 @@ _WEAK_START = ("это ", "об этом", "он ", "она ", "они ", "пр�
 
 def _summary(rep: RawItem) -> str:
     """Первая фраза лида, если она самостоятельна; иначе заголовок (он тоже есть в тексте источника)."""
-    first = rules.sentences(rep.lead or rep.text or "")
+    first = rules.sentences(strip_injections(rep.lead or rep.text or "")[0])
     s = first[0].splitlines()[0].strip() if first else ""
     if len(s) < 60 or s.lower().startswith(_WEAK_START):
         return rep.title
@@ -295,6 +297,8 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
     if facts.event_type != rule_type and not llm_channels:  # тип сменился — факторы нового типа
         ch = next((t.channels for t in rules._config()[0] if t.name == facts.event_type), [])
         facts.channels = rules.channel_directions(text, ch)
+    if facts.event_type == "other":  # вне таксономии (политика, происшествия) — факторов не ставим
+        facts.channels = []
     if facts.event_type in rules.MACRO_TYPES:
         facts.sectors_okved = []
     elif llm_sectors:

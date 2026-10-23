@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+sys.stdout.reconfigure(encoding="utf-8")  # консоль Windows — cp1251
 
 from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: E402
 from sqlalchemy import select  # noqa: E402

@@ -28,6 +28,7 @@ FORECAST = re.compile(r"\b(прогноз\w*|ожида\w+|ждут|ожидан
 # типы-меры, которые отрицание отменяет: «не ввели санкции» — не санкции
 NEGATABLE = {"sanctions", "secondary_sanctions", "sanctions_relief"}
 _NEG = re.compile(r"\bне(\s+\w+){0,2}\s*$", re.IGNORECASE)
+_EXEMPT = re.compile(r"\bисключени\w*\b|\bиз-под санкци\w*", re.IGNORECASE)
 
 # Число + единица. Порядок важен: сначала длинные единицы.
 _UNITS = [
@@ -125,6 +126,8 @@ def event_type(title: str, lead: str | None) -> tuple[str, str | None]:
         for et in types:
             for rx in et.patterns:
                 m = rx.search(part)
+                if m and et.name == "sanctions" and _EXEMPT.search(part):
+                    continue  # исключение из пакета, вывод из-под санкций — не новая мера
                 if m and not (et.name in NEGATABLE and _negated(part, m.start())):
                     return et.name, part
     return "other", None
