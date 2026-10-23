@@ -1,17 +1,18 @@
 """API: лента, карточка, журнал, вопрос-ответ (заглушки), сессия и защита company_id."""
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
 from backend.api.errors import install_error_handling
 from backend.api.labeling import router as labeling_router
-from backend.api.routes import router
+from backend.api.routes import AuditDep, SessionDep, router
 from backend.db import models as m
 from backend.db.engine import get_engine
 from backend.ingest.store import ingest_stats
 from backend.profile.graph import get_graph
 from backend.schemas import CounterpartyGraph
+from backend.security.guard import enforce_company
 
 app = FastAPI(title="AlfaAINews")
 app.add_middleware(
@@ -50,12 +51,18 @@ def stats() -> list[dict]:
 
 
 @app.get("/companies/{company_id}/counterparties", response_model=CounterpartyGraph)
-def counterparties(company_id: str) -> CounterpartyGraph:
-    """Топ-10 поставщиков и покупателей, их отрасли, доли, HHI и связи компании (граф платежей)."""
+def counterparties(
+    company_id: str, request: Request, session: SessionDep, audit: AuditDep
+) -> CounterpartyGraph:
+    """Топ-10 поставщиков и покупателей, их отрасли, доли, HHI и связи компании (граф платежей).
+
+    Только своя компания из сессии: чужой id → 403 и запись в журнал (инвариант 6).
+    """
+    cid = enforce_company(session, company_id, request, audit)
     with get_engine().connect() as conn:
-        graph = get_graph(conn, company_id)
+        graph = get_graph(conn, cid)
     if graph is None:
-        raise HTTPException(404, f"нет платежей по компании {company_id}")
+        raise HTTPException(404, "нет платежей по компании")
     return graph
 
 

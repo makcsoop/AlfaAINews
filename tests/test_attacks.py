@@ -166,3 +166,11 @@ def test_rate_limiter_window():
     assert rl.allow("a", now=0) and rl.allow("a", now=1) and not rl.allow("a", now=2)
     assert rl.allow("b", now=2)
     assert rl.allow("a", now=61)
+
+
+def test_http_counterparties_graph_needs_session_and_own_company(http, audit):
+    assert http.get(f"/companies/{BORROWER}/counterparties").status_code == 401
+    login(http)
+    r = http.get("/companies/U_OTHER_COMPANY/counterparties")
+    assert r.status_code == 403 and "U_OTHER_COMPANY" not in r.text
+    assert audit.records
