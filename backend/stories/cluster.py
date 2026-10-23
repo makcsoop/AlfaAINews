@@ -165,6 +165,12 @@ def rebuild(conn: Connection, hours: float = 72, now: datetime | None = None) ->
 
     old_ids = set(conn.execute(select(m.stories.c.id).where(m.stories.c.first_seen >= since)).scalars())
     new_ids = {s.id for s in stories}
+    # версию ведёт экстрактор (существенное изменение фактов) — пересборка её не сбрасывает
+    versions = dict(
+        conn.execute(select(m.stories.c.id, m.stories.c.version).where(m.stories.c.id.in_(new_ids))).all()
+    )
+    for s in stories:
+        s.version = versions.get(s.id) or 1
     if old_ids - new_ids:
         conn.execute(
             update(m.raw_items).where(m.raw_items.c.story_id.in_(old_ids - new_ids)).values(story_id=None)

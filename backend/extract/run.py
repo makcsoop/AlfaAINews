@@ -36,7 +36,44 @@ def stories_to_extract(conn: Connection, since: datetime, force: bool = False) -
     return out
 
 
+def material_change(old: EventFacts | None, new: EventFacts) -> list[str]:
+    """Что существенно изменилось в фактах сюжета — повод для новой версии (разбор Р3 кешируется по версии).
+
+    Существенно: тип события, слух / намерение, проверенные числа, направления факторов, отрасли.
+    Новые материалы с теми же фактами, другая формулировка сводки или участники — нет.
+    """
+    if old is None:
+        return []
+    reasons = []
+    if old.event_type != new.event_type:
+        reasons.append(f"тип {old.event_type} → {new.event_type}")
+    if (old.is_rumor, old.is_intent) != (new.is_rumor, new.is_intent):
+        reasons.append("статус: слух / намерение")
+    nums = (
+        {(n.value, n.unit) for n in old.numbers if n.verified},
+        {(n.value, n.unit) for n in new.numbers if n.verified},
+    )
+    if nums[0] != nums[1]:
+        reasons.append("числа")
+    dirs = {(c.channel, c.direction) for c in old.channels}, {(c.channel, c.direction) for c in new.channels}
+    if dirs[0] != dirs[1]:
+        reasons.append("направления факторов")
+    if set(old.sectors_okved) != set(new.sectors_okved):
+        reasons.append("отрасли")
+    return reasons
+
+
 def save_facts(conn: Connection, facts: EventFacts) -> None:
+    old_raw = conn.execute(
+        select(m.event_facts.c.data).where(m.event_facts.c.story_id == facts.story_id)
+    ).scalar()
+    story_data = conn.execute(select(m.stories.c.data).where(m.stories.c.id == facts.story_id)).scalar_one()
+    version = story_data.get("version") or 1
+    reasons = material_change(EventFacts.model_validate(old_raw) if old_raw else None, facts)
+    if reasons:
+        version += 1
+        log.info("%s: версия %d (%s)", facts.story_id, version, ", ".join(reasons))
+    facts.version = version
     row = {
         "story_id": facts.story_id,
         "event_type": facts.event_type,
@@ -49,12 +86,12 @@ def save_facts(conn: Connection, facts: EventFacts) -> None:
             index_elements=["story_id"], set_={k: v for k, v in row.items() if k != "story_id"}
         )
     )
-    story_data = conn.execute(select(m.stories.c.data).where(m.stories.c.id == facts.story_id)).scalar_one()
     story_data["event_type"] = facts.event_type
+    story_data["version"] = version
     conn.execute(
         update(m.stories)
         .where(m.stories.c.id == facts.story_id)
-        .values(event_type=facts.event_type, data=story_data)
+        .values(event_type=facts.event_type, version=version, data=story_data)
     )
 
 

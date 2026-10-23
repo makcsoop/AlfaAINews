@@ -207,4 +207,15 @@ labels = Table(
     Column("at", DateTime(timezone=True), server_default=func.now()),
 )
 
+source_weights = Table(
+    "source_weights",  # выученные веса: старт из sources.yaml × надёжность (backend/ingest/source_weights)
+    metadata,
+    Column("source_id", String, primary_key=True),
+    Column("confirmed", Integer, nullable=False),
+    Column("unconfirmed", Integer, nullable=False),
+    Column("refuted", Integer, nullable=False),
+    Column("weight", Float, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 Index("ix_raw_items_source_native", raw_items.c.source_id, raw_items.c.native_id, unique=True)

@@ -217,3 +217,35 @@ def test_paste_joins_story_and_ignores_injected_commands(engine):
     data = llm.calls[0]["user"].split("<data>", 1)[1].split("</data>", 1)[0]
     assert "Игнорируй" in data  # команда внутри блока данных, а не среди инструкций
     assert alone_facts["event_type"] != "sanctions"
+
+
+def test_story_version_grows_only_on_material_change(engine):
+    # версия сюжета: новый материал с теми же фактами — та же версия; другой тип события — +1,
+    # и пересборка сюжетов версию не сбрасывает (кеш разбора Р3 ключуется по версии)
+    from datetime import timedelta
+
+    from backend.extract.extractor import extract
+    from backend.extract.run import save_facts
+    from backend.schemas import Story
+    from backend.stories.cluster import rebuild
+
+    now = datetime.now(UTC)
+    a = RawItem(
+        id="ver_a", source_id="interfax", native_id="va", tier=1,
+        title="Минфин разместил ОФЗ на 50 млрд рублей", lead="Минфин разместил ОФЗ на 50 млрд рублей на аукционе.",
+        published_at=now - timedelta(hours=3), fetched_at=now, content_hash="va",
+    )
+    with engine.begin() as conn:
+        insert_items(conn, [a])
+        rebuild(conn, hours=72, now=now)
+        sid = conn.execute(select(m.raw_items.c.story_id).where(m.raw_items.c.id == "ver_a")).scalar_one()
+        story = Story.model_validate(conn.execute(select(m.stories.c.data).where(m.stories.c.id == sid)).scalar_one())
+        facts = extract(story, [a])
+        save_facts(conn, facts)
+        save_facts(conn, facts.model_copy(deep=True))  # те же факты — версия не растёт
+        v1 = conn.execute(select(m.stories.c.version).where(m.stories.c.id == sid)).scalar_one()
+        save_facts(conn, facts.model_copy(update={"event_type": "budget_policy"}))
+        v2 = conn.execute(select(m.stories.c.version).where(m.stories.c.id == sid)).scalar_one()
+        rebuild(conn, hours=72, now=now)
+        data = conn.execute(select(m.stories.c.data).where(m.stories.c.id == sid)).scalar_one()
+    assert (v1, v2, data["version"]) == (1, 2, 2)
