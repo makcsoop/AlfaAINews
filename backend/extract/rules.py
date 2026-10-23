@@ -27,7 +27,8 @@ RUMOR = re.compile(
 FORECAST = re.compile(r"\b(прогноз\w*|ожида\w+|ждут|ожидани\w+)\b", re.IGNORECASE)
 # типы-меры, которые отрицание отменяет: «не ввели санкции» — не санкции
 NEGATABLE = {"sanctions", "secondary_sanctions", "sanctions_relief"}
-_NEG = re.compile(r"\bне(\s+\w+){0,2}\s*$", re.IGNORECASE)
+# отрицание и условие: «не ввели», «нужно, чтобы сняли», «если продлят»
+_NEG = re.compile(r"\b(не|чтобы|если|когда|пока)(\s+\w+){0,2}\s*$", re.IGNORECASE)
 _EXEMPT = re.compile(r"\bисключени\w*\b|\bиз-под санкци\w*", re.IGNORECASE)
 
 # Число + единица. Порядок важен: сначала длинные единицы.

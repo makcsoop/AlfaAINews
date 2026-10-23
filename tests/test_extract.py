@@ -305,3 +305,13 @@ def test_llm_sanctions_type_kept_with_measure():
     item = _item(title="США ввели санкции против «Роснефти» и «Лукойла»", text=SANCTIONS_TEXT)
     ans = {**GOOD, "event_type": "sanctions", "summary_quote": "США ввели санкции", "numbers": [], "channels": []}
     assert extract(_story(), [item], FixtureLLM(ans)).event_type == "sanctions"
+
+
+def test_conditional_relief_and_background_measure():
+    lead = "Нормализация возможна, но для этого нужно, чтобы сняли все абсолютно санкции, заявил Грушко."
+    assert rules.event_type("В Москве допускают нормализацию отношений с США", lead)[0] == "other"
+    # мера в фоне статьи («ранее ввели») — не тип события от модели
+    text = "Президент Кубы высмеял ордер на арест. Он выступил по телевидению. США ранее ввели санкции против Кубы."
+    item = _item(title="Президент Кубы назвал ордер на арест Рауля Кастро «цирком в Майами»", text=text)
+    ans = {**GOOD, "event_type": "sanctions", "summary_quote": "Президент Кубы", "numbers": [], "channels": []}
+    assert extract(_story(), [item], FixtureLLM(ans)).event_type == "other"

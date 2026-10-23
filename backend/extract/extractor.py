@@ -226,6 +226,12 @@ def _prompt(rep: RawItem, text: str, failures: list[str] | None) -> tuple[str, s
     return system, user
 
 
+def _head(item: RawItem) -> str:
+    """Заголовок, лид и первые два предложения: событие подаётся там, дальше — фон («ранее ввели…»)."""
+    body = " ".join(rules.sentences(strip_injections(item.text or "")[0])[:2])
+    return "\n".join(p for p in (item.title, item.lead or "", body) if p)
+
+
 def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[str]:
     """Переносит в facts только проверенные поля ответа модели. Возвращает список провалов."""
     types, channels = _known()
@@ -235,7 +241,7 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
         facts.event_type = ans["event_type"]
         # тип-мера (санкции) от модели — только если мера есть в тексте: живой прогон 23.10 — модель ставила
         # sanctions «иноагенту», ордеру на арест, ударам по Ирану
-        if facts.event_type in rules.NEGATABLE and not rules.has_measure(facts.event_type, text):
+        if facts.event_type in rules.NEGATABLE and not rules.has_measure(facts.event_type, _head(rep)):
             log.info("%s: тип %s от модели без меры в тексте → other", rep.id, facts.event_type)
             facts.event_type = "other"
     if ans.get("status") in {"fact", "announced", "planned", "rumor", "forecast"}:

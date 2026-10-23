@@ -41,9 +41,9 @@
 - [ ] Вечер: общий прогон 20 сюжетов
 
 ## День 5
-- [ ] **До 11:00:** деплой, запуск с нуля по README (скрипт `python -m backend.db.demo` и раздел README готовы, деплоя нет)
-- [ ] Демо-кеш 30 сюжетов × 5 клиентов, снимок Telegram-архива
-- [ ] README, THIRD_PARTY_NOTICES (ПРАЙМ, Telegram п. 1.5), lock-файлы
+- [x] **До 11:00:** запуск с нуля по README — проверен на пустой базе (≈5,5 мин); внешнего деплоя нет — стенд локальный, `docker compose up --build`
+- [x] Демо-кеш: `scripts/warm_demo_cache.py` (демо-вход — 2 клиента, 5 — после `DEMO_COMPANIES`); снимок Telegram-архива — в `data/snapshot/`
+- [x] README, THIRD_PARTY_NOTICES (ПРАЙМ, Telegram п. 1.5), lock-файлы (`uv.lock`, `frontend/package-lock.json`)
 - [ ] 15:00 репетиция
 
 ## Если не успеваешь (режь сверху)
