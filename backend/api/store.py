@@ -69,7 +69,7 @@ log = logging.getLogger(__name__)
 # демо-пары «компания × роль», для которых есть фикстуры ответов модели
 DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_DEPOSITOR", "treasurer"))
 
-DEFAULT_DEEP_PER_REQUEST = 3  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
+DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
 
 

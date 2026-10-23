@@ -64,7 +64,7 @@ cd frontend && npm run dev                                          # http://loc
 | `LLM_MODE` | `live` / `fixture` | настоящие модели или записанные ответы (`backend/llm/fixtures/`), тесты — всегда `fixture` |
 | `CARD_STORE` | `pipeline` (по умолчанию) / `fixture` | карточки из конвейера или готовые из фикстуры |
 | `TOOL_SOURCE` | `fixture` (по умолчанию) / `db` | откуда агенты и скоринг читают данные: фикстура или таблицы Р1 (JSONB `data`) |
-| `FEED_DEEP_PER_REQUEST`, `FEED_MIN_SCORE` | `3`, `0.05` | лента: глубоких разборов за обращение (остальное — быстрые карточки) и порог значимости сюжета для ленты |
+| `FEED_DEEP_PER_REQUEST`, `FEED_MIN_SCORE` | `1`, `0.05` | лента: глубоких разборов за обращение (остальное — быстрые карточки) и порог значимости сюжета для ленты |
 | `CACHE_BACKEND`, `CACHE_TTL_S` | `memory` / `redis`, секунды (24 ч) | кеш разбора, карточек и трасс |
 | `CRITIC_LLM_ENABLED` | `true` / `false` | LLM-критик DeepSeek по сомнительным утверждениям |
 
