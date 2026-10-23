@@ -9,7 +9,7 @@ import {
   sourceLabel,
   sourceName,
 } from "../labels";
-import type { Claim, ClaimChecks, Evidence, FeedbackKind, InsightCard, Surprise } from "../types";
+import type { Claim, ClaimChecks, Condition, Evidence, FeedbackKind, InsightCard, Surprise } from "../types";
 import { AskPanel } from "./AskPanel";
 import {
   ClaimTag,
@@ -38,6 +38,7 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
     ids.filter((id) => !skip.has(id)).flatMap((id) => byId.get(id) ?? []);
   const why = pick(card.why_it_matters);
   const consequences = pick(card.consequences, new Set(card.why_it_matters));
+  const conditions: Condition[] = card.conditions?.length ? card.conditions : card.what_would_change.map((text) => ({ text }));
   const contribs = topContributions(card);
   const max = Math.max(...contribs.map((c) => Math.abs(c.value)), 0);
   // отметка пишется в журнал; ошибка отметки не мешает читать карточку
@@ -66,7 +67,7 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
               {formatDate(card.event.first_seen)} · {STORY_STATUS_LABELS[card.event.status] ?? card.event.status}
             </span>
           </div>
-          <h1>{card.event.title}</h1>
+          <h1>{card.headline || card.event.title}</h1>
           <Sources card={card} />
           {card.stage === "fast" && (
             <div className="banner" role="status">
@@ -109,7 +110,10 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
               {card.actions.map((a) => (
                 <li key={a.text} className={a.is_advertising ? "claim offer" : "claim"}>
                   {a.is_advertising && <span className="tag tag-bank_offer">{CLAIM_LABELS.bank_offer}</span>}
-                  <span>{a.text}</span>
+                  <div className="claim-body">
+                    <span>{a.text}</span>
+                    {!a.is_advertising && <Refs refs={a.refs} byId={byId} />}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -136,12 +140,15 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
           </ul>
         </section>
 
-        {card.what_would_change.length > 0 && (
+        {conditions.length > 0 && (
           <section className="sec">
             <h2>Что изменит вывод</h2>
             <ul className="reasons">
-              {card.what_would_change.map((w) => (
-                <li key={w}>{w}</li>
+              {conditions.map((c) => (
+                <li key={c.text}>
+                  {c.kind && <ClaimTag type={c.kind} />} {c.text}
+                  <Refs refs={c.refs} byId={byId} />
+                </li>
               ))}
             </ul>
           </section>
@@ -152,6 +159,16 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
       </article>
     </Mark.Provider>
   );
+}
+
+// Ссылки действия или условия: утверждение карточки — его метка и начало текста, иначе источник досье
+function Refs({ refs, byId }: { refs?: string[]; byId: Map<string, Claim> }) {
+  if (!refs || refs.length === 0) return null;
+  const label = (id: string) => {
+    const c = byId.get(id);
+    return c ? `${CLAIM_LABELS[c.type].toLowerCase()} «${c.text.slice(0, 48)}…»` : sourceLabel(id);
+  };
+  return <div className="muted small">На основе: {[...new Set(refs.map(label))].join(" · ")}</div>;
 }
 
 function Sources({ card }: { card: InsightCard }) {

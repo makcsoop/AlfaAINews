@@ -118,11 +118,13 @@ export function sourceLabel(sourceId: string): string {
   const cmi = sourceId.match(/^cmi_[^#]+(?:#p(\d+))?/);
   if (cmi) return cmi[1] ? `ЦМИ Альфа-Банка, с. ${cmi[1]}` : "ЦМИ Альфа-Банка";
   if (sourceId.startsWith("mk_")) return "консенсус аналитиков";
+  if (sourceId === "user_paste") return "ваш материал";
   return "первоисточник";
 }
 
 // Названия лент из config/sources.yaml (пока в StorySource не приходит title)
 const SOURCE_NAMES: Record<string, string> = {
+  user_paste: "ваш материал",
   prime: "ПРАЙМ",
   interfax: "Интерфакс",
   rbc: "РБК",

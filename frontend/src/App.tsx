@@ -177,6 +177,7 @@ export function App() {
           {error}
         </div>
       )}
+      {view.name === "home" && api && <PasteBox api={api} onCard={onAnalyzed} />}
       {view.name === "home" && <Home cards={cards} unseen={unseen} onOpen={open} onFeed={() => go("feed")} />}
       {(view.name === "feed" || view.name === "runs") && (
         <nav className="tabs" aria-label="Разделы">

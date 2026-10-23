@@ -70,6 +70,15 @@ export interface Action {
   type: "analysis_question" | "scenario" | "bank_product";
   text: string;
   is_advertising: boolean;
+  kind?: ClaimType | null; // схемы 0.2.1: метка и ссылки (инвариант 4)
+  refs?: string[];
+}
+
+// «Что изменит вывод» с меткой и ссылками (схемы 0.2.1); what_would_change — те же тексты строками
+export interface Condition {
+  text: string;
+  kind?: ClaimType | null;
+  refs?: string[];
 }
 
 export interface Surprise {
@@ -91,6 +100,7 @@ export interface InsightCard {
   updated_at?: string | null;
   stage: "fast" | "deep";
   analysis_ref?: string | null;
+  headline?: string | null; // заголовок модели; нет — event.title
   event: CardEvent;
   relevance: RelevanceScore;
   what_happened: string[];
@@ -99,6 +109,7 @@ export interface InsightCard {
   actions: Action[];
   bank_and_market: string[];
   what_would_change: string[];
+  conditions?: Condition[];
   surprise?: Surprise | null;
   claims: Claim[];
   confidence: Confidence;
