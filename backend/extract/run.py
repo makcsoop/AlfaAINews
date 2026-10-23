@@ -129,6 +129,7 @@ def run(
     force: bool = False,
     limit: int | None = None,
     min_corroboration: int = 0,
+    commit_every: int | None = None,
 ) -> dict:
     since = datetime.now(UTC) - timedelta(hours=hours)
     stories = [s for s in stories_to_extract(conn, since, force) if s.corroboration >= min_corroboration]
@@ -155,6 +156,11 @@ def run(
             facts = kept
             stats["kept_llm"] += 1
         save_facts(conn, facts)
+        done = stats.get("done", 0) + 1
+        stats["done"] = done
+        if commit_every and done % commit_every == 0:  # долгий прогон с моделью: обрыв не теряет сделанное
+            conn.commit()
+            log.info("сохранено %d из %d", done, len(stories))
         stats["llm"] += facts.extractor_model is not None and not facts.extractor_model.startswith("rules")
         stats["unverified"] += bool(facts.unverified_fields)
         stats[facts.event_type] = stats.get(facts.event_type, 0) + 1
@@ -181,7 +187,7 @@ def main() -> None:
 
         llm = ClientJsonLLM(max_calls=2 * (args.limit or 150))  # шаг бюджета extract
     t0 = time.monotonic()
-    with get_engine().begin() as conn:
+    with get_engine().connect() as conn:
         stats = run(
             conn,
             24 * 365 * 10 if args.all else args.hours,
@@ -189,7 +195,9 @@ def main() -> None:
             force=args.force,
             limit=args.limit,
             min_corroboration=args.min_corroboration,
+            commit_every=20,
         )
+        conn.commit()
     if llm:
         u = llm.usage
         stats["llm_usage"] = {"calls": u.calls, "failures": u.failures, "cost": round(u.cost, 4)}

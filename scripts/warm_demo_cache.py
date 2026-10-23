@@ -28,10 +28,12 @@ def warm(base: str, company: str, role: str, stories: int, max_rub: float, timeo
         if token:
             c.headers["Authorization"] = f"Bearer {token}"
         deep, stale, spent, t0 = 0, 0, 0.0, time.monotonic()
+        cards: list[dict] = []
         while deep < stories and spent < max_rub and stale < 3:
             cards = c.get("/feed").raise_for_status().json()
             now_deep = sum(1 for k in cards if k.get("stage") == "deep")
-            runs = c.get("/feed/runs").json() if c.get("/feed/runs").status_code == 200 else []
+            resp = c.get("/feed/runs")
+            runs = resp.json() if resp.status_code == 200 else []
             spent = sum(float(x.get("cost_rub") or 0) for x in runs)
             stale = stale + 1 if now_deep == deep else 0
             deep = now_deep
