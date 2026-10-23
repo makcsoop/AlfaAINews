@@ -1,5 +1,7 @@
 """Pydantic-схемы всех объектов системы. Импортируйте отсюда: `from backend.schemas import Story`."""
 
+from pydantic import BaseModel
+
 from backend.schemas.client import ChannelExposure, CompanyProfile, Counterparty, CounterpartyGraph
 from backend.schemas.common import SCHEMA_VERSION, ChannelImpact, Evidence, NumberFact
 from backend.schemas.insight import (
@@ -20,7 +22,7 @@ from backend.schemas.knowledge import BankPosition, Forecast, MarketKnowledge
 from backend.schemas.news import EventFacts, ItemEdit, Participant, RawItem, Source, Story
 
 # Объекты «Контрактов данных» финальной архитектуры + служебные — для экспорта JSON Schema и проверки фикстур
-ALL_SCHEMAS = {
+ALL_SCHEMAS: dict[str, type[BaseModel]] = {
     "source": Source,
     "raw_item": RawItem,
     "story": Story,
