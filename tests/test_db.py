@@ -137,3 +137,21 @@ def test_graph_end_to_end(engine, case_dir):
         assert g.suppliers[0].in_dataset is False and g.sector_shares_suppliers == {"outside": 1.0}
         assert g.group_id == "g1" and "U_2" in g.group_members and g.sparse is True
         assert get_graph(conn, "U_NOPE") is None
+
+
+def test_snapshot_roundtrip(engine, tmp_path, monkeypatch):
+    # А6: снимок знаний Р1 переносится на чужой стенд без OCR и без Kimi
+    from backend.db import demo
+
+    monkeypatch.setattr(demo, "SNAPSHOT", tmp_path)
+    with engine.begin() as conn:
+        load_fixtures(conn)
+        before = conn.execute(select(m.bank_positions.c.id, m.bank_positions.c.data)).all()
+        sent = demo.export(conn)
+    assert sent["bank_positions"] == len(before) > 0
+    with engine.begin() as conn:
+        conn.execute(m.bank_positions.delete())
+        conn.execute(m.market_knowledge.delete())
+        got = demo.load(conn)
+        after = conn.execute(select(m.bank_positions.c.id, m.bank_positions.c.data)).all()
+    assert got["bank_positions"] == len(before) and sorted(after) == sorted(before)

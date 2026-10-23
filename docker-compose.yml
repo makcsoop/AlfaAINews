@@ -47,6 +47,11 @@ services:
 
   backend:
     <<: *app
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-newsai}:${POSTGRES_PASSWORD:-newsai}@db:5432/${POSTGRES_DB:-newsai}
+      REDIS_URL: redis://redis:6379/0
+      # /labeling показывает профили компаний без сессии — на демо выключен; для разметки: LABELING_ENABLED=true
+      LABELING_ENABLED: ${LABELING_ENABLED:-false}
     ports:
       - "8000:8000"
     depends_on:

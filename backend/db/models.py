@@ -200,6 +200,7 @@ labels = Table(
     ),
     Column("labeler", String, nullable=False),
     Column("important", Boolean, nullable=False),
+    Column("relevance", Integer),  # 0 не про нас … 3 важно сегодня (шкала каппы Р2, backend.eval.agreement)
     Column("main_channel", String),
     Column("sign", Integer),  # −1 риск, 0 нейтрально, +1 возможность
     Column("comment", Text),

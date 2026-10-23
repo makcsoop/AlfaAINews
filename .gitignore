@@ -13,6 +13,7 @@ node_modules/
 .DS_Store
 data/bank/pdf/
 data/bank/pages/
+data/snapshot/
 frontend/dist/
 *.tsbuildinfo
 CLAUDE.local.md
