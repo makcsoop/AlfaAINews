@@ -25,6 +25,11 @@ RUMOR = re.compile(
     re.IGNORECASE,
 )
 FORECAST = re.compile(r"\b(прогноз\w*|ожида\w+|ждут|ожидани\w+)\b", re.IGNORECASE)
+# типы-меры, которые отрицание отменяет: «не ввели санкции» — не санкции
+NEGATABLE = {"sanctions", "secondary_sanctions", "sanctions_relief"}
+# отрицание и условие: «не ввели», «нужно, чтобы сняли», «если продлят»
+_NEG = re.compile(r"\b(не|чтобы|если|когда|пока)(\s+\w+){0,2}\s*$", re.IGNORECASE)
+_EXEMPT = re.compile(r"\bисключени\w*\b|\bиз-под санкци\w*", re.IGNORECASE)
 
 # Число + единица. Порядок важен: сначала длинные единицы.
 _UNITS = [
@@ -83,6 +88,54 @@ def sentences(text: str) -> list[str]:
     return [s.strip() for line in text.splitlines() for s in _SENT.split(line) if s.strip()]
 
 
+DICTIONARIES = EVENT_TYPES.parent / "dictionaries.yaml"
+# макрособытия касаются всех отраслей — отрасль у них не ставится
+MACRO_TYPES = {
+    "rate_decision", "monetary_signal", "inflation_data", "fx_move", "fx_control", "macro_data",
+    "budget_policy", "ofz_auction", "capital_control_change", "credit_regulation", "minimum_wage",
+    "labor_policy", "foreign_demand_data", "other",
+}
+
+
+@lru_cache
+def _sector_rx() -> dict[str, re.Pattern]:
+    cfg = yaml.safe_load(DICTIONARIES.read_text(encoding="utf-8"))
+    return {code: re.compile(rx, re.IGNORECASE) for code, rx in (cfg.get("sectors") or {}).items()}
+
+
+def sectors(etype: str, text: str) -> list[tuple[str, str]]:
+    """Отрасли отраслевого события по заголовку и лиду: [(ОКВЭД, фрагмент текста)]."""
+    if etype in MACRO_TYPES:
+        return []
+    out = []
+    for code, rx in _sector_rx().items():
+        m = rx.search(text)
+        if m:
+            out.append((code, m.group(0)))
+    return out
+
+
+def _negated(part: str, start: int) -> bool:
+    """«ЕС не ввёл санкции», «не стали продлевать»: перед совпадением отрицание в пределах двух слов."""
+    return bool(_NEG.search(part[max(0, start - 30) : start]))
+
+
+def has_measure(etype: str, text: str) -> bool:
+    """Есть ли в тексте мера этого типа (санкции: ввели / продлили / сняли…) — проверка типа от модели."""
+    types, _ = _config()
+    et = next((t for t in types if t.name == etype), None)
+    if et is None or not et.patterns:
+        return True
+    for part in sentences(text):
+        for rx in et.patterns:
+            m = rx.search(part)
+            if not m or (etype == "sanctions" and _EXEMPT.search(part)):
+                continue
+            if not (etype in NEGATABLE and _negated(part, m.start())):
+                return True
+    return False
+
+
 def event_type(title: str, lead: str | None) -> tuple[str, str | None]:
     """Тип события и фрагмент, на котором сработал паттерн. Заголовок важнее лида."""
     types, _ = _config()
@@ -90,7 +143,9 @@ def event_type(title: str, lead: str | None) -> tuple[str, str | None]:
         for et in types:
             for rx in et.patterns:
                 m = rx.search(part)
-                if m:
+                if m and et.name == "sanctions" and _EXEMPT.search(part):
+                    continue  # исключение из пакета, вывод из-под санкций — не новая мера
+                if m and not (et.name in NEGATABLE and _negated(part, m.start())):
                     return et.name, part
     return "other", None
 

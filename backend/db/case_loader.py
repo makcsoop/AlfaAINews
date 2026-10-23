@@ -110,6 +110,7 @@ def load_csv(conn: Connection, path: Path) -> tuple[str, int] | None:
     conn.execute(text(f"CREATE TABLE {kind} ({', '.join(f'{c} text' for c in cols)})"))
 
     raw = conn.connection.driver_connection  # psycopg3: COPY напрямую, без pandas
+    assert raw is not None
     with path.open(encoding=enc, newline="") as f, raw.cursor() as cur:
         reader = csv.reader(f, delimiter=delim)
         next(reader)

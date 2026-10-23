@@ -16,6 +16,8 @@ RUN uv sync --frozen --no-install-project --no-dev
 
 COPY backend ./backend
 COPY config ./config
+# промпты планировщика, аналитиков, карточки и критика (Р3): без них глубокий разбор падает
+COPY prompts ./prompts
 COPY fixtures ./fixtures
 COPY scripts ./scripts
 COPY eval ./eval

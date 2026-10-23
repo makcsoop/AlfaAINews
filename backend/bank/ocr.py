@@ -15,9 +15,9 @@ import yaml
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
+from backend.bank.vision import VisionOCR
 from backend.db import models as m
 from backend.db.engine import get_engine
-from backend.extract.llm_adapter import OpenAIJsonLLM
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _ocr_page(doc: dict, page_no: int) -> tuple[str, int, str | None, float]:
     pdf = pymupdf.open(PDF_DIR / doc["file"])
     # JPEG: цветная страница в PNG весит до 5 МБ, в JPEG — в несколько раз меньше, текст читается так же
     jpg = pdf[page_no - 1].get_pixmap(dpi=DPI).tobytes("jpg", jpg_quality=80)
-    llm = OpenAIJsonLLM(max_calls=2, timeout=240)
+    llm = VisionOCR(max_calls=2, timeout=240)
     text = llm.transcribe_image(model=MODEL, image=jpg, prompt=PROMPT)
     return doc["id"], page_no, text, llm.usage.cost
 

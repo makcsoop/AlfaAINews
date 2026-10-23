@@ -181,6 +181,7 @@
     "trigger": {
       "anyOf": [
         {
+          "pattern": "^[a-z][a-z0-9_]*$",
           "type": "string"
         },
         {
@@ -188,7 +189,7 @@
         }
       ],
       "default": null,
-      "description": "продуктовый триггер предложения: 'loa+rate_up'",
+      "description": "id продуктового триггера из backend/cards/offers.py: fix_rate, long_deposit, fx_hedge",
       "title": "Trigger"
     }
   },
@@ -199,5 +200,5 @@
   ],
   "title": "Claim",
   "type": "object",
-  "$comment": "schema 0.2.0"
+  "$comment": "schema 0.2.1"
 }

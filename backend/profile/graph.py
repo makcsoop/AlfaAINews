@@ -190,7 +190,8 @@ def build_graphs(conn: Connection, company: str | None = None):
 
 
 def save_graphs(conn: Connection, graphs, batch: int = 2000) -> int:
-    n, buf = 0, []
+    n = 0
+    buf: list[dict] = []
 
     def flush():
         if not buf:

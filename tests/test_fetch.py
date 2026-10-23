@@ -19,7 +19,7 @@ FEED = """<?xml version="1.0" encoding="windows-1251"?>
 
 
 def _fetcher(handler) -> Fetcher:
-    f = Fetcher(rps=1000)
+    f = Fetcher(rps=1000, retry_pause=0)
     f.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return f
 
@@ -67,3 +67,41 @@ async def test_host_limiter_spacing():
     other_host = time.monotonic() - t1
     assert same_host >= 0.19
     assert other_host < 0.05
+
+
+async def test_retries_on_5xx_and_network_errors():
+    calls = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ConnectTimeout("медленно")
+        if len(calls) == 2:
+            return httpx.Response(503, headers={"Retry-After": "0"})
+        return httpx.Response(200, content=FEED.encode("cp1251"))
+
+    f = _fetcher(handler)
+    res = await poll_feed(f, SRC, None, None)
+    assert res.status == 200 and len(calls) == 3  # 1 запрос + 2 повтора
+    await f.aclose()
+
+
+async def test_gives_up_after_two_retries():
+    calls = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        raise httpx.ReadTimeout("нет ответа")
+
+    f = _fetcher(handler)
+    with pytest.raises(httpx.ReadTimeout):
+        await f.get("https://feed.test/rss")
+    assert len(calls) == 3
+    await f.aclose()
+
+
+async def test_404_is_not_retried():
+    calls = []
+    f = _fetcher(lambda req: calls.append(1) or httpx.Response(404))
+    assert (await f.get("https://feed.test/x")).status_code == 404 and len(calls) == 1
+    await f.aclose()

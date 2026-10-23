@@ -8,7 +8,7 @@
 Мнение рынка и позиция банка разделены: позиция банка — только материалы ЦМИ (BANK_SOURCE_PREFIX).
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from pydantic import BaseModel
 from sqlalchemy import Connection, select
@@ -62,14 +62,16 @@ class BankMarketReport(BaseModel):
     surprise: Surprise | None
 
 
-def _consensus(conn: Connection, day: date) -> MarketKnowledge | None:
-    """Консенсус к заседанию в день события или в ближайшие 3 дня до него."""
+def _consensus(conn: Connection, day: date, before: datetime | None = None) -> MarketKnowledge | None:
+    """Консенсус к заседанию (день события или 3 дня до него), опубликованный раньше сюжета — инвариант 10."""
     rows = conn.execute(
         select(m.market_knowledge.c.data).where(m.market_knowledge.c.id.like("mk_consensus_%"))
     ).scalars()
     best = None
     for r in rows:
         mk = MarketKnowledge.model_validate(r)
+        if before and mk.published_at >= before:
+            continue
         if (mk.target_event_date and timedelta(0) <= mk.target_event_date - day <= timedelta(days=3)) or (
             mk.target_event_date == day
         ):
@@ -131,7 +133,7 @@ def report(conn: Connection, story_id: str, index: BankIndex | None = None, k: i
     market, surprise = None, None
     etype = facts.event_type if facts else story.event_type
     if etype in RATE_TYPES or "key_rate" in channels:
-        mk = _consensus(conn, as_of)
+        mk = _consensus(conn, as_of, before=story.first_seen)
         if mk:
             market = MarketView(
                 meeting=mk.target_event_date,
@@ -154,12 +156,13 @@ def report(conn: Connection, story_id: str, index: BankIndex | None = None, k: i
                 None,
             )
             exp = market.expected_value if market else None
-            ref = exp if exp is not None else (bank.forecast["value"] if bank else None)
+            bank_value = bank.forecast["value"] if bank and bank.forecast else None
+            ref = exp if exp is not None else bank_value
             surprise = Surprise(
                 metric="key_rate",
                 actual=actual,
                 market_expected=exp,
-                bank_expected=bank.forecast["value"] if bank else None,
+                bank_expected=bank_value,
                 bank_ref=bank.position_id if bank else None,
                 market_ref=f"mk_consensus_{market.meeting.isoformat()}" if market else None,
                 direction=None

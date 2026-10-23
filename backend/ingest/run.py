@@ -6,6 +6,7 @@
 import argparse
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime
 
 from backend.db.engine import get_engine
@@ -77,6 +78,7 @@ async def run_source_forever(fetcher: Fetcher, src: Source) -> None:
 
 STORIES_EVERY = 300  # секунд между пересборками сюжетов
 TELEGRAM_EVERY = 180  # секунд между кругами по каналам
+EXTRACT_LLM_CALLS = 60  # вызовов модели за проход склейки (раз в 5 минут): ≈1 ₽ в худшем случае
 
 
 async def telegram_round(client, channels: list[Source]) -> int:
@@ -131,14 +133,25 @@ async def telegram_forever(fetcher: Fetcher, channels: list[Source], once: bool 
 
 
 def _rebuild_stories() -> dict:
-    """Склейка, затем факты по новым и изменившимся сюжетам (LLM подключится через порт экстрактора)."""
+    """Склейка, затем факты по новым и изменившимся сюжетам.
+
+    EXTRACT_LLM=true — подтверждённые сюжеты типирует модель (шаг extract общего клиента, потолок вызовов
+    за проход); иначе только правила.
+    """
     from backend.extract.run import run as extract_facts
     from backend.stories.cluster import rebuild
 
+    llm = None
+    if os.environ.get("EXTRACT_LLM", "").strip().lower() in {"1", "true", "yes"}:
+        from backend.llm.port import ClientJsonLLM
+
+        llm = ClientJsonLLM(max_calls=EXTRACT_LLM_CALLS)
     with get_engine().begin() as conn:
         stats = rebuild(conn)
     with get_engine().begin() as conn:
-        stats["facts"] = extract_facts(conn)["stories"]
+        stats["facts"] = extract_facts(conn, llm=llm)["stories"]
+    if llm:
+        stats["llm_rub"] = round(llm.usage.cost, 3)
     return stats
 
 

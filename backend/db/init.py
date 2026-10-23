@@ -3,6 +3,7 @@
 import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import Connection, text
 from sqlalchemy.dialects.postgresql import insert
@@ -20,6 +21,8 @@ SYNTHETIC_DIR = Path("data/case_synthetic")
 
 # Переименования колонок в уже созданных базах (create_all существующие таблицы не меняет)
 _RENAMES = [("stories", "independent_sources", "corroboration")]
+# колонки, добавленные после первого запуска стенда: create_all существующие таблицы не меняет
+_ADD_COLUMNS = [("labels", "relevance", "INTEGER")]
 
 
 def create_schema(conn: Connection) -> None:
@@ -32,6 +35,8 @@ def create_schema(conn: Connection) -> None:
         if exists:
             conn.execute(text(f"ALTER TABLE {table} RENAME COLUMN {old} TO {new}"))
     m.metadata.create_all(conn)
+    for table, col, typ in _ADD_COLUMNS:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typ}"))
 
 
 def _upsert(conn: Connection, table, rows: list[dict]) -> None:
@@ -45,7 +50,7 @@ def _upsert(conn: Connection, table, rows: list[dict]) -> None:
 
 
 def load_fixtures(conn: Connection, name: str = "rate_14") -> None:
-    b = load_bundle(name)
+    b: dict[str, list[Any]] = load_bundle(name)  # type: ignore[assignment]  # объекты разных схем
     dump = lambda o: o.model_dump(mode="json")  # noqa: E731
     _upsert(
         conn,

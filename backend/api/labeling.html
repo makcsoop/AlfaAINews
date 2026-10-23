@@ -58,9 +58,11 @@
   <section id="form-card" hidden>
     <form id="form">
       <div class="row">
-        <strong>Важно для этого клиента?</strong>
-        <label class="opt"><input type="radio" name="important" value="1" required>Важно</label>
-        <label class="opt"><input type="radio" name="important" value="0">Не важно</label>
+        <strong>Насколько важно этому клиенту?</strong>
+        <label class="opt"><input type="radio" name="relevance" value="0" required>0 — не про нас</label>
+        <label class="opt"><input type="radio" name="relevance" value="1">1 — фон</label>
+        <label class="opt"><input type="radio" name="relevance" value="2">2 — важно</label>
+        <label class="opt"><input type="radio" name="relevance" value="3">3 — важно сегодня</label>
       </div>
       <div class="row">
         <strong>Главный канал</strong>
@@ -75,7 +77,7 @@
       <textarea id="comment" placeholder="Комментарий: почему (необязательно)"></textarea>
       <div class="row">
         <button type="submit">Сохранить и дальше</button>
-        <span class="muted">Клавиши: 1 — важно, 0 — не важно, Enter — сохранить</span>
+        <span class="muted">Клавиши: 0–3 — значимость, Enter — сохранить</span>
       </div>
     </form>
   </section>
@@ -142,7 +144,7 @@ $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
   const sign = f.get("sign");
-  const body = { pair_id: current.pair_id, labeler: labeler.value.trim(), important: f.get("important") === "1",
+  const body = { pair_id: current.pair_id, labeler: labeler.value.trim(), relevance: Number(f.get("relevance")),
                  main_channel: $("channel").value || null, sign: sign === null ? null : Number(sign), comment: $("comment").value || null };
   const r = await fetch("/labeling/labels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) { alert("Не сохранилось: " + r.status); return; }
@@ -151,7 +153,7 @@ $("form").addEventListener("submit", async (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
-  if (e.key === "1" || e.key === "0") document.querySelector(`input[name=important][value="${e.key}"]`).checked = true;
+  if (["0", "1", "2", "3"].includes(e.key)) document.querySelector(`input[name=relevance][value="${e.key}"]`).checked = true;
 });
 
 loadChannels().then(load);

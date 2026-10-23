@@ -200,10 +200,22 @@ labels = Table(
     ),
     Column("labeler", String, nullable=False),
     Column("important", Boolean, nullable=False),
+    Column("relevance", Integer),  # 0 не про нас … 3 важно сегодня (шкала каппы Р2, backend.eval.agreement)
     Column("main_channel", String),
     Column("sign", Integer),  # −1 риск, 0 нейтрально, +1 возможность
     Column("comment", Text),
     Column("at", DateTime(timezone=True), server_default=func.now()),
+)
+
+source_weights = Table(
+    "source_weights",  # выученные веса: старт из sources.yaml × надёжность (backend/ingest/source_weights)
+    metadata,
+    Column("source_id", String, primary_key=True),
+    Column("confirmed", Integer, nullable=False),
+    Column("unconfirmed", Integer, nullable=False),
+    Column("refuted", Integer, nullable=False),
+    Column("weight", Float, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
 Index("ix_raw_items_source_native", raw_items.c.source_id, raw_items.c.native_id, unique=True)

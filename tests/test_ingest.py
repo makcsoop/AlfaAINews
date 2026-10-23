@@ -10,6 +10,7 @@ from backend.ingest.rss import entry_to_item, extract_page
 
 DATA = Path(__file__).parent / "data"
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)
+SAVED_23 = datetime(2026, 10, 23, 16, 0, tzinfo=UTC)
 
 
 @pytest.fixture(scope="module")
@@ -23,10 +24,11 @@ def test_registry_has_day1_feeds(sources):
     assert sources["cbr_press"].official and sources["cbr_press"].tier == 0
 
 
-@pytest.mark.parametrize("name", ["prime", "interfax", "rbc"])
+@pytest.mark.parametrize("name", ["prime", "interfax", "rbc", "tass", "kommersant", "vedomosti", "cbr_press"])
 def test_feed_entries_become_items(sources, name):
     feed = feedparser.parse((DATA / f"{name}.xml").read_bytes())
-    items = [entry_to_item(sources[name], e, NOW) for e in feed.entries]
+    now = NOW if name in {"prime", "interfax", "rbc"} else SAVED_23  # ленты дня 2 сохранены 23.10
+    items = [entry_to_item(sources[name], e, now) for e in feed.entries]
     items = [i for i in items if i]
     assert len(items) >= 10
     assert len({i.id for i in items}) == len(items)
@@ -58,3 +60,14 @@ def test_simhash_near_duplicates():
     assert hamming(simhash(a), simhash(b)) <= 3
     assert hamming(simhash(a), simhash(c)) > 3
     assert content_hash("Т", a) == content_hash("т", a.replace("ё", "е"))
+
+
+def test_saved_cbr_feed_has_typed_rate_decision(sources):
+    # сохранённая лента ЦБ 23.10: решение по ставке → официальный источник, тип rate_decision
+    from backend.extract.rules import event_type
+
+    feed = feedparser.parse((DATA / "cbr_press.xml").read_bytes())
+    items = [i for e in feed.entries if (i := entry_to_item(sources["cbr_press"], e, SAVED_23))]
+    decision = [i for i in items if "ключевую ставку" in i.title]
+    assert decision and event_type(decision[0].title, decision[0].lead)[0] == "rate_decision"
+    assert decision[0].tier == 0 and decision[0].dropped_reason is None

@@ -82,14 +82,16 @@ def cluster_items(items: list[RawItem], *, entity_keys: list[set[str]] | None = 
                 for j in range(i - 1, -1, -1)
                 if items[i].published_at - items[j].published_at <= WINDOW
                 and item.simhash is not None
-                and items[j].simhash is not None
-                and hamming(item.simhash, items[j].simhash) <= SIMHASH_COPY
+                and (other := items[j].simhash) is not None
+                and hamming(item.simhash, other) <= SIMHASH_COPY
             ),
             None,
         )
         if copy_of is not None:
             d = drafts[story_of[copy_of]]
-            d.items.append(item), d.idx.append(i), d.copies.add(item.id)
+            d.items.append(item)
+            d.idx.append(i)
+            d.copies.add(item.id)
             d.keys |= keys[i]
             story_of[i] = story_of[copy_of]
             continue
@@ -112,7 +114,8 @@ def cluster_items(items: list[RawItem], *, entity_keys: list[set[str]] | None = 
             story_of[i] = len(drafts) - 1
         else:
             d = drafts[best]
-            d.items.append(item), d.idx.append(i)
+            d.items.append(item)
+            d.idx.append(i)
             d.keys |= keys[i]
             story_of[i] = best
     return drafts
@@ -165,6 +168,12 @@ def rebuild(conn: Connection, hours: float = 72, now: datetime | None = None) ->
 
     old_ids = set(conn.execute(select(m.stories.c.id).where(m.stories.c.first_seen >= since)).scalars())
     new_ids = {s.id for s in stories}
+    # версию ведёт экстрактор (существенное изменение фактов) — пересборка её не сбрасывает
+    versions = dict(
+        conn.execute(select(m.stories.c.id, m.stories.c.version).where(m.stories.c.id.in_(new_ids))).all()
+    )
+    for s in stories:
+        s.version = versions.get(s.id) or 1
     if old_ids - new_ids:
         conn.execute(
             update(m.raw_items).where(m.raw_items.c.story_id.in_(old_ids - new_ids)).values(story_id=None)

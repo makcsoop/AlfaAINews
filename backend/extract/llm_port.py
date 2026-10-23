@@ -9,7 +9,14 @@ from typing import Protocol
 
 class JsonLLM(Protocol):
     def complete_json(
-        self, *, model: str, system: str, user: str, json_schema: dict, purpose: str
+        self,
+        *,
+        model: str | None = None,
+        system: str,
+        user: str,
+        json_schema: dict,
+        purpose: str,
+        max_tokens: int | None = None,
     ) -> dict | None:
         """Ответ модели как JSON по схеме или None (нет бюджета, сбой, невалидный ответ)."""
 

@@ -17,15 +17,54 @@ docker compose up --build
   - `/session`, `/feed`, `/feed/runs`, `/card/{id}`, `/trace/{id}`, `/ask`, `POST /feedback` — карточки для клиента из сессии;
   - `/stories?business_only=true` — свежие сюжеты с типом события и статусом подтверждения;
   - `/stories/{id}` — сюжет, факты с цитатами и материалы; `/stories/{id}/bank_market`, `/stories/{id}/statistician`;
-  - `/labeling` — разметка пар «сюжет × клиент»;
+  - `/labeling` — разметка пар «сюжет × клиент» (только при `LABELING_ENABLED=true`, на демо — 404);
   - `/companies/{id}/counterparties` — граф платежей компании;
   - `/raw_items`, `/stats/ingest`, `/health` — служебные.
-- `ingest` раз в 5 минут склеивает материалы в сюжеты и извлекает факты (правила; LLM — через порт экстрактора).
+- `ingest` раз в 5 минут склеивает материалы в сюжеты и извлекает факты: правила, а при `EXTRACT_LLM=true` подтверждённые сюжеты типирует Gemma через общий LLM-клиент (до 60 вызовов за проход).
 - `frontend` работает на http://localhost:3000: макет главного экрана Альфа-Бизнеса, виджет «Важно для вашего бизнеса», лента и карточка. API доступен под `/api` (nginx проксирует на `backend`).
 
 CSV кейса (`df_Uid_data_hack.csv` и остальные) в репозиторий не коммитятся: положите их в `data/case/`. Повторный `up` не перезаливает CSV, если файлы не менялись; принудительно — `docker compose run --rm init python -m backend.db.init --load-case --force-case`.
 
 Postgres доступен с хоста на `localhost:55432` (порт задаёт `DB_HOST_PORT`), чтобы не конфликтовать с локально установленным PostgreSQL. PDF ЦМИ кладутся в `data/bank/pdf/`.
+
+## Демо-база с нуля
+
+На машине, где уже собраны знания (Р1), снять снимок — страницы ЦМИ, реестр позиций, консенсус, архив материалов
+за 120 дней. Снимок содержит тексты ЦМИ и чужие материалы, поэтому в git не попадает (`data/snapshot/`):
+
+```bash
+uv run python -m backend.db.demo --export
+```
+
+Передать папку `data/snapshot/` (и CSV кейса в `data/case/`) на стенд, затем там:
+
+```bash
+docker compose up -d --build
+docker compose run --rm backend python -m backend.db.demo          # только правила, без ₽
+docker compose run --rm -e LLM_MODE=live backend python -m backend.db.demo --llm   # + типирование моделью
+```
+
+Шаги: таблицы и фикстура → CSV кейса (или синтетика) → граф платежей → профили (Р2) → снимок знаний → один проход
+сбора → склейка за 72 ч → факты → консенсус (из снимка; без снимка и с `--llm` — заново по архиву каналов).
+Реестр ЦМИ из снимка — без повторного OCR и Kimi. Лента — http://localhost:3000 (вход `U_DEMO_BORROWER` / `cfo`
+или `U_DEMO_DEPOSITOR` / `treasurer`).
+
+Стенд по умолчанию (`docker-compose.yml`, переопределяется в `.env`): `backend` — `LLM_MODE=live`, `TOOL_SOURCE=db`,
+`CARD_STORE=pipeline`, `CACHE_BACKEND=redis`, `FEED_DEEP_PER_REQUEST=1`, `FEED_MIN_SCORE=0.05`, `CRITIC_LLM_ENABLED=true`,
+`LABELING_ENABLED=false`; `ingest` — `EXTRACT_LLM=false` (для демо: `EXTRACT_LLM=true docker compose up -d ingest`,
+до 60 вызовов Gemma за проход раз в 5 минут, ≈1 ₽). Ключ `LLM_API_KEY` — только в `.env`.
+
+Перед показом — прогрев демо-кеша (глубокие карточки топ-сюжетов, ≈0,4 ₽ за карточку, кеш в Redis):
+
+```bash
+uv run python scripts/warm_demo_cache.py --stories 30 --max-rub 40
+```
+
+Проверка ленты без браузера — `uv run python scripts/check_feed_top.py --company U_DEMO_BORROWER --role cfo`
+(топ-20 по скорингу и сюрприз по решению ЦБ).
+
+Все вызовы моделей идут через `backend/llm/client.py` (бюджет и журнал команды). Исключение — OCR сканов ЦМИ
+(`backend/bank/vision.py`, Qwen3-VL): клиент не передаёт картинки; это разовая подготовка, страницы уже в снимке.
 
 ## Разработка без Docker
 
@@ -68,6 +107,8 @@ cd frontend && npm run dev                                          # http://loc
 | `FEEDBACK_STORE` | `db` / `memory` (по умолчанию `db` при `TOOL_SOURCE=db`) | куда пишет `POST /feedback`: таблица `feedback` или память |
 | `CACHE_BACKEND`, `CACHE_TTL_S` | `memory` / `redis`, секунды (24 ч) | кеш разбора, карточек и трасс |
 | `CRITIC_LLM_ENABLED` | `true` / `false` | LLM-критик DeepSeek по сомнительным утверждениям |
+| `EXTRACT_LLM` | `false` (по умолчанию) / `true` | воркер `ingest`: тип и факторы подтверждённых сюжетов ставит модель (шаг `extract`) |
+| `LABELING_ENABLED` | `false` (по умолчанию) / `true` | открыть `/labeling` (профили компаний без сессии — только для разметки) |
 
 Отчёты: `uv run python -m backend.llm.report` (бюджет по шагам и моделям), `uv run python -m backend.cards.quality` (качество карточек).
 

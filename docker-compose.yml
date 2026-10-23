@@ -47,6 +47,20 @@ services:
 
   backend:
     <<: *app
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-newsai}:${POSTGRES_PASSWORD:-newsai}@db:5432/${POSTGRES_DB:-newsai}
+      REDIS_URL: redis://redis:6379/0
+      # /labeling показывает профили компаний без сессии — на демо выключен; для разметки: LABELING_ENABLED=true
+      LABELING_ENABLED: ${LABELING_ENABLED:-false}
+      # демо-стенд по умолчанию: живая лента из БД Р1, конвейер карточек, кеш в Redis (переживает перезапуск);
+      # любое значение переопределяется в .env (например, LLM_MODE=fixture — без ключа и без ₽)
+      LLM_MODE: ${LLM_MODE:-live}
+      TOOL_SOURCE: ${TOOL_SOURCE:-db}
+      CARD_STORE: ${CARD_STORE:-pipeline}
+      CACHE_BACKEND: ${CACHE_BACKEND:-redis}
+      FEED_DEEP_PER_REQUEST: ${FEED_DEEP_PER_REQUEST:-1}
+      FEED_MIN_SCORE: ${FEED_MIN_SCORE:-0.05}
+      CRITIC_LLM_ENABLED: ${CRITIC_LLM_ENABLED:-true}
     ports:
       - "8000:8000"
     depends_on:
@@ -57,6 +71,13 @@ services:
     <<: *app
     command: ["python", "-m", "backend.ingest.run"]
     restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-newsai}:${POSTGRES_PASSWORD:-newsai}@db:5432/${POSTGRES_DB:-newsai}
+      REDIS_URL: redis://redis:6379/0
+      # true — подтверждённые сюжеты типирует модель (шаг extract общего клиента, до 60 вызовов за проход);
+      # нужен ключ LLM_API_KEY в .env; модель воркер зовёт только при EXTRACT_LLM=true
+      EXTRACT_LLM: ${EXTRACT_LLM:-false}
+      LLM_MODE: live
     depends_on:
       init:
         condition: service_completed_successfully

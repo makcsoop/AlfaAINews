@@ -2,6 +2,7 @@
   "$defs": {
     "Action": {
       "additionalProperties": false,
+      "description": "Действие в карточке. refs — claim_id или id источников, на которые опирается (инвариант 4).",
       "properties": {
         "type": {
           "enum": [
@@ -20,6 +21,33 @@
           "default": false,
           "title": "Is Advertising",
           "type": "boolean"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "fact",
+                "bank_view",
+                "market_view",
+                "model_inference",
+                "bank_offer"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "метка: bank_product — только bank_offer",
+          "title": "Kind"
+        },
+        "refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Refs",
+          "type": "array"
         }
       },
       "required": [
@@ -177,6 +205,7 @@
         "trigger": {
           "anyOf": [
             {
+              "pattern": "^[a-z][a-z0-9_]*$",
               "type": "string"
             },
             {
@@ -184,7 +213,7 @@
             }
           ],
           "default": null,
-          "description": "продуктовый триггер предложения: 'loa+rate_up'",
+          "description": "id продуктового триггера из backend/cards/offers.py: fix_rate, long_deposit, fx_hedge",
           "title": "Trigger"
         }
       },
@@ -194,6 +223,47 @@
         "text"
       ],
       "title": "Claim",
+      "type": "object"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "description": "«Что изменит вывод»: условие с меткой и ссылками (инвариант 4).",
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "fact",
+                "bank_view",
+                "market_view",
+                "model_inference",
+                "bank_offer"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "Condition",
       "type": "object"
     },
     "Contribution": {
@@ -619,6 +689,20 @@
       "description": "'story_id:sector:version' разбора",
       "title": "Analysis Ref"
     },
+    "headline": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "заголовок карточки от модели; нет — event.title",
+      "title": "Headline"
+    },
     "event": {
       "$ref": "#/$defs/CardEvent"
     },
@@ -663,10 +747,19 @@
       "type": "array"
     },
     "what_would_change": {
+      "description": "тексты условий из conditions",
       "items": {
         "type": "string"
       },
       "title": "What Would Change",
+      "type": "array"
+    },
+    "conditions": {
+      "description": "что изменит вывод — с меткой и ссылками (инвариант 4)",
+      "items": {
+        "$ref": "#/$defs/Condition"
+      },
+      "title": "Conditions",
       "type": "array"
     },
     "surprise": {
@@ -739,5 +832,5 @@
   ],
   "title": "InsightCard",
   "type": "object",
-  "$comment": "schema 0.2.0"
+  "$comment": "schema 0.2.1"
 }

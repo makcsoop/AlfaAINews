@@ -1,16 +1,18 @@
 """Инструмент разметки пар «сюжет × клиент» (ТЗ, день 3): важно / неважно, главный канал, знак → CSV.
 
-Страница — GET /labeling. Пары создаёт eval/labeling/make_pairs.py. Каждый разметчик видит пары,
+Страница — GET /labeling, только при LABELING_ENABLED=true: страница показывает профили компаний без сессии,
+поэтому на демо-стенде выключена (404). Пары создаёт eval/labeling/make_pairs.py. Каждый разметчик видит пары,
 которые он ещё не размечал; одну пару могут разметить несколько человек (для согласия разметчиков).
 """
 
 import csv
 import io
+import os
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -19,7 +21,14 @@ from sqlalchemy.dialects.postgresql import insert
 from backend.db import models as m
 from backend.db.engine import get_engine
 
-router = APIRouter(prefix="/labeling", tags=["labeling"])
+
+def _enabled() -> None:
+    """Инвариант 6: данные клиентов без сессии наружу не отдаём — инструмент только для разметки."""
+    if os.environ.get("LABELING_ENABLED", "").strip().lower() not in {"1", "true", "yes"}:
+        raise HTTPException(404, "Not Found")
+
+
+router = APIRouter(prefix="/labeling", tags=["labeling"], dependencies=[Depends(_enabled)])
 PAGE = Path(__file__).with_name("labeling.html")
 CHANNELS = Path(__file__).resolve().parents[2] / "config" / "channels_matrix.yaml"
 
@@ -27,7 +36,8 @@ CHANNELS = Path(__file__).resolve().parents[2] / "config" / "channels_matrix.yam
 class LabelIn(BaseModel):
     pair_id: str
     labeler: str = Field(min_length=1, max_length=40)
-    important: bool
+    relevance: Literal[0, 1, 2, 3]  # 0 не про нас, 1 фон, 2 важно, 3 важно сегодня
+    important: bool | None = None  # по умолчанию relevance ≥ 2
     main_channel: str | None = None
     sign: Literal[-1, 0, 1] | None = None
     comment: str | None = Field(default=None, max_length=1000)
@@ -70,7 +80,10 @@ def save_label(label: LabelIn) -> dict:
             select(m.label_pairs.c.pair_id).where(m.label_pairs.c.pair_id == label.pair_id)
         ).first():
             raise HTTPException(404, "нет такой пары")
-        conn.execute(insert(m.labels).values(**label.model_dump()))
+        row = label.model_dump()
+        if row["important"] is None:
+            row["important"] = label.relevance >= 2
+        conn.execute(insert(m.labels).values(**row))
     return {"ok": True}
 
 
@@ -84,6 +97,7 @@ def export(batch: str = "oct-60") -> StreamingResponse:
                 m.label_pairs.c.company_id,
                 m.label_pairs.c.data,
                 m.labels.c.labeler,
+                m.labels.c.relevance,
                 m.labels.c.important,
                 m.labels.c.main_channel,
                 m.labels.c.sign,
@@ -105,6 +119,7 @@ def export(batch: str = "oct-60") -> StreamingResponse:
             "event_type",
             "story_title",
             "labeler",
+            "relevance",
             "important",
             "main_channel",
             "sign",
@@ -122,6 +137,7 @@ def export(batch: str = "oct-60") -> StreamingResponse:
                 r.data["story"]["event_type"],
                 r.data["story"]["title"],
                 r.labeler,
+                "" if r.relevance is None else r.relevance,
                 int(r.important),
                 r.main_channel or "",
                 "" if r.sign is None else r.sign,

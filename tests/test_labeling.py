@@ -21,8 +21,37 @@ def test_top_sectors_sorted_by_share_not_key_order():
 
 
 def test_label_validation():
-    LabelIn(pair_id="p", labeler="Кирилл", important=True, main_channel="key_rate", sign=-1)
+    LabelIn(pair_id="p", labeler="Кирилл", relevance=3, main_channel="key_rate", sign=-1)
     with pytest.raises(ValidationError):
-        LabelIn(pair_id="p", labeler="", important=True)
+        LabelIn(pair_id="p", labeler="", relevance=1)
     with pytest.raises(ValidationError):
-        LabelIn(pair_id="p", labeler="x", important=True, sign=2)
+        LabelIn(pair_id="p", labeler="x", relevance=2, sign=2)
+    with pytest.raises(ValidationError):
+        LabelIn(pair_id="p", labeler="x", relevance=4)  # шкала каппы Р2 — 0…3
+    with pytest.raises(ValidationError):
+        LabelIn(pair_id="p", labeler="x", important=True)  # без значимости метка не принимается
+
+
+def _client():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.labeling import router
+
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+@pytest.mark.parametrize("path", ["/labeling", "/labeling/channels", "/labeling/export.csv"])
+def test_labeling_closed_without_flag(monkeypatch, path):
+    # инвариант 6: на демо страница с профилями компаний без сессии не открывается
+    monkeypatch.delenv("LABELING_ENABLED", raising=False)
+    assert _client().get(path).status_code == 404
+
+
+def test_labeling_open_with_flag(monkeypatch):
+    monkeypatch.setenv("LABELING_ENABLED", "true")
+    c = _client()
+    assert c.get("/labeling").status_code == 200
+    assert any(ch["id"] == "key_rate" for ch in c.get("/labeling/channels").json())
