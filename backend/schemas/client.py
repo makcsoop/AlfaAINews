@@ -52,12 +52,17 @@ class CompanyProfile(Schema):
     completeness: Score01 | None = Field(default=None, description="доля заполненных ключевых полей")
 
 
+# Корзина отраслей для контрагентов, которых нет в файле компаний (у них нет ОКВЭД)
+OUTSIDE_SECTOR = "outside"
+
+
 class Counterparty(Schema):
     company_id: str
     direction: Literal["supplier", "buyer"]
-    share: Score01 = Field(description="доля в платежах клиента по этому направлению")
+    share: Score01 = Field(description="доля во внешних платежах клиента по этому направлению")
     pay_amt: float
     pay_cnt: int | None = None
+    in_dataset: bool = Field(default=True, description="контрагент есть в файле компаний (известен ОКВЭД)")
     okved_code: str | None = None
     sector: str | None = None
     same_group: bool = False
@@ -65,17 +70,37 @@ class Counterparty(Schema):
 
 
 class CounterpartyGraph(Schema):
-    """6. Топ-контрагенты, их отрасли, доли и концентрация (HHI) по направлениям."""
+    """6. Топ-контрагенты, их отрасли, доли и концентрация (HHI) по направлениям.
+
+    Поставщики — получатели платежей клиента (PAYER = клиент), покупатели — плательщики клиенту.
+    Доли и HHI считаются по внешним платежам: самоплатежи и платежи внутри GROUP_ID исключены
+    и показаны отдельной суммой. Контрагенты вне файла компаний попадают в сектор «outside»."""
 
     company_id: str
-    suppliers: list[Counterparty] = Field(default_factory=list)
-    buyers: list[Counterparty] = Field(default_factory=list)
+    group_id: str | None = None
+    suppliers: list[Counterparty] = Field(default_factory=list, description="топ-10 по сумме")
+    buyers: list[Counterparty] = Field(default_factory=list, description="топ-10 по сумме")
+    total_out: float = Field(default=0, description="внешние исходящие платежи")
+    total_in: float = Field(default=0, description="внешние входящие платежи")
+    n_suppliers: int = 0
+    n_buyers: int = 0
+    intragroup_out: float = 0
+    intragroup_in: float = 0
     hhi_suppliers: float | None = Field(default=None, ge=0, le=1)
     hhi_buyers: float | None = Field(default=None, ge=0, le=1)
     top_supplier_share: Score01 | None = None
     top_buyer_share: Score01 | None = None
-    sector_shares_suppliers: dict[str, float] = Field(default_factory=dict)
+    sector_shares_suppliers: dict[str, float] = Field(
+        default_factory=dict, description="2 знака ОКВЭД → доля; 'outside' — контрагенты вне базы"
+    )
     sector_shares_buyers: dict[str, float] = Field(default_factory=dict)
-    group_members: list[str] = Field(default_factory=list)
+    group_size: int = Field(default=1, description="компаний с тем же GROUP_ID, включая клиента")
+    group_members: list[str] = Field(default_factory=list, description="до 50 компаний группы")
     linked_via_persons: list[str] = Field(default_factory=list, description="гипотеза «скрытой группы»")
-    high_dependency: bool = False
+    high_dependency: bool = Field(
+        default=False,
+        description="при 5+ контрагентах крупнейший получает ≥ 50% внешних платежей по направлению",
+    )
+    sparse: bool = Field(
+        default=False, description="меньше 5 контрагентов в обе стороны: концентрацию клиенту не показываем"
+    )

@@ -14,3 +14,11 @@ def load_sources(path: str | Path | None = None, *, enabled_only: bool = False) 
     if len(ids) != len(set(ids)):
         raise ValueError("повторяющиеся id в sources.yaml")
     return [s for s in sources if s.enabled] if enabled_only else sources
+
+
+ANALYST_TAGS = {"analytics", "author", "aggregator"}
+
+
+def analyst_sources(path: str | Path | None = None) -> list[str]:
+    """Аналитические, авторские и агрегирующие Telegram-каналы — «мнение рынка» (не СМИ и не регуляторы)."""
+    return [s.id for s in load_sources(path) if s.kind == "telegram" and ANALYST_TAGS & set(s.tags)]

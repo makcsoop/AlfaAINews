@@ -462,6 +462,14 @@
       },
       "title": "Unverified Fields",
       "type": "array"
+    },
+    "source_item_ids": {
+      "description": "материалы сюжета, по которым извлечены факты (для пересчёта и трассы)",
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Item Ids",
+      "type": "array"
     }
   },
   "required": [

@@ -16,7 +16,7 @@
           "type": "string"
         },
         "share": {
-          "description": "доля в платежах клиента по этому направлению",
+          "description": "доля во внешних платежах клиента по этому направлению",
           "maximum": 1.0,
           "minimum": 0.0,
           "title": "Share",
@@ -37,6 +37,12 @@
           ],
           "default": null,
           "title": "Pay Cnt"
+        },
+        "in_dataset": {
+          "default": true,
+          "description": "контрагент есть в файле компаний (известен ОКВЭД)",
+          "title": "In Dataset",
+          "type": "boolean"
         },
         "okved_code": {
           "anyOf": [
@@ -84,13 +90,26 @@
     }
   },
   "additionalProperties": false,
-  "description": "6. Топ-контрагенты, их отрасли, доли и концентрация (HHI) по направлениям.",
+  "description": "6. Топ-контрагенты, их отрасли, доли и концентрация (HHI) по направлениям.\n\nПоставщики — получатели платежей клиента (PAYER = клиент), покупатели — плательщики клиенту.\nДоли и HHI считаются по внешним платежам: самоплатежи и платежи внутри GROUP_ID исключены\nи показаны отдельной суммой. Контрагенты вне файла компаний попадают в сектор «outside».",
   "properties": {
     "company_id": {
       "title": "Company Id",
       "type": "string"
     },
+    "group_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Group Id"
+    },
     "suppliers": {
+      "description": "топ-10 по сумме",
       "items": {
         "$ref": "#/$defs/Counterparty"
       },
@@ -98,11 +117,44 @@
       "type": "array"
     },
     "buyers": {
+      "description": "топ-10 по сумме",
       "items": {
         "$ref": "#/$defs/Counterparty"
       },
       "title": "Buyers",
       "type": "array"
+    },
+    "total_out": {
+      "default": 0,
+      "description": "внешние исходящие платежи",
+      "title": "Total Out",
+      "type": "number"
+    },
+    "total_in": {
+      "default": 0,
+      "description": "внешние входящие платежи",
+      "title": "Total In",
+      "type": "number"
+    },
+    "n_suppliers": {
+      "default": 0,
+      "title": "N Suppliers",
+      "type": "integer"
+    },
+    "n_buyers": {
+      "default": 0,
+      "title": "N Buyers",
+      "type": "integer"
+    },
+    "intragroup_out": {
+      "default": 0,
+      "title": "Intragroup Out",
+      "type": "number"
+    },
+    "intragroup_in": {
+      "default": 0,
+      "title": "Intragroup In",
+      "type": "number"
     },
     "hhi_suppliers": {
       "anyOf": [
@@ -164,6 +216,7 @@
       "additionalProperties": {
         "type": "number"
       },
+      "description": "2 знака ОКВЭД → доля; 'outside' — контрагенты вне базы",
       "title": "Sector Shares Suppliers",
       "type": "object"
     },
@@ -174,7 +227,14 @@
       "title": "Sector Shares Buyers",
       "type": "object"
     },
+    "group_size": {
+      "default": 1,
+      "description": "компаний с тем же GROUP_ID, включая клиента",
+      "title": "Group Size",
+      "type": "integer"
+    },
     "group_members": {
+      "description": "до 50 компаний группы",
       "items": {
         "type": "string"
       },
@@ -191,7 +251,14 @@
     },
     "high_dependency": {
       "default": false,
+      "description": "при 5+ контрагентах крупнейший получает ≥ 50% внешних платежей по направлению",
       "title": "High Dependency",
+      "type": "boolean"
+    },
+    "sparse": {
+      "default": false,
+      "description": "меньше 5 контрагентов в обе стороны: концентрацию клиенту не показываем",
+      "title": "Sparse",
       "type": "boolean"
     }
   },

@@ -75,17 +75,102 @@ async def run_source_forever(fetcher: Fetcher, src: Source) -> None:
         await asyncio.sleep(src.poll_seconds)
 
 
+STORIES_EVERY = 300  # секунд между пересборками сюжетов
+TELEGRAM_EVERY = 180  # секунд между кругами по каналам
+
+
+async def telegram_round(client, channels: list[Source]) -> int:
+    from backend.ingest.telegram import ingest_channel
+
+    total = 0
+    for src in channels:  # по очереди: один клиент, без параллельных запросов к API
+        try:
+            total += await ingest_channel(client, src)
+        except Exception:
+            log.exception("%s: сбой Telegram", src.id)
+    return total
+
+
+async def telegram_web_forever(fetcher: Fetcher, channels: list[Source], once: bool) -> None:
+    """Без аккаунта: публичные страницы t.me/s. Каналы по очереди, общий лимит 1 запрос/с на хост."""
+    from backend.ingest.tme_web import ingest_channel_web
+
+    while True:
+        total = 0
+        for src in channels:
+            try:
+                total += await ingest_channel_web(fetcher, src)
+            except Exception:
+                log.exception("%s: сбой t.me/s", src.id)
+        log.info("Telegram (t.me/s, без входа): круг по %d каналам, записано %d", len(channels), total)
+        if once:
+            return
+        await asyncio.sleep(TELEGRAM_EVERY)
+
+
+async def telegram_forever(fetcher: Fetcher, channels: list[Source], once: bool = False) -> None:
+    """Telethon, если есть сессия (TG_SESSION_STRING); иначе — публичные страницы t.me/s без входа."""
+    from backend.ingest.telegram import make_client
+
+    if not channels:
+        return
+    client = make_client()
+    if client is None:
+        await telegram_web_forever(fetcher, channels, once)
+        return
+    async with client:
+        while True:
+            log.info(
+                "Telegram: круг по %d каналам, записано %d",
+                len(channels),
+                await telegram_round(client, channels),
+            )
+            if once:
+                return
+            await asyncio.sleep(TELEGRAM_EVERY)
+
+
+def _rebuild_stories() -> dict:
+    """Склейка, затем факты по новым и изменившимся сюжетам (LLM подключится через порт экстрактора)."""
+    from backend.extract.run import run as extract_facts
+    from backend.stories.cluster import rebuild
+
+    with get_engine().begin() as conn:
+        stats = rebuild(conn)
+    with get_engine().begin() as conn:
+        stats["facts"] = extract_facts(conn)["stories"]
+    return stats
+
+
+async def stories_forever() -> None:
+    """Склейка и факты идут в том же воркере, что и сбор: раз в 5 минут, в отдельном потоке."""
+    while True:
+        await asyncio.sleep(STORIES_EVERY)
+        try:
+            log.info("сюжеты: %s", await asyncio.to_thread(_rebuild_stories))
+        except Exception:
+            log.exception("сбой склейки")
+
+
 async def main_async(once: bool, only: list[str] | None) -> None:
-    sources = [s for s in load_sources(enabled_only=not only) if s.kind == "rss"]
+    registry = load_sources(enabled_only=not only)
     if only:
-        sources = [s for s in sources if s.id in only]
+        registry = [s for s in registry if s.id in only]
+    sources = [s for s in registry if s.kind == "rss"]
+    channels = [s for s in registry if s.kind == "telegram"]
     log.info("ленты: %s", ", ".join(s.id for s in sources))
     fetcher = Fetcher()
     try:
         if once:
-            await asyncio.gather(*(ingest_rss(fetcher, s) for s in sources))
+            await asyncio.gather(
+                *(ingest_rss(fetcher, s) for s in sources), telegram_forever(fetcher, channels, once=True)
+            )
         else:
-            await asyncio.gather(*(run_source_forever(fetcher, s) for s in sources))
+            await asyncio.gather(
+                *(run_source_forever(fetcher, s) for s in sources),
+                telegram_forever(fetcher, channels),
+                stories_forever(),
+            )
     finally:
         await fetcher.aclose()
 
@@ -94,6 +179,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("trafilatura").setLevel(logging.WARNING)
+    logging.getLogger("telethon").setLevel(logging.WARNING)
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true", help="один проход и выход")
     ap.add_argument("--source", action="append", help="только эти id (можно выключенные)")

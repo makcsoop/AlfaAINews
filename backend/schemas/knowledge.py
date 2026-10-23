@@ -33,7 +33,7 @@ class BankPosition(Schema):
     quote_verified: bool | None = None
     valid_until: date | None = Field(default=None, description="срок актуальности позиции")
     superseded_by: str | None = Field(
-        default=None, description="id сюжета, который сделал позицию устаревшей"
+        default=None, description="id сюжета или более новой позиции банка, которые сделали эту устаревшей"
     )
 
 

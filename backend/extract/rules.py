@@ -1,0 +1,160 @@
+"""Детерминированная часть экстрактора: тип события, статус, числа, направление факторов.
+
+Всё, что здесь найдено, привязано к дословному фрагменту текста. LLM-слой дополняет и уточняет,
+а при исчерпании бюджета эта разметка остаётся единственной.
+"""
+
+import re
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+
+from backend.schemas import ChannelImpact, NumberFact
+
+EVENT_TYPES = Path(__file__).resolve().parents[2] / "config" / "event_types.yaml"
+
+_SENT = re.compile(r"(?<=[.!?…])\s+(?=[А-ЯЁA-Z«\"])")
+INTENT = re.compile(
+    r"\b(планиру\w*|намерен\w*|собира\w*|рассматрива\w*|предлага\w*|может|могут|готов\w+ к|допуска\w+)\b",
+    re.IGNORECASE,
+)
+RUMOR = re.compile(
+    r"по (данным|информации|словам) (источник|собеседник)|источники? (в|из|знаком|близк)|якобы|по слухам",
+    re.IGNORECASE,
+)
+FORECAST = re.compile(r"\b(прогноз\w*|ожида\w+|ждут|ожидани\w+)\b", re.IGNORECASE)
+
+# Число + единица. Порядок важен: сначала длинные единицы.
+_UNITS = [
+    (r"трлн\.?\s*(руб|рублей|₽)", "трлн руб"),
+    (r"млрд\.?\s*(руб|рублей|₽)", "млрд руб"),
+    (r"млн\.?\s*(руб|рублей|₽)", "млн руб"),
+    (r"млрд\.?\s*(долл\w*|\$)", "млрд USD"),
+    (r"млн\.?\s*(долл\w*|\$)", "млн USD"),
+    (r"(руб|рублей|₽)", "руб"),
+    (r"(долл\w*|\$)", "USD"),
+    (r"(евро|€)", "EUR"),
+    (r"(%|процент\w*|п\.п\.)", "%"),
+    (r"(б\.п\.|базисн\w+ пункт\w*)", "б.п."),
+    (r"(трлн)", "трлн"),
+    (r"(млрд)", "млрд"),
+    (r"(млн)", "млн"),
+    (r"(тыс\.?\s*т|млн\s*т|т\b|тонн\w*)", "т"),
+]
+_NUM_UNIT = re.compile(
+    r"(?<![\w.,])(?P<num>\d+(?:[  ]\d{3})*(?:[.,]\d+)?)\s*(?P<unit>" + "|".join(u for u, _ in _UNITS) + r")",
+    re.IGNORECASE,
+)
+_UNIT_RX = [(re.compile(u, re.IGNORECASE), name) for u, name in _UNITS]
+# валюта перед числом: «$111,05», «€1 050»
+_PRE_UNIT = re.compile(r"(?P<cur>[$€])\s?(?P<num>\d+(?:[  ]\d{3})*(?:[.,]\d+)?)")
+_PRE_NAMES = {"$": "USD", "€": "EUR"}
+_UP = re.compile(r"(вырос|повысил|увелич|подорожал|ускорил|подня)", re.IGNORECASE)
+_DOWN = re.compile(r"(снизил|сниж|упал|уменьш|подешевел|замедлил|сократил)", re.IGNORECASE)
+
+
+@dataclass
+class EventTypeRule:
+    name: str
+    channels: list[str]
+    patterns: list[re.Pattern]
+
+
+@lru_cache
+def _config():
+    cfg = yaml.safe_load(EVENT_TYPES.read_text(encoding="utf-8"))
+    types = [
+        EventTypeRule(
+            name, et.get("channels", []), [re.compile(p, re.IGNORECASE) for p in et.get("patterns", [])]
+        )
+        for name, et in cfg["event_types"].items()
+    ]
+    hints = {
+        ch: {k: re.compile(v, re.IGNORECASE) for k, v in h.items()}
+        for ch, h in cfg.get("direction_hints", {}).items()
+    }
+    return types, hints
+
+
+def sentences(text: str) -> list[str]:
+    """Предложения; перенос строки — тоже граница (заголовок без точки не склеивается с текстом)."""
+    return [s.strip() for line in text.splitlines() for s in _SENT.split(line) if s.strip()]
+
+
+def event_type(title: str, lead: str | None) -> tuple[str, str | None]:
+    """Тип события и фрагмент, на котором сработал паттерн. Заголовок важнее лида."""
+    types, _ = _config()
+    for part in (title, lead or ""):
+        for et in types:
+            for rx in et.patterns:
+                m = rx.search(part)
+                if m:
+                    return et.name, part
+    return "other", None
+
+
+def status(text: str) -> tuple[str, bool, bool]:
+    """(status, is_intent, is_rumor) по первым предложениям: что произошло, а не что когда-то было."""
+    head = " ".join(sentences(text)[:2])
+    rumor = bool(RUMOR.search(head))
+    intent = bool(INTENT.search(head))
+    if rumor:
+        return "rumor", intent, True
+    if intent:
+        return "planned", True, False
+    if FORECAST.search(head):
+        return "forecast", False, False
+    return "fact", False, False
+
+
+def numbers(text: str, limit: int = 12) -> list[NumberFact]:
+    out: list[NumberFact] = []
+    seen = set()
+    for sent in sentences(text):
+        found = [(m, None) for m in _NUM_UNIT.finditer(sent)] + [
+            (m, _PRE_NAMES[m.group("cur")]) for m in _PRE_UNIT.finditer(sent)
+        ]
+        for m, pre_unit in sorted(found, key=lambda x: x[0].start()):
+            raw = m.group("num").replace(" ", "").replace(" ", "").replace(",", ".")
+            try:
+                value = float(raw)
+            except ValueError:
+                continue
+            unit = pre_unit or next(name for rx, name in _UNIT_RX if rx.fullmatch(m.group("unit").strip()))
+            key = (value, unit)
+            if key in seen:
+                continue
+            seen.add(key)
+            window = sent[max(0, m.start() - 60) : m.end() + 20]
+            direction = "up" if _UP.search(window) else "down" if _DOWN.search(window) else None
+            out.append(
+                NumberFact(value=value, unit=unit, direction=direction, quote=sent[:400], verified=True)
+            )
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def channel_directions(text: str, channels: list[str]) -> list[ChannelImpact]:
+    """Направление факторов по подсказкам: ключ фактора и слово направления в одном предложении.
+    Сила по правилам — 0,3 (низкая): уточняет LLM-разбор."""
+    _, hints = _config()
+    out = []
+    for ch in channels:
+        h = hints.get(ch)
+        if not h:
+            continue
+        for sent in sentences(text)[:6]:
+            if not h["key"].search(sent):
+                continue
+            direction = next((d for d in ("up", "down", "flat") if d in h and h[d].search(sent)), None)
+            if direction:
+                out.append(
+                    ChannelImpact(
+                        channel=ch, direction=direction, strength=0.3, rationale="правила: " + sent[:200]
+                    )
+                )
+                break
+    return out

@@ -31,6 +31,7 @@ class EventType(BaseModel):
 
     channels: list[str] = Field(default_factory=list)
     prior: dict[str, Signed] = Field(default_factory=dict)
+    patterns: list[str] = Field(default_factory=list)  # регулярки типирования Р1 (backend/extract/rules.py)
 
 
 @lru_cache

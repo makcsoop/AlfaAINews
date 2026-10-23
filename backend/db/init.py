@@ -204,6 +204,37 @@ def main() -> None:
                 case_dir = SYNTHETIC_DIR
             log.info("CSV кейса: %s", load_case_dir(conn, case_dir, force=args.force_case))
 
+    if args.load_case:
+        refresh_graph_if_stale()
+
+
+def refresh_graph_if_stale() -> None:
+    """Граф платежей пересчитывается, если его нет или платежи загружены позже последнего расчёта."""
+    from backend.profile.graph import build_graphs, save_graphs
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        stale = conn.execute(
+            text(
+                "SELECT (SELECT max(loaded_at) FROM case_load_state"
+                " WHERE kind IN ('case_payments', 'case_companies'))"
+                " > coalesce((SELECT loaded_at FROM case_load_state WHERE kind = 'graph'), 'epoch')"
+            )
+        ).scalar()
+    if not stale:
+        log.info("граф платежей актуален — пропускаю")
+        return
+    with engine.connect() as read, engine.begin() as write:
+        n = save_graphs(write, build_graphs(read))
+        write.execute(
+            text(
+                "INSERT INTO case_load_state (kind, file, sha1, rows) VALUES ('graph', 'payments', '-', :n) "
+                "ON CONFLICT (kind) DO UPDATE SET rows = :n, loaded_at = now()"
+            ),
+            {"n": n},
+        )
+    log.info("граф платежей пересчитан: %d компаний", n)
+
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,138 @@
+"""Экстрактор: правила, проверка цитат и чисел, LLM-слой на заглушке."""
+
+from datetime import UTC, datetime
+
+import pytest
+
+from backend.extract import rules
+from backend.extract.extractor import extract, extract_rules
+from backend.extract.llm_port import FixtureLLM
+from backend.extract.verify import number_in_quote, quote_in_text
+from backend.schemas import RawItem, Story
+
+T0 = datetime(2026, 9, 11, 10, 30, tzinfo=UTC)
+TEXT = (
+    "11 сентября 2026 года совет директоров Банка России принял решение сохранить ключевую ставку "
+    "на уровне 14% годовых. Это первая пауза после десяти снижений подряд. "
+    "Рубль после решения укрепился на 0,5%."
+)
+
+
+def _item(
+    source="cbr_press", title="Банк России сохранил ключевую ставку на уровне 14,00% годовых", text=TEXT
+):
+    return RawItem(
+        id="it1",
+        source_id=source,
+        native_id="1",
+        title=title,
+        lead=None,
+        text=text,
+        published_at=T0,
+        fetched_at=T0,
+        content_hash="h",
+    )
+
+
+def _story():
+    return Story(id="st1", title="t", item_ids=["it1"], corroboration=1, first_seen=T0, last_seen=T0)
+
+
+@pytest.mark.parametrize(
+    ("title", "etype"),
+    [
+        ("Банк России сохранил ключевую ставку на уровне 14%", "rate_decision"),
+        ("Минфин разместил ОФЗ на 50 млрд рублей", "ofz_auction"),
+        ("ЕС ввел новые санкции против российских банков", "sanctions"),
+        ("Brent превысила $111 за баррель впервые за пять месяцев", "commodity_price"),
+        ("Госдума приняла в первом чтении законопроект о платформенной экономике", "regulation_proposed"),
+        ("Лазертаг стал официальным видом спорта в России", "other"),
+    ],
+)
+def test_event_type(title, etype):
+    assert rules.event_type(title, None)[0] == etype
+
+
+@pytest.mark.parametrize(
+    ("text", "status"),
+    [
+        ("ЦБ сохранил ставку.", "fact"),
+        ("Минфин планирует повысить НДС с 2027 года.", "planned"),
+        ("По данным источников, правительство обсуждает новый налог.", "rumor"),
+        ("Аналитики ожидают снижения ставки до 13%.", "forecast"),
+    ],
+)
+def test_status(text, status):
+    assert rules.status(text)[0] == status
+
+
+def test_numbers_units_and_prefix_currency():
+    nums = {
+        (n.value, n.unit)
+        for n in rules.numbers("Ставка 14% годовых. Выручка 1,5 млрд рублей. Brent — $111,05.")
+    }
+    assert {(14.0, "%"), (1.5, "млрд руб"), (111.05, "USD")} <= nums
+
+
+def test_verify_quote_and_number():
+    assert quote_in_text("сохранить ключевую ставку на уровне 14% годовых", TEXT)
+    assert quote_in_text("«сохранить ключевую ставку» на уровне 14%", TEXT)  # кавычки не мешают
+    assert not quote_in_text("повысить ключевую ставку до 16%", TEXT)
+    assert not quote_in_text("14%", "ставка 15%")
+    assert number_in_quote(14, "на уровне 14% годовых") and number_in_quote(1.5, "1,5 млрд рублей")
+    assert not number_in_quote(16, "на уровне 14% годовых")
+
+
+def test_rules_facts_are_grounded():
+    facts = extract_rules(_story(), [_item()])
+    assert facts.event_type == "rate_decision" and facts.status == "fact"
+    assert any(p.name == "Банк России" and p.role == "regulator" for p in facts.participants)
+    assert any(n.value == 14 and n.unit == "%" for n in facts.numbers)
+    source_text = _item().title + "\n" + TEXT  # цитаты сверяются с полным текстом источника
+    assert all(quote_in_text(n.quote, source_text) and "\n" not in n.quote for n in facts.numbers)
+    assert {(c.channel, c.direction) for c in facts.channels} >= {("key_rate", "flat"), ("fx_rub", "up")}
+    assert facts.extractor_model.startswith("rules") and facts.source_item_ids == ["it1"]
+
+
+def test_weak_lead_sentence_falls_back_to_title():
+    item = _item(text=None, title="Цена газа в Европе превысила $1050")
+    item.lead = "Это произошло впервые с декабря 2022 года. Подробнее в материале."
+    assert extract_rules(_story(), [item]).summary == "Цена газа в Европе превысила $1050"
+
+
+GOOD = {
+    "event_type": "rate_decision",
+    "status": "fact",
+    "summary": "ЦБ сохранил ставку 14%",
+    "summary_quote": "принял решение сохранить ключевую ставку на уровне 14% годовых",
+    "numbers": [{"value": 14, "unit": "%", "quote": "на уровне 14% годовых"}],
+    "channels": [
+        {"channel": "key_rate", "direction": "flat", "strength": 0.7, "quote": "сохранить ключевую ставку"}
+    ],
+}
+
+
+def test_llm_verified_fields_applied():
+    llm = FixtureLLM(GOOD)
+    facts = extract(_story(), [_item()], llm)
+    assert facts.summary == "ЦБ сохранил ставку 14%" and facts.unverified_fields == []
+    assert facts.channels[0].strength == 0.7 and facts.channels[0].evidence[0].verified
+    assert len(llm.calls) == 1
+    assert '<untrusted_source id="it1">' in llm.calls[0]["user"]  # новость — только как данные
+
+
+def test_llm_hallucinations_dropped_after_one_retry():
+    bad = {
+        **GOOD,
+        "summary_quote": "ЦБ повысил ставку до 16%",  # цитаты нет в тексте
+        "numbers": [{"value": 16, "unit": "%", "quote": "на уровне 14% годовых"}],  # числа нет в цитате
+        "channels": [{"channel": "weather", "direction": "up", "quote": "сохранить ключевую ставку"}],
+    }
+    llm = FixtureLLM(bad)
+    facts = extract(_story(), [_item()], llm)
+    assert len(llm.calls) == 2  # ответ + ровно один повтор
+    assert "не прошли проверку" in llm.calls[1]["user"]
+    assert len(facts.unverified_fields) == 3
+    assert not any(n.value == 16 for n in facts.numbers)
+    assert all(c.channel != "weather" for c in facts.channels)
+    assert facts.summary != "ЦБ сохранил ставку 14%"  # сводка осталась от правил

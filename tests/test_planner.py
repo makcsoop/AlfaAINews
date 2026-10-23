@@ -153,7 +153,7 @@ def test_dossier_rate_14_has_facts_bank_market_and_tool_calls(bundle):
     assert number.data["value"] == 14.0 and "14%" in number.text  # число с цитатой
     banks = dossier.by_kind("bank_position")
     assert banks and all(i.id.startswith("cmi_") for i in banks)
-    assert [i.id for i in dossier.by_kind("market_knowledge")] == ["mk_consensus_2026-09-11"]
+    assert [i.id for i in dossier.by_kind("market_knowledge")] == ["mk_fixture_consensus_2026-09-11"]
     assert dossier.by_kind("news")
     assert calls and all(c.ok for c in calls)
     assert all(set(c.args) == {"sha256"} for c in calls)  # в трассе только хеш аргументов

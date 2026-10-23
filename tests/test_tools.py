@@ -174,7 +174,7 @@ def test_market_knowledge_filters_after_story_and_after_event():
     )
     out, _ = run_tool(ctx_with(src), "get_market_knowledge", {})
     ids = {k.id for k in out.knowledge}
-    assert ids == {"mk_consensus_2026-09-11", "mk_ok", "mk_site"}
+    assert ids == {"mk_fixture_consensus_2026-09-11", "mk_ok", "mk_site"}
     assert all(k.timing == "before_event" for k in out.knowledge)
     assert all(k.origin for k in out.knowledge)
 
@@ -185,7 +185,7 @@ def test_market_knowledge_telegram_switch():
     out, _ = run_tool(ctx_with(src, allow_telegram_origin=False), "get_market_knowledge", {})
     assert [k.id for k in out.knowledge] == ["mk_site"]
     only_kind, _ = run_tool(ctx_with(src), "get_market_knowledge", {"kind": "expectation"})
-    assert [k.id for k in only_kind.knowledge] == ["mk_consensus_2026-09-11"]
+    assert [k.id for k in only_kind.knowledge] == ["mk_fixture_consensus_2026-09-11"]
 
 
 def test_similar_cases_empty_on_fixture_and_before_story(ctx):

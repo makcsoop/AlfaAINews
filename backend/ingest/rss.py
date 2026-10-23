@@ -12,6 +12,7 @@ import trafilatura
 from backend.ingest.http import Fetcher
 from backend.ingest.normalize import clean_text, content_hash, item_id, simhash, strip_dateline
 from backend.schemas import RawItem, Source
+from backend.stories.filters import drop_reason
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ def entry_to_item(
     nid = native_id(entry)
     updated = entry.get("rbc_news_newsmodifdate")
     priority = entry.get("rian_priority")
-    return RawItem(
+    item = RawItem(
         id=item_id(src.id, nid),
         source_id=src.id,
         native_id=nid,
@@ -97,7 +98,10 @@ def entry_to_item(
         priority=int(priority) if priority and str(priority).isdigit() else None,
         content_hash=content_hash(title, text or lead),
         simhash=simhash(f"{title}\n{lead or ''}\n{text or ''}"),
+        tier=src.tier,
     )
+    item.dropped_reason = drop_reason(item)
+    return item
 
 
 def extract_page(html: bytes, url: str | None = None) -> str | None:

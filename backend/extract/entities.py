@@ -1,0 +1,118 @@
+"""Сущности текста: Natasha (ORG, LOC, PER) + синонимы + словари валют и сырья.
+
+Общий модуль для склейки (общая сущность — обязательное условие) и экстрактора фактов.
+Natasha грузится лениво и один раз (около 2 с).
+"""
+
+import re
+from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+
+DICTIONARIES = Path(__file__).resolve().parents[2] / "config" / "dictionaries.yaml"
+
+
+@dataclass
+class Entities:
+    orgs: set[str] = field(default_factory=set)
+    locations: set[str] = field(default_factory=set)
+    persons: set[str] = field(default_factory=set)
+    currencies: set[str] = field(default_factory=set)
+    commodities: set[str] = field(default_factory=set)
+
+    def keys(self) -> set[str]:
+        """Ключи для сравнения сущностей двух текстов. Валюты и страны не различают сюжеты —
+        они есть почти в каждой экономической новости, поэтому в ключи не входят."""
+        return (
+            {f"org:{x}" for x in self.orgs}
+            | {f"per:{x}" for x in self.persons}
+            | {f"com:{x}" for x in self.commodities}
+        )
+
+    def all_names(self) -> list[str]:
+        return sorted(self.orgs | self.locations | self.persons)
+
+
+@lru_cache
+def _dicts():
+    cfg = yaml.safe_load(DICTIONARIES.read_text(encoding="utf-8"))
+    alias = {}
+    for canon, variants in cfg["aliases"].items():
+        for v in [canon, *variants]:
+            alias[_key(v)] = canon
+    skip = {_key(x) for x in cfg.get("media", []) + cfg.get("generic", [])}
+    cur = {k: re.compile(v, re.IGNORECASE) for k, v in cfg["currencies"].items()}
+    com = {k: re.compile(v, re.IGNORECASE) for k, v in cfg["commodities"].items()}
+    return alias, cur, com, set(cfg["regulators"]), skip
+
+
+def _key(name: str) -> str:
+    return re.sub(r"\s+", " ", name.lower().replace("ё", "е").strip(" «»\"'.,"))
+
+
+@lru_cache
+def _natasha():
+    from natasha import Doc, MorphVocab, NewsEmbedding, NewsMorphTagger, NewsNERTagger, Segmenter
+
+    emb = NewsEmbedding()
+    return Doc, Segmenter(), MorphVocab(), NewsMorphTagger(emb), NewsNERTagger(emb)
+
+
+def canonical(name: str) -> str:
+    alias = _dicts()[0]
+    return alias.get(_key(name), name.strip(" «»\"'"))
+
+
+def regulators() -> set[str]:
+    return _dicts()[3]
+
+
+def _is_noise(name: str, kind: str) -> bool:
+    if _key(name) in _dicts()[4]:
+        return True
+    # город из датлайна капсом («ПЕТЕРБУРГ», «С.-ПЕТЕРБУРГ») — не организация
+    return kind == "ORG" and name.replace(".", "").replace("-", "").isupper() and len(name) >= 6
+
+
+def _dedupe_persons(persons: set[str]) -> set[str]:
+    """«Путин Путин» → «Путин»; фамилия отдельно от полного имени не нужна."""
+    cleaned = set()
+    for p in persons:
+        tokens = p.split()
+        cleaned.add(" ".join(dict.fromkeys(tokens)))
+    return {p for p in cleaned if not any(p != q and p in q.split() for q in cleaned)}
+
+
+def extract_entities(text: str, *, ner: bool = True) -> Entities:
+    alias, cur, com, *_ = _dicts()
+    ents = Entities(
+        currencies={k for k, rx in cur.items() if rx.search(text)},
+        commodities={k for k, rx in com.items() if rx.search(text)},
+    )
+    if not ner or not text.strip():
+        return ents
+    Doc, segmenter, morph_vocab, morph_tagger, ner_tagger = _natasha()
+    doc = Doc(text[:5000])
+    doc.segment(segmenter)
+    doc.tag_morph(morph_tagger)
+    doc.tag_ner(ner_tagger)
+    for span in doc.spans:
+        span.normalize(morph_vocab)
+        # сначала исходный текст: Natasha иногда портит устойчивые имена («Банк России» → «Банк Россия»)
+        name = alias.get(_key(span.text)) or canonical(span.normal or span.text)
+        if len(name) < 2 or _is_noise(name, span.type):
+            continue
+        {"ORG": ents.orgs, "LOC": ents.locations, "PER": ents.persons}[span.type].add(name)
+    # регулятор, записанный аббревиатурой, Natasha иногда пропускает — добираем по словарю синонимов
+    low = _key(text)
+    for variant, canon in alias.items():
+        if (
+            canon in regulators()
+            and len(variant) > 2
+            and re.search(rf"(?<!\w){re.escape(variant)}(?!\w)", low)
+        ):
+            ents.orgs.add(canon)
+    ents.persons = _dedupe_persons(ents.persons)
+    return ents

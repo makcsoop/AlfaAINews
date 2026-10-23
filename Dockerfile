@@ -18,6 +18,7 @@ COPY backend ./backend
 COPY config ./config
 COPY fixtures ./fixtures
 COPY scripts ./scripts
+COPY eval ./eval
 RUN uv sync --frozen --no-dev
 
 CMD ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
