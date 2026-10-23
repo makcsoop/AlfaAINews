@@ -17,7 +17,7 @@
 | Д3 вечер | «Банк и рынок», «Статистик», примеры разборов | Р1 | Р3 | ✅ | `backend.agents.bank_market.report`, `backend.agents.statistician.report`; `/stories/{id}/bank_market`, `/stories/{id}/statistician` |
 | Д3 вечер | Analysis + Card | Р3 | Р2 | 🟨 | на фикстуре rate_14 готово: `run_for_client(story_id, company_id, role, sector=…)` → (InsightCard, RunTrace), `/feed`; `AnalystReport.channels[]` — `direction`/`strength` (направление фактора, схемы 0.2.0); ждём живые сюжеты и скоринг |
 | Д4 13:00 | Приоры каналов | Р1 | Р2 | ⬜ | |
-| Д4 15:00 | Эндпоинт «вставить ссылку» | Р1 | Р2 | ⬜ | |
+| Д4 15:00 | Эндпоинт «вставить ссылку» | Р1 | Р2, Р3 | ✅ | функция `backend.ingest.paste.ingest_paste(conn, url=, text=, title=, llm=)` → story_id (источник `user_paste`, уровень 3, ссылки только на публичные адреса, `PasteError` → 400); HTTP `POST /analyze` и карточка — Р3 |
 | Д4 день | Данные трассы и журнал стоимости | Р3 | Р2 | ✅ | `GET /trace/{id}` (RunTrace: шаги, инструменты, вызовы моделей), `GET /trace/{id}/cost` (₽ по шагам, остаток бюджета); `POST /ask` — вопрос-ответ |
 | Д5 11:00 | Стенд и демо-кеш | Р1 | все | 🟨 | демо-база с нуля: `python -m backend.db.demo` + снимок `--export` (README «Демо-база с нуля»); демо-кеш — день 5 |
 
