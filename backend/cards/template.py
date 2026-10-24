@@ -12,6 +12,7 @@ from backend.cards.build import CardAssemblyError, _as_datetime
 from backend.cards.features import channel_label, company_features, is_sector_feature
 from backend.cards.llm_schema import CardDraft, DraftAction, DraftItem
 from backend.cards.signals import channel_horizon, channel_mean
+from backend.ranking.fast_card import _words
 from backend.schemas import (
     AnalystReport,
     CompanyProfile,
@@ -118,7 +119,7 @@ def template_draft(
             DraftItem(
                 text=(
                     f"Событие затрагивает вашу компанию по каналу «{_factor_label(c.factor)}»: "
-                    f"{'; '.join(feats)}."
+                    f"{_words(feats)}."
                 ),
                 refs=fact0,
                 client_features=feats,

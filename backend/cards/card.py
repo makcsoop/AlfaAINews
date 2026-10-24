@@ -1,5 +1,6 @@
 """Шаг card: вызов модели через единый LLM-клиент, сборка карточки, шаблон при любом сбое."""
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +30,8 @@ from backend.schemas import (
     Story,
 )
 from backend.schemas.common import UserRole
+
+log = logging.getLogger(__name__)
 
 
 class _ForceTemplate(Exception):
@@ -124,6 +127,9 @@ def write_card(
         pass
     except (LLMUnavailable, BudgetExceeded, CardAssemblyError, ValidationError) as e:
         reason = f"{type(e).__name__}: {str(e)[:200]}"
+        log.warning(
+            "карточка %s/%s/%s: черновик не собран, шаблон — %s", story.id, profile.company_id, role, reason
+        )
 
     try:
         draft = template_draft(role=role, **{k: v for k, v in common.items()})  # type: ignore[arg-type]

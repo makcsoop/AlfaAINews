@@ -250,11 +250,13 @@ def mutate(name: str, fn) -> CardDraft:
     return CardDraft.model_validate(data)
 
 
-def test_bank_voice_outside_bank_section_rejected(bundle):
+def test_bank_voice_outside_bank_section_dropped(bundle):
+    """«Банк ожидает» вне раздела банка не попадает в карточку, но и не отправляет её целиком в шаблон."""
     e = env(bundle, *CASES[0])
-    bad = mutate("U_DEMO_BORROWER_cfo", lambda d: d["consequences"][0].update(text="По мнению банка, ставка снизится."))
-    with pytest.raises(CardAssemblyError, match="вне раздела"):
-        assemble(e, bad)
+    text = "По мнению банка, ставка снизится."
+    bad = mutate("U_DEMO_BORROWER_cfo", lambda d: d["consequences"].append({**d["consequences"][0], "text": text}))
+    card = assemble(e, bad)
+    assert all(c.text != text for c in card.claims)
     ok = mutate("U_DEMO_BORROWER_cfo", lambda d: d["bank_and_market"][0].update(text="Банк ожидает паузу до конца года."))
     assemble(e, ok)  # в разделе банка — можно
 

@@ -191,6 +191,12 @@ class _Builder:
         return self.add(claim, [item.id])
 
 
+def _bank_voice(text: str) -> bool:
+    """«Банк ожидает…» — позиция банка; вне раздела «Банк и рынок» такое утверждение выбрасывается целиком:
+    живой прогон 24.10 — одна фраза «Альфа-Банк ожидает…» в последствиях отправляла всю карточку в шаблон."""
+    return bool(_BANK_VOICE.search(text))
+
+
 def _scan(text: str, where: str, *, bank_section: bool = False) -> None:
     if _OFFER_VOICE.search(text):
         raise CardAssemblyError(f"{where}: «предложение банка» добавляет код, не модель")
@@ -458,10 +464,14 @@ def assemble_card(
         bank_and_market.append(b.add(claim, it.refs))
 
     # 3. выводы AI: почему важно и последствия
+    dropped: list[str] = []  # утверждения с голосом банка вне раздела банка — не в карточку
     def inferences(section: list[DraftItem], name: str) -> tuple[list[str], list[list[str]]]:
         ids, used = [], []
         for n, it in enumerate(section):
             where = f"{name}[{n}]"
+            if _bank_voice(it.text):
+                dropped.append(where)
+                continue
             _scan(it.text, where)
             items = b.resolve(it.refs, where)
             feats = b.feats(it.client_features)
@@ -508,6 +518,9 @@ def assemble_card(
     actions: list[Action] = []
     for n, a in enumerate(draft.actions):
         where = f"actions[{n}]"
+        if _bank_voice(a.text):
+            dropped.append(where)
+            continue
         _scan(a.text, where)
         b.resolve(a.refs, where)
         # вопрос и сценарий — вывод модели; ссылки — проверенные id досье (инвариант 4)
@@ -516,6 +529,9 @@ def assemble_card(
     conditions: list[Condition] = []
     for n, it in enumerate(draft.what_would_change):
         where = f"what_would_change[{n}]"
+        if _bank_voice(it.text):
+            dropped.append(where)
+            continue
         _scan(it.text, where)
         b.resolve(it.refs, where)
         conditions.append(Condition(text=it.text, kind="model_inference", refs=list(dict.fromkeys(it.refs))))
