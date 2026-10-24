@@ -24,6 +24,7 @@ import { FeedbackBar } from "./FeedbackBar";
 
 // Отметки из глубины карточки (клик по источнику, «неверно» у утверждения) — без проброса через все уровни
 const Mark = createContext<(kind: FeedbackKind, claimId?: string) => void>(() => {});
+const SOURCES_SHOWN = 6;
 
 interface Props {
   card: InsightCard;
@@ -173,20 +174,39 @@ function Refs({ refs, byId }: { refs?: string[]; byId: Map<string, Claim> }) {
 
 function Sources({ card }: { card: InsightCard }) {
   const mark = useContext(Mark);
+  const [all, setAll] = useState(false);
+  // официальные и агентства — первыми; в сюжете решения ЦБ больше 20 источников, на телефоне это экран
+  const seen = new Set<string>();
+  const sorted = [...card.event.sources]
+    .sort((a, b) => a.tier - b.tier)
+    .filter((s) => {
+      const name = sourceName(s.source_id, s.title);
+      if (seen.has(name)) return false; // «Банк России»: пресс-релиз, события и канал — одно имя
+      seen.add(name);
+      return true;
+    });
+  const shown = all ? sorted : sorted.slice(0, SOURCES_SHOWN);
+  const hidden = sorted.length - shown.length;
   return (
     <div className="sources small">
       <span className="muted">Источники:</span>
-      {card.event.sources.map((s) => {
+      {shown.map((s) => {
         const href = safeUrl(s.url);
         const label = sourceName(s.source_id, s.title);
+        const hint = s.title ?? undefined;
         return href ? (
-          <a key={s.source_id} href={href} target="_blank" rel="noopener noreferrer" onClick={() => mark("click_source")}>
+          <a key={s.source_id} href={href} title={hint} target="_blank" rel="noopener noreferrer" onClick={() => mark("click_source")}>
             {label}
           </a>
         ) : (
-          <span key={s.source_id}>{label}</span>
+          <span key={s.source_id} title={hint}>{label}</span>
         );
       })}
+      {hidden > 0 && (
+        <button type="button" className="link small" onClick={() => setAll(true)}>
+          ещё {hidden}
+        </button>
+      )}
       <span className="muted">· независимых: {card.event.corroboration}</span>
     </div>
   );

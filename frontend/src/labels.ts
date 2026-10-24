@@ -137,12 +137,30 @@ const SOURCE_NAMES: Record<string, string> = {
   cbr_dailyinfo: "Банк России, ставки",
   moex_iss: "Московская биржа",
   agroinvestor: "Агроинвестор",
+  nalog_rss: "ФНС России",
+  customs_rss: "ФТС России",
+  metalinfo: "Металлоснабжение и сбыт",
+  comnews: "ComNews",
+  frank_media: "Frank Media",
+  smartlab: "Смартлаб",
+  tg_centralbank_russia: "Банк России",
+  tg_minfin: "Минфин России",
+  tg_government_rus: "Правительство России",
+  tg_minec_russia: "Минэкономразвития",
+  tg_minenergo_official: "Минэнерго",
+  tg_mintrans_russia: "Минтранс",
+  tg_mcx_ru: "Минсельхоз",
+  tg_mintrudrf: "Минтруд",
+  tg_fasrussia: "ФАС России",
+  tg_minpromtorg_ru: "Минпромторг",
+  tg_duma_gov_ru: "Госдума",
+  tg_rosstat_official: "Росстат",
 };
 
 export function sourceName(sourceId: string, title?: string | null): string {
-  if (title) return title;
   if (SOURCE_NAMES[sourceId]) return SOURCE_NAMES[sourceId];
-  return sourceId.startsWith("tg_") ? `@${sourceId.slice(3)}` : sourceId;
+  if (sourceId.startsWith("tg_")) return `@${sourceId.slice(3)}`;
+  return title || sourceId;
 }
 
 export function formatNum(v: number): string {
