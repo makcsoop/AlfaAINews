@@ -403,3 +403,8 @@ def test_mention_of_decision_is_not_rate_decision():
     t = "В ЦБ не видят рисков для финансовой стабильности, это не могло быть фактором для принятия решения по ключевой ставке"
     assert rules.event_type(t, None)[0] != "rate_decision"
     assert rules.event_type("Банк России принял решение по ключевой ставке: сохранил 14%", None)[0] == "rate_decision"
+
+
+def test_repatriation_of_people_is_not_fx_control():
+    assert rules.event_type("Суд в Индии постановил организовать репатриацию 23 моряков с танкера", None)[0] != "fx_control"
+    assert rules.event_type("Правительство продлило требование о репатриации валютной выручки", None)[0] == "fx_control"
