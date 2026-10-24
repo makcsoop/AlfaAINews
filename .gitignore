@@ -22,3 +22,6 @@ data/llm_journal/
 data/llm_cache/
 data/security_audit/
 reports/
+
+# разметка: профили компаний кейса и метки — в git не кладём
+data/labeling/

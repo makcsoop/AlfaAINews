@@ -15,8 +15,8 @@ spec.loader.exec_module(make_pairs)
 
 def test_top_sectors_sorted_by_share_not_key_order():
     # JSONB отдаёт ключи по алфавиту — «outside» оказывался последним, хотя это 92%
-    shares = {"33": 0.001, "43": 0.002, "46": 0.08, "outside": 0.92}
-    assert make_pairs._top_sectors(shares) == ["вне базы: 92%", "ОКВЭД 46: 8%", "ОКВЭД 43: 0%"]
+    shares = {"33": 0.001, "43": 0.002, "46": 0.08, "99": 0.003, "outside": 0.92}
+    assert make_pairs._top_sectors(shares) == ["вне базы: 92%", "оптовая торговля: 8%", "ОКВЭД 99: 0%"]
     assert make_pairs._top_sectors(None) == []
 
 
