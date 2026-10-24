@@ -69,6 +69,9 @@ class SurpriseMetric(_Cfg):
     unit: str
     number_hint: str
     forecast_prefix: str
+    # прогноз «без изменений до конца года» (key_rate_eoy_2026, направление 0) — ожидание и для каждого
+    # заседания этого года после публикации: «ожидаем сохранения на текущем значении 14,0% до конца года»
+    hold_prefix: str | None = None
 
 
 class SurpriseCfg(_Cfg):
@@ -110,6 +113,7 @@ class RateLevelCfg(_Cfg):
     neutral: float
     full_at: float
     strength: float
+    strength_by_type: dict[str, float] = {}
 
 
 class FeedCfg(_Cfg):

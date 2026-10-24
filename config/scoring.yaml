@@ -66,7 +66,9 @@ surprise:
   # какое число события сравнивать с ожиданиями: тип события → метрика.
   # number_hint — слово в period или цитате числа из фактов; forecast_prefix — Forecast.metric позиции ЦМИ
   metrics:
-    rate_decision:  {metric: "ключевая ставка", unit: "%", number_hint: "ставк", forecast_prefix: "key_rate_decision"}
+    # hold_prefix — прогноз «без изменений до конца года» с направлением 0 тоже считается ожиданием к заседанию
+    rate_decision:  {metric: "ключевая ставка", unit: "%", number_hint: "ставк", forecast_prefix: "key_rate_decision",
+                     hold_prefix: "key_rate_eoy"}
     inflation_data: {metric: "инфляция", unit: "%", number_hint: "инфляц", forecast_prefix: "cpi"}
     fx_move:        {metric: "курс доллара", unit: "руб", number_hint: "доллар", forecast_prefix: "usdrub"}
 
@@ -125,6 +127,9 @@ rate_level:
   neutral: 8.0                    # %, около нейтральной ставки
   full_at: 8.0                    # на столько п.п. выше нейтральной — полная сила
   strength: 0.5                   # сила при полной высоте ставки (как «средний» сдвиг фактора)
+  # заявления и анонсы с упоминанием ставки — не само решение: с полной силой анонс заседания стоял 3-м,
+  # рядом с решением, и выглядел дублем
+  strength_by_type: {monetary_signal: 0.2}
 
 # ---------- лента (читает API Р3; раньше — переменные окружения FEED_MIN_SCORE, FEED_DEEP_PER_REQUEST) ----------
 feed:

@@ -260,3 +260,44 @@ def test_rate_hold_at_neutral_level_adds_nothing():
 
     r = score_pair(STORY, with_exposures(BORROWER), now=STORY.last_seen, facts=_flat_hold(7.5), sources=SOURCES)
     assert not any(c.factor == "key_rate" for c in r.contributions)
+
+
+def test_surprise_bank_year_end_hold_counts_for_later_meeting():
+    """23.10: прогноза ЦМИ к самому заседанию нет, есть «сохранение 14,0% до конца года» от 11.09."""
+    from datetime import date
+
+    from backend.schemas import Forecast
+
+    oct23 = STORY.model_copy(update={"first_seen": STORY.first_seen.replace(month=10, day=23)})
+    base = B["bank_position"][0]
+
+    def pos(pid, metric, value, direction, doc_date=date(2026, 9, 11)):
+        return base.model_copy(
+            update={
+                "id": pid,
+                "doc_date": doc_date,
+                "direction": direction,
+                "superseded_by": None,
+                "forecast": Forecast(metric=metric, value=value, unit="%", horizon="конец 2026"),
+            }
+        )
+
+    hold = pos("cmi#hold", "key_rate_eoy_2026", 14.0, 0.0)
+    cut = pos("cmi#cut", "key_rate_eoy_2026", 13.5, -1.0, date(2026, 9, 1))
+    later = pos("cmi#later", "key_rate_eoy_2026", 14.0, 0.0, date(2026, 10, 24))  # после события — нельзя
+    s = find_surprise(oct23, FACTS, bank_positions=[hold, cut, later])
+    assert s is not None and (s.bank_expected, s.bank_ref) == (14.0, "cmi#hold")
+    # прогноз на конец года со сменой ставки — не ожидание к заседанию
+    assert find_surprise(oct23, FACTS, bank_positions=[cut]) is None
+
+
+def test_rate_level_weaker_for_statements_than_decision():
+    from backend.profile.exposures import with_exposures
+
+    def kr(event_type):
+        facts = _flat_hold(14.0).model_copy(update={"event_type": event_type})
+        story = STORY.model_copy(update={"event_type": event_type})
+        r = score_pair(story, with_exposures(BORROWER), now=STORY.last_seen, facts=facts, sources=SOURCES)
+        return next((abs(c.value) for c in r.contributions if c.factor == "key_rate"), 0.0)
+
+    assert 0 < kr("monetary_signal") < kr("rate_decision")

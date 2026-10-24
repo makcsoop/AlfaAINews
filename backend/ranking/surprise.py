@@ -38,16 +38,32 @@ def actual_value(facts: EventFacts | None, m: SurpriseMetric) -> float | None:
 def bank_expectation(
     positions: Sequence[BankPosition], m: SurpriseMetric, story: Story, day: date
 ) -> BankPosition | None:
-    """Свежайшая позиция ЦМИ с прогнозом этой метрики к дате события, опубликованная до него."""
+    """Свежайшая позиция ЦМИ с прогнозом этой метрики к дате события, опубликованная до него.
+
+    Нет прогноза к самому событию — прогноз «без изменений до конца года» того же года (hold_prefix,
+    направление 0): банк, ждущий 14% до конца года, ждёт 14% и на каждом заседании до тех пор.
+    """
     stamp = day.strftime("%Y_%m_%d")
-    found = [
+    published = [
         p
         for p in positions
-        if p.forecast
-        and p.forecast.metric.startswith(m.forecast_prefix)
-        and (stamp in p.forecast.metric or (p.forecast.horizon or "").endswith(day.strftime("%d.%m.%Y")))
-        and _before(datetime.combine(p.doc_date, datetime.min.time(), tzinfo=UTC), story)
+        if p.forecast and _before(datetime.combine(p.doc_date, datetime.min.time(), tzinfo=UTC), story)
     ]
+    found = [
+        p
+        for p in published
+        if p.forecast.metric.startswith(m.forecast_prefix)  # type: ignore[union-attr]
+        and (stamp in p.forecast.metric or (p.forecast.horizon or "").endswith(day.strftime("%d.%m.%Y")))  # type: ignore[union-attr]
+    ]
+    if not found and m.hold_prefix:
+        found = [
+            p
+            for p in published
+            if p.forecast.metric == f"{m.hold_prefix}_{day.year}"  # type: ignore[union-attr]
+            and p.direction is not None
+            and abs(p.direction) < 1e-9
+            and p.superseded_by is None
+        ]
     return max(found, key=lambda p: p.doc_date, default=None)
 
 

@@ -82,7 +82,8 @@ def rate_level_driver(
     if rate is None:
         return None
     level = max(0.0, min(1.0, (rate - rl.neutral) / rl.full_at))
-    return Driver("key_rate", 1, round(level * rl.strength, 3), "level") if level > 0 else None
+    strength = rl.strength_by_type.get(event_type, rl.strength)
+    return Driver("key_rate", 1, round(level * strength, 3), "level") if level > 0 else None
 
 
 def quality(
