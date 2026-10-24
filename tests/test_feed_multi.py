@@ -310,3 +310,62 @@ def test_background_failure_logged_and_worker_survives():
 
 def test_background_off_in_fixture_mode():
     assert PipelineCardStore(source=MultiSource())._background is False
+
+
+# ---------- лента сверяется с базой без перезапуска: сборщик работает непрерывно ----------
+def make_refresh_store(refresh_s: float = 0.0):
+    store, calls = make_store(k=1)
+    store._refresh_s = refresh_s
+    return store, calls, store._explicit_source
+
+
+def _add_story(src, sid: str, **update):
+    base_story, base_facts = src._b["story"][0], src._b["event_facts"][0]
+    src._b["story"].append(base_story.model_copy(update={"id": sid, "title": f"новый {sid}", **update}))
+    src._b["event_facts"].append(base_facts.model_copy(update={"story_id": sid}))
+
+
+def _ids(cards):
+    return [c.event.story_id for c in cards]
+
+
+def test_refresh_adds_new_story_and_keeps_deep_cards():
+    store, _, src = make_refresh_store()
+    first = store.list_cards(BORROWER, "cfo")
+    deep_before = {c.card_id for c in first if c.relevance.deep_analysis}
+    _add_story(src, "s_new", quality=0.95)
+    cards = store.list_cards(BORROWER, "cfo")
+    assert "s_new" in _ids(cards) and len(cards) == len(first) + 1
+    assert deep_before <= {c.card_id for c in cards}  # готовый разбор не потерян
+    assert len(_ids(cards)) == len(set(_ids(cards)))  # одна карточка на сюжет
+
+
+def test_refresh_new_version_gets_fast_card_and_new_analysis():
+    store, calls, src = make_refresh_store()
+    store.list_cards(BORROWER, "cfo")
+    (sid,) = calls
+    i = next(n for n, st in enumerate(src._b["story"]) if st.id == sid)
+    src._b["story"][i] = src._b["story"][i].model_copy(update={"version": 2})
+    cards = store.list_cards(BORROWER, "cfo")
+    assert calls.count(sid) == 2  # новая версия — новый разбор
+    assert len(_ids(cards)) == len(set(_ids(cards)))
+
+
+def test_refresh_drops_story_merged_away():
+    store, _, src = make_refresh_store()
+    store.list_cards(BORROWER, "cfo")
+    src._b["story"] = [st for st in src._b["story"] if st.id != "s_3"]  # пересклейка: s_3 влился в другой
+    cards = store.list_cards(BORROWER, "cfo")
+    assert "s_3" not in _ids(cards)
+
+
+def test_refresh_respects_interval_and_can_be_off():
+    store, _, src = make_refresh_store(refresh_s=3600)
+    n = len(store.list_cards(BORROWER, "cfo"))
+    _add_story(src, "s_new")
+    assert len(store.list_cards(BORROWER, "cfo")) == n  # сверка раз в час — ещё рано
+    off, _, src2 = make_refresh_store(refresh_s=-1)
+    m = len(off.list_cards(BORROWER, "cfo"))
+    _add_story(src2, "s_new")
+    off._feeds[(BORROWER, "cfo")].checked_at = 0
+    assert len(off.list_cards(BORROWER, "cfo")) == m

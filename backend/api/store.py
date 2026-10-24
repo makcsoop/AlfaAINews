@@ -4,6 +4,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -88,6 +89,14 @@ DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_
 # переменные окружения — переопределение для стенда
 DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
+
+
+DEFAULT_FEED_REFRESH_S = 60.0  # как часто лента сверяется с базой: новые сюжеты, новые версии, пересклейка
+
+
+def feed_refresh_s() -> float:
+    """FEED_REFRESH_S: 0 — при каждом запросе ленты, меньше 0 — лента собирается один раз (как раньше)."""
+    return _env_float("FEED_REFRESH_S", DEFAULT_FEED_REFRESH_S)
 
 
 def feed_background() -> bool:
@@ -176,6 +185,8 @@ class _Feed:
     deep: set[str] = field(default_factory=set)  # сюжеты с глубокой карточкой
     attempted: set[str] = field(default_factory=set)  # по ним глубокий разбор уже запускали или он не нужен
     pending: set[str] = field(default_factory=set)  # в очереди фонового разбора или разбираются сейчас
+    seen: dict[str, int] = field(default_factory=dict)  # все оценённые сюжеты (и ниже порога) -> версия
+    checked_at: float = 0.0  # time.monotonic() последней сверки с базой
     pinned: set[str] = field(default_factory=set)  # прислал пользователь (/analyze): из ленты не убираем
 
 
@@ -201,6 +212,7 @@ class PipelineCardStore:
         runner: Callable[..., tuple[InsightCard, RunTrace]] | None = None,
         deep_per_request: int | None = None,
         background: bool | None = None,
+        refresh_s: float | None = None,
     ) -> None:
         # kv=None — взять из CACHE_BACKEND (redis -> клиент, иначе память)
         kv = kv if kv is not None else make_kv()
@@ -224,6 +236,7 @@ class PipelineCardStore:
         self._demo_done = False
         self.runs = 0  # сколько раз запускался конвейер (для тестов и мониторинга)
         self._background = feed_background() if background is None else background
+        self._refresh_s = feed_refresh_s() if refresh_s is None else refresh_s
         # один фоновый поток на хранилище: разборы идут по одному, бюджет и лимит модели не перегружаются
         self._jobs: queue.Queue[tuple[_Feed, str]] = queue.Queue()
         self._worker: threading.Thread | None = None
@@ -285,16 +298,67 @@ class PipelineCardStore:
         if ctx is None:
             return None
         min_score = self._min_score()
-        feed = _Feed(company_id, role, ctx.profile.sector or "")
-        for story in self._src().stories():
-            try:
-                rel, card = self._score_story(ctx, role, story)
-            except Exception as e:  # один плохой сюжет не ломает ленту
-                log.warning("сюжет %s для %s/%s пропущен: %r", story.id, company_id, role, e)
-                continue
+        feed = _Feed(company_id, role, ctx.profile.sector or "", checked_at=time.monotonic())
+        for story, rel, card in self._score_all(ctx, role, self._src().stories()):
+            feed.seen[story.id] = story.version
             if rel.score >= min_score:
                 self._put_fast(feed, ctx, story, rel, card)
         return feed
+
+    def _score_all(
+        self, ctx: _Ctx, role: str, stories: list[Story]
+    ) -> list[tuple[Story, RelevanceScore, InsightCard]]:
+        out = []
+        for story in stories:
+            try:
+                out.append((story, *self._score_story(ctx, role, story)))
+            except Exception as e:  # один плохой сюжет не ломает ленту
+                log.warning("сюжет %s для %s/%s пропущен: %r", story.id, ctx.profile.company_id, role, e)
+        return out
+
+    def _refresh(self, feed: _Feed) -> None:
+        """Сверка ленты с базой (сборщик работает непрерывно): новые сюжеты и новые версии — быстрые карточки
+        и снова в очередь глубокого разбора; сюжеты, исчезнувшие при пересклейке, — из ленты. Глубокие
+        карточки неизменившихся сюжетов остаются. Чтение базы и оценка — вне блокировки."""
+        try:
+            ctx = self._context(feed.company_id)
+            stories = self._src().stories()
+        except Exception as e:  # база недоступна — показываем ленту как есть
+            log.warning("лента %s/%s не обновлена: %r", feed.company_id, feed.role, e)
+            return
+        if ctx is None:
+            return
+        with self._lock:
+            seen = dict(feed.seen)
+        changed = [st for st in stories if seen.get(st.id) != st.version]
+        scored = self._score_all(ctx, feed.role, changed)
+        ids = {st.id for st in stories}
+        min_score = self._min_score()
+        with self._lock:
+            for sid in [sid for sid in feed.seen if sid not in ids]:
+                if sid not in feed.pending and sid not in feed.pinned:
+                    self._forget(feed, sid)
+                    feed.seen.pop(sid, None)
+            for story, rel, card in scored:
+                if story.id in feed.pending:
+                    continue  # разбор прежней версии идёт — новую возьмём на следующей сверке
+                if story.id in feed.story_version:
+                    self._forget(feed, story.id)
+                feed.seen[story.id] = story.version
+                if rel.score >= min_score or story.id in feed.pinned:
+                    self._put_fast(feed, ctx, story, rel, card)
+        if changed:
+            log.info("лента %s/%s: обновлено сюжетов %d", feed.company_id, feed.role, len(changed))
+
+    def _forget(self, feed: _Feed, story_id: str) -> None:
+        """Убрать сюжет из ленты со всеми его карточками: пересклейка или новая версия."""
+        old = feed.cards.pop(story_id, None)
+        if old:
+            self._cards.pop(old, None)
+        feed.scores.pop(story_id, None)
+        feed.story_version.pop(story_id, None)
+        feed.deep.discard(story_id)
+        feed.attempted.discard(story_id)
 
     def add_story(self, story_id: str, company_id: str, role: str) -> InsightCard | None:
         """Сюжет, который прислал пользователь («вставить ссылку или текст»): быстрая карточка сразу и в ленту
@@ -517,12 +581,19 @@ class PipelineCardStore:
     def _ensure(self, company_id: str, role: str, *, upgrade: bool = True) -> None:
         with self._lock:
             feed = self._feeds.get((company_id, role))
+            due = False
             if feed is None:
                 feed = self._build_feed(company_id, role)
                 if feed is None:
                     return
                 self._feeds[(company_id, role)] = feed
-            if upgrade:
+            elif self._refresh_s >= 0 and time.monotonic() - feed.checked_at >= self._refresh_s:
+                feed.checked_at = time.monotonic()  # сверку делает один запрос, остальные не ждут
+                due = True
+        if due:
+            self._refresh(feed)
+        if upgrade:
+            with self._lock:
                 self._upgrade(feed)
 
     def _ensure_demo(self) -> None:
