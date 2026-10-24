@@ -58,6 +58,12 @@ def fea_role(sector: str | None, cfg: ProfileCfg) -> str | None:
     return None
 
 
+def subsector(okved_code: str | None, matrix: ChannelsMatrix) -> str | None:
+    """Самая точная строка матрицы длиннее двух цифр ОКВЭД (46.71 для 46.71.2), если она есть."""
+    code = okved_code or ""
+    return next((code[:n] for n in (5, 4) if len(code) >= n and code[:n] in matrix.okved), None)
+
+
 def compute_exposures(
     profile: CompanyProfile,
     graph: CounterpartyGraph | None = None,
@@ -72,6 +78,9 @@ def compute_exposures(
 
     if profile.sector and profile.sector in matrix.okved:
         acc.add(matrix.okved[profile.sector], cfg.sector_weight, f"MAINOKVED_CODE={profile.okved_code}")
+        # подотрасль поверх отрасли: «46» — опт вообще, «46.71» — опт топливом, у него ещё и цены на топливо
+        if sub := subsector(profile.okved_code, matrix):
+            acc.add(matrix.okved[sub], cfg.sector_weight, f"MAINOKVED_CODE={profile.okved_code}")
 
     for product, on in profile.products.items():
         if on and product in cfg.products:

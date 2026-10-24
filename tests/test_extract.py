@@ -53,6 +53,28 @@ def test_event_type(title, etype):
     assert rules.event_type(title, None)[0] == etype
 
 
+def test_gas_equipment_prices_are_not_commodity_price():
+    # разметка oct-60: поручения о газификации стали «ценами на сырьё» по «цены на газовое оборудование»
+    assert rules.event_type("Путин поручил ФАС контролировать цены на газовое оборудование", None)[0] != (
+        "commodity_price"
+    )
+    assert rules.event_type("Цены на газ на бирже TTF выросли на 5%", None)[0] == "commodity_price"
+
+
+@pytest.mark.parametrize(
+    ("text", "channel", "direction"),
+    [
+        ("Впервые за шесть месяцев стоимость нефти Brent превысила $117.", "oil_gas", "up"),
+        ("Центробанк ухудшил прогнозы по инфляции и по ключевой ставке.", "key_rate", "up"),
+        ("Центробанк ухудшил прогнозы по инфляции и по ключевой ставке.", "inflation", "up"),
+        ("Банк России улучшил прогноз по ключевой ставке.", "key_rate", "down"),
+    ],
+)
+def test_direction_hints_for_forecasts_and_thresholds(text, channel, direction):
+    got = {c.channel: c.direction for c in rules.channel_directions(text, [channel])}
+    assert got == {channel: direction}
+
+
 # живой прогон 23.10: политика со словом «санкции» без меры занимала топ ленты как sanctions
 @pytest.mark.parametrize(
     ("title", "lead"),

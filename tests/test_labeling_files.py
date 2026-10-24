@@ -2,7 +2,7 @@
 
 import random
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from backend.eval.agreement import read_labels
 from backend.eval.metrics import gold_from_csv
@@ -140,6 +140,35 @@ def test_unknown_channel_is_error(tmp_path):
     _fill(path, [(1, "Погода", 0, None)])
     r = read_sheet(path, CHANNELS)
     assert not r.labels and "Погода" in r.errors[0]
+
+
+def test_resaved_sheet_without_meta_uses_origin(tmp_path):
+    # разметчик пересохранил таблицу: один лист, заголовок «pair_id», числа дробями, каналы по id
+    origin = tmp_path / "razmetka.xlsx"
+    write_sheet(origin, "razmetka", "oct-60", _rows(2), CHANNELS)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Untitled"
+    ws.append(
+        [
+            "pair_id",
+            "Компания",
+            "Значимость 0–3 (relevance)",
+            "Главный канал (main_channel)",
+            "Знак −1/0/+1 (sign)",
+            "Комментарий (comment)",
+        ]
+    )
+    ws.append(["oct-60-01", "Оптовик", 2.0, "key_rate", -1.0, "кредит"])
+    ws.append(["oct-60-02", "Оптовик", 0.0, None, 0.0, None])
+    path = tmp_path / "filled.xlsx"
+    wb.save(path)
+    r = read_sheet(path, CHANNELS, origin)
+    assert r.labeler == "razmetka" and not r.errors and not r.warnings
+    assert [(x.pair_id, x.story_id, x.relevance, x.main_channel, x.sign) for x in r.labels] == [
+        ("oct-60-01", "s1", 2, "key_rate", -1),
+        ("oct-60-02", "s2", 0, None, 0),
+    ]
 
 
 def test_csv_feeds_metrics_and_agreement(tmp_path):

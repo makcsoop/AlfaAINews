@@ -75,6 +75,10 @@ okved:
   "43": {construction: 0.8, key_rate: -0.5, labor_costs: -0.5, counterparty_defaults: -0.4}
   "45": {consumer_demand: 0.6, key_rate: -0.6, fx_rub: 0.6, import_prices: -0.5, trade_restrictions: -0.6, logistics_costs: -0.4}
   "46": {fx_rub: 0.5, import_prices: -0.5, consumer_demand: 0.4, logistics_costs: -0.5, trade_restrictions: -0.5, key_rate: -0.4, counterparty_defaults: -0.4, capital_controls: -0.3}
+  # подотрасли (ключ длиннее двух цифр) добавляются к строке отрасли: опт и розница топливом зарабатывают
+  # на цене топлива — разметка oct-60: Brent $111 важен оптовику топливом (+), скоринг давал 0
+  "46.71": {petroleum_products: 0.6}
+  "47.30": {petroleum_products: 0.5}
   "47": {consumer_demand: 0.9, inflation: -0.3, fx_rub: 0.4, import_prices: -0.3, key_rate: -0.3, labor_costs: -0.5, logistics_costs: -0.3}
   "49": {petroleum_products: -0.7, logistics_costs: 0.4, consumer_demand: 0.3, export_demand: 0.3, labor_costs: -0.5, key_rate: -0.4, trade_restrictions: -0.3}
   "50": {logistics_costs: 0.5, export_demand: 0.5, trade_restrictions: -0.5, fx_rub: -0.3}

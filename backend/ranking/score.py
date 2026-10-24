@@ -86,6 +86,19 @@ def rate_level_driver(
     return Driver("key_rate", 1, round(level * strength, 3), "level") if level > 0 else None
 
 
+def transmit(drivers: Sequence[Driver], cfg: ScoringConfig) -> list[Driver]:
+    """Производные факторы (config transmission): Brent ↑ двигает и «топливо ↑» — у оптовика топливом и
+    перевозчика в профиле топливо, а не нефть. Явный фактор сюжета производный не перебивает."""
+    out = list(drivers)
+    have = {d.channel for d in drivers}
+    for d in drivers:
+        for target, share in cfg.transmission.get(d.channel, {}).items():
+            if target not in have:
+                out.append(Driver(target, d.direction, round(d.strength * share, 3), d.origin))
+                have.add(target)
+    return out
+
+
 def quality(
     story: Story, facts: EventFacts | None, sources: Mapping[str, Source], cfg: ScoringConfig
 ) -> float:
@@ -285,6 +298,7 @@ def score_pair(
     event_type = (facts.event_type if facts else None) or story.event_type
     if (level := rate_level_driver(drivers, facts, event_type, cfg)) is not None:
         drivers.append(level)
+    drivers = transmit(drivers, cfg)
     only_prior = bool(drivers) and all(d.origin == "prior" for d in drivers)
     if only_prior and event_type in cfg.prior_unscoped_types and not (facts and facts.sectors_okved):
         scope *= cfg.prior_unscoped

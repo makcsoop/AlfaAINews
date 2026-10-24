@@ -157,21 +157,41 @@ def _text(v: object) -> str | None:
     return s or None
 
 
-def read_sheet(path: Path, channels: Mapping[str, str]) -> ReadResult:
-    """Метки из заполненного файла. Канал принимается названием из списка или id."""
-    wb = load_workbook(path, data_only=True)
-    meta = wb[META]
-    labeler = str(meta["B1"].value or path.stem).strip()
+def read_meta(path: Path) -> tuple[str, dict[str, tuple[str, str]]]:
+    """Разметчик и pair_id → (story_id, company_id) из скрытого листа файла, который выдали разметчику."""
+    meta = load_workbook(path, data_only=True)[META]
     ids = {
         str(r[0]): (str(r[1]), str(r[2]))
         for r in meta.iter_rows(min_row=4, values_only=True)
         if r[0] is not None
     }
+    return str(meta["B1"].value or path.stem).strip(), ids
+
+
+def read_sheet(
+    path: Path,
+    channels: Mapping[str, str],
+    origin: Path | None = None,
+    labeler: str | None = None,
+) -> ReadResult:
+    """Метки из заполненного файла. Канал принимается названием из списка или id.
+
+    Если разметчик пересохранил таблицу без листа «_meta» (Google Таблицы, копия листа), связки пар берутся
+    из выданного файла origin. Колонки ищутся по ключу в скобках заголовка или по самому ключу.
+    """
+    wb = load_workbook(path, data_only=True)
+    if META in wb.sheetnames:
+        name, ids = read_meta(path)
+    elif origin is not None:
+        name, ids = read_meta(origin)
+    else:
+        raise ValueError(f"{path.name}: нет листа {META} — укажите выданный файл (--origin)")
+    labeler = labeler or name
     by_name = {name.strip().lower(): cid for cid, name in channels.items()}
     by_name.update({cid: cid for cid in channels})
-    ws = wb[SHEET]
-    header = [str(c.value or "") for c in ws[1]]
-    col = {key: next(i for i, h in enumerate(header) if f"({key})" in h) for key in _keys()}
+    ws = wb[SHEET] if SHEET in wb.sheetnames else wb.worksheets[0]
+    header = [str(c.value or "").strip() for c in ws[1]]
+    col = {key: next(i for i, h in enumerate(header) if f"({key})" in h or h == key) for key in _keys()}
     out = ReadResult(labeler=labeler)
     for n, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         pid = _text(row[col["pair_id"]])

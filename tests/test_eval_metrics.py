@@ -57,6 +57,15 @@ def test_evaluate_against_baseline():
     assert "nDCG@5" in text and "1 из 1" in text
 
 
+def test_equal_scores_ordered_by_freshness_like_feed():
+    # у системы обе пары 0 — порядок как в ленте (свежее выше), а не по story_id
+    pairs = [
+        PairEval("C0", "C", "a", 0.0, system=0.0, baseline=0.2, covered=False),
+        PairEval("C1", "C", "b", 1.0, system=0.0, baseline=0.9, covered=False),
+    ]
+    assert evaluate(pairs, k=1).precision == 1.0
+
+
 def test_covered_sectors_needs_five_channels():
     rows = [{"source_id": f"tg_{i}", "sectors_okved": ["24"]} for i in range(5)]
     rows += [{"source_id": "tg_0", "sectors_okved": ["46"]} for _ in range(9)]  # один канал много раз

@@ -104,7 +104,14 @@ off_sector: 0.3
 # не называет — тип мог быть угадан по слову («санкции» в политической новости): вклады каналов ослабляются
 prior_unscoped: 0.5
 # только для типов, которые обычно касаются отдельных отраслей и стран; налоги и МРОТ — общие для всех
-prior_unscoped_types: [sanctions, secondary_sanctions, sanctions_relief, tariff_duty, export_duty, import_duty, export_ban_quota, supply_disruption]
+# господдержка и госзакупки тоже адресные (IT-ипотека, закупки у техкомпаний): разметка oct-60 — инфраструктурной
+# стройке без отраслей в событии они вставали выше решения ЦБ, человек ставил 0
+prior_unscoped_types: [sanctions, secondary_sanctions, sanctions_relief, tariff_duty, export_duty, import_duty, export_ban_quota, supply_disruption, state_support, public_procurement]
+
+# производные факторы: фактор сюжета → {фактор: доля силы}. Нефть дорожает — дорожает и топливо: в разметке oct-60
+# Brent $111 был важен оптовику топливом и перевозчику, а скоринг давал 0 — у них в профиле топливо, не нефть
+transmission:
+  oil_gas: {petroleum_products: 0.7}
 
 saturation: 1.2                  # raw = 1,2 → score ≈ 0,63 × quality × freshness
 min_contribution: 0.02            # мельче — не показываем во вкладах

@@ -126,9 +126,17 @@ def main() -> None:
     ap.add_argument("--out", type=Path, help="CSV меток, по умолчанию data/labeling/labels-<партия>.csv")
     ap.add_argument("--db", action="store_true", help="записать метки в таблицу labels")
     ap.add_argument("--no-metrics", action="store_true")
+    ap.add_argument(
+        "--origin",
+        type=Path,
+        default=ROOT / "data" / "labeling" / "razmetka.xlsx",
+        help="выданный файл: из него берутся связки пар, если в заполненном нет листа _meta",
+    )
+    ap.add_argument("--labeler", help="имя разметчика вместо записанного в файле")
     args = ap.parse_args()
     names = load_channels()
-    results = [read_sheet(f, names) for f in args.files]
+    origin = args.origin if args.origin.exists() else None
+    results = [read_sheet(f, names, origin, args.labeler) for f in args.files]
     ok = report(results)
     labels = [x for r in results for x in r.labels]
     if not labels:

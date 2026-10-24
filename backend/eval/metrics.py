@@ -78,7 +78,8 @@ def evaluate(pairs: Sequence[PairEval], *, k: int = K, cfg: ScoringConfig | None
     pr_b: list[float] = []
     misses = {True: [0, 0], False: [0, 0]}
     for group in by_client.values():
-        sys_order = sorted(group, key=lambda p: (-p.system, p.story_id))
+        # равные оценки — по свежести и качеству, как в ленте (rank: score, затем freshness)
+        sys_order = sorted(group, key=lambda p: (-p.system, -p.baseline, p.story_id))
         base_order = sorted(group, key=lambda p: (-p.baseline, p.story_id))
         for order, nd_list, pr_list in ((sys_order, nd, pr), (base_order, nd_b, pr_b)):
             gains = [p.gold for p in order]

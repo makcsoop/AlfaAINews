@@ -143,6 +143,8 @@ class ScoringConfig(_Cfg):
     deep: DeepCfg
     feed: FeedCfg
     rate_level: RateLevelCfg | None = None
+    # фактор → производные факторы с долей силы: нефть дорожает → топливо дорожает
+    transmission: dict[str, dict[str, float]] = {}
 
 
 def role_weight(cfg: "ScoringConfig", role: str | None, channel: str) -> float:

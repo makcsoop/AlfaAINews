@@ -312,3 +312,31 @@ def test_unscoped_sanctions_prior_is_damped():
     named = score_pair(s, p, now=NOW, facts=_facts(s, sectors=["46"]))
     explicit = score_pair(s, p, now=NOW, facts=_facts(s, channels=[("trade_restrictions", "up", 0.8)]))
     assert vague.score < named.score and vague.score < explicit.score
+
+
+def test_oil_price_reaches_fuel_dependent_clients():
+    # разметка oct-60: Brent ↑ важен перевозчику, а скоринг давал 0 — в профиле топливо, а не нефть
+    truck = _company("TR", "49.41")
+    brent = _story("brent", "commodity_price", "Нефть Brent подорожала до $111")
+    r = score_pair(brent, truck, now=NOW, facts=_facts(brent, channels=[("oil_gas", "up", 0.6)]))
+    fuel = [c for c in r.contributions if c.factor == "petroleum_products"]
+    assert r.score > 0 and fuel and fuel[0].sign < 0  # топливо дороже — перевозчику минус
+    # явный фактор «топливо» сюжета производный не перебивает
+    both = _facts(brent, channels=[("oil_gas", "up", 0.6), ("petroleum_products", "down", 0.3)])
+    r2 = score_pair(brent, truck, now=NOW, facts=both)
+    assert [c.sign for c in r2.contributions if c.factor == "petroleum_products"] == [1]
+
+
+def test_unscoped_state_support_prior_is_damped():
+    # IT-ипотека без отраслей в фактах не должна вставать у инфраструктурной стройки выше решения ЦБ
+    p = _company("CON", "42.99", guarantees=True, loans=True)
+    s = _story("it", "state_support", "Обсуждают досрочное завершение IT-ипотеки")
+    vague = score_pair(s, p, now=NOW, facts=_facts(s))
+    named = score_pair(s, p, now=NOW, facts=_facts(s, sectors=["42"]))
+    assert vague.score < named.score
+
+
+def test_fuel_wholesaler_gets_subsector_row():
+    fuel = {e.channel: e for e in _company("FW", "46.71.2").exposures}
+    other = {e.channel: e for e in _company("OW", "46.69").exposures}
+    assert fuel["petroleum_products"].sensitivity > 0 and "petroleum_products" not in other
