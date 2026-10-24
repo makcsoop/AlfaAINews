@@ -1,6 +1,6 @@
 """Пары «сюжет × клиент» для разметки и Excel-файлы разметчиков (ТЗ «разметка 60 пар»).
 
-`uv run python eval/labeling/make_pairs.py [--labelers r1,r2,r3] [--batch oct-60] [--out data/labeling]`
+`uv run python eval/labeling/make_pairs.py [--labelers razmetka] [--batch oct-60] [--out data/labeling]`
 
 Клиенты — 6 реальных компаний из CSV кейса: 5 архетипов `config/archetypes.yaml` и розница. Их профили v1
 пишутся в company_profiles — по ним метрики считают значимость. Каждому клиенту 10 сюжетов за последние
@@ -9,8 +9,8 @@
 иначе precision@5 одной из них считается на неразмеченных парах. Порядок сюжетов внутри клиента перемешан,
 оценка системы в файл не попадает.
 
-В пару пишется снимок сюжета и клиента (его же показывает /labeling). 10 пар общие у всех разметчиков —
-для согласия; остальные делятся поровну. Один разметчик получает все 60.
+В пару пишется снимок сюжета и клиента (его же показывает /labeling). По умолчанию один разметчик и один файл
+на все 60 пар; при нескольких (`--labelers a,b,c`) 10 пар общие у всех — для согласия, остальные поровну.
 """
 
 import argparse
@@ -376,7 +376,7 @@ def make_pairs(
     channels = load_channels()
     files = {}
     for name, pids in per_labeler.items():
-        path = out_dir / f"razmetka_{name}.xlsx"
+        path = out_dir / ("razmetka.xlsx" if len(per_labeler) == 1 else f"razmetka_{name}.xlsx")
         write_sheet(path, name, batch, [rows_meta[pid] for pid in pids], channels)
         files[name] = path
     return files
@@ -386,7 +386,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", default="oct-60")
     ap.add_argument(
-        "--labelers", default="r1,r2,r3", help="имена через запятую, латиницей: из них имена файлов"
+        "--labelers", default="razmetka", help="имена через запятую, латиницей: из них имена файлов"
     )
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "labeling")
     ap.add_argument("--hours", type=int, default=72, help="окно сюжетов до последнего в базе")
