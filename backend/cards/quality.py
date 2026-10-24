@@ -109,12 +109,17 @@ def _quote_pool(card: InsightCard, claim_id: str, seen: set[str] | None = None) 
         d, rest = extract_dates(ev.quote or "")
         dates |= d
         numbers |= extract_numbers(rest)
-    for refs in claim.based_on.values():
+    for key, refs in claim.based_on.items():
         for ref in refs:
             if ref in by_id:
                 n, d = _quote_pool(card, ref, seen)
                 numbers |= n
                 dates |= d
+            elif key == "client_features":
+                # признак компании («payments: 40% входящих от ОКВЭД 41») сверен с профилем, как в verify.py
+                d, rest = extract_dates(ref)
+                dates |= d
+                numbers |= extract_numbers(rest)
     return numbers, dates
 
 

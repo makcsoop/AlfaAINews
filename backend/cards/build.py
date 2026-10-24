@@ -179,7 +179,12 @@ class _Builder:
             return self.by_ref[item.id]
         if item.id in self._multi_ref:
             return self._multi_ref[item.id]
-        text = item.title or item.text
+        # у позиции банка и мнения рынка title — название обзора («Макростатистика 7М26: …»), тезис — в text:
+        # с названием опорные утверждения одного обзора повторялись, а «7» из «7М26» не находилось в цитате
+        if item.kind in ("bank_position", "market_knowledge"):
+            text = item.text or item.title
+        else:
+            text = item.title or item.text
         if item.kind == "bank_position":
             self.bank_items.append(item)
             claim = Claim(
