@@ -92,6 +92,50 @@ sources:
   - {id: tg_bbbreaking, name: "Раньше всех. Ну почти.", kind: telegram, url: "https://t.me/bbbreaking",
      tier: 3, weight: 0.35, value: 2, tags: [aggregator, speed]}
 
+  # ---------- Пакет «источники» 24.10: ведомства и отраслевые каналы (t.me/s без входа) ----------
+  # weight — w_card из source_weights.csv пакета; value — ценность из пакета
+  - {id: tg_government_rus, name: "Правительство России", kind: telegram, url: "https://t.me/government_rus",
+     tier: 0, weight: 1.0, value: 5, official: true, tags: [fiscal, trade, regulation, region]}
+  - {id: tg_minenergo_official, name: "Минэнерго России", kind: telegram, url: "https://t.me/minenergo_official",
+     tier: 0, weight: 1.0, value: 4, official: true, tags: [commodities, regulation]}
+  - {id: tg_mintrans_russia, name: "Минтранс России", kind: telegram, url: "https://t.me/mintrans_russia",
+     tier: 0, weight: 1.0, value: 4, official: true, tags: [regulation, trade]}
+  - {id: tg_mcx_ru, name: "Минсельхоз России", kind: telegram, url: "https://t.me/mcx_ru",
+     tier: 0, weight: 1.0, value: 4, official: true, tags: [trade, commodities, fiscal]}
+  - {id: tg_mintrudrf, name: "Минтруд России", kind: telegram, url: "https://t.me/mintrudrf",
+     tier: 0, weight: 1.0, value: 4, official: true, tags: [regulation]}
+  - {id: tg_fasrussia, name: "ФАС России", kind: telegram, url: "https://t.me/fasrussia",
+     tier: 0, weight: 1.0, value: 3, official: true, tags: [regulation, company]}
+  - {id: tg_minpromtorg_ru, name: "Минпромторг России", kind: telegram, url: "https://t.me/minpromtorg_ru",
+     tier: 0, weight: 1.0, value: 4, official: true, tags: []}
+  - {id: tg_duma_gov_ru, name: "Государственная Дума", kind: telegram, url: "https://t.me/duma_gov_ru",
+     tier: 0, weight: 1.0, value: 4, official: true, tags: [fiscal, regulation]}
+  - {id: tg_spimexofficial, name: "Петербургская биржа (СПбМТСБ)", kind: telegram, url: "https://t.me/spimexofficial",
+     tier: 0, weight: 1.0, value: 4, official: true, tags: [commodities]}
+  - {id: tg_kommersant, name: "Коммерсантъ", kind: telegram, url: "https://t.me/kommersant",
+     tier: 1, weight: 0.849, value: 4, tags: []}
+  - {id: tg_vedomosti, name: "Ведомости", kind: telegram, url: "https://t.me/vedomosti",
+     tier: 1, weight: 0.867, value: 4, tags: []}
+  - {id: tg_agroinvestor, name: "Агроинвестор", kind: telegram, url: "https://t.me/agroinvestor",
+     tier: 1, weight: 0.761, value: 3, tags: []}
+  - {id: tg_neftegazchannel, name: "Neftegaz.RU", kind: telegram, url: "https://t.me/neftegazchannel",
+     tier: 1, weight: 0.77, value: 3, tags: []}
+  - {id: tg_russianmacro, name: "MMI", kind: telegram, url: "https://t.me/russianmacro",
+     tier: 2, weight: 0.646, value: 3, tags: [monetary, macro_data, fiscal]}
+  # RSS из пакета: только заголовок и лид (content_use пакета не разрешает полный текст, кроме ведомств)
+  - {id: nalog_rss, name: "ФНС России", kind: rss, url: "https://www.nalog.gov.ru/rn77/rss/",
+     tier: 0, weight: 1.0, value: 4, poll_seconds: 600, full_text: none, official: true, tags: []}
+  - {id: customs_rss, name: "ФТС России", kind: rss, url: "https://customs.gov.ru/press/federal/rss",
+     tier: 0, weight: 1.0, value: 4, poll_seconds: 600, full_text: none, official: true, tags: []}
+  - {id: metalinfo, name: "Металлоснабжение и сбыт", kind: rss, url: "https://www.metalinfo.ru/ru/news/list.rss",
+     tier: 1, weight: 0.77, value: 3, poll_seconds: 600, full_text: none, tags: []}
+  - {id: comnews, name: "ComNews", kind: rss, url: "https://www.comnews.ru/rss",
+     tier: 1, weight: 0.77, value: 3, poll_seconds: 600, full_text: none, tags: []}
+  - {id: frank_media, name: "Frank Media", kind: rss, url: "https://frankmedia.ru/feed",
+     tier: 1, weight: 0.77, value: 2, poll_seconds: 600, full_text: none, tags: []}
+  - {id: smartlab, name: "Смартлаб, RSS", kind: rss, url: "https://smart-lab.ru/news/rss/",
+     tier: 2, weight: 0.517, value: 3, poll_seconds: 600, full_text: none, tags: []}
+
   # ---------- Аналитика банка (офлайн, день 3) ----------
   - {id: alfa_cmi, name: "ЦМИ Альфа-Банка", kind: bank_pdf, tier: 0, weight: 1.0, value: 5,
      full_text: none, enabled: false, tags: [bank]}

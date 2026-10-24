@@ -24,9 +24,25 @@ docker compose up --build
 - `ingest` раз в 5 минут склеивает материалы в сюжеты и извлекает факты: правила, а при `EXTRACT_LLM=true` подтверждённые сюжеты типирует Gemma через общий LLM-клиент (до 60 вызовов за проход).
 - `frontend` работает на http://localhost:3000: макет главного экрана Альфа-Бизнеса, виджет «Важно для вашего бизнеса», лента и карточка. API доступен под `/api` (nginx проксирует на `backend`).
 
-CSV кейса (`df_Uid_data_hack.csv` и остальные) в репозиторий не коммитятся: положите их в `data/case/`. Повторный `up` не перезаливает CSV, если файлы не менялись; принудительно — `docker compose run --rm init python -m backend.db.init --load-case --force-case`.
+Postgres доступен с хоста на `localhost:55432` (порт задаёт `DB_HOST_PORT`), чтобы не конфликтовать с локально установленным PostgreSQL.
 
-Postgres доступен с хоста на `localhost:55432` (порт задаёт `DB_HOST_PORT`), чтобы не конфликтовать с локально установленным PostgreSQL. PDF ЦМИ кладутся в `data/bank/pdf/`.
+## Данные организаторов
+
+В git не коммитятся (материалы банка и данные кейса), лежат на диске организаторов:
+
+| Что | Откуда | Куда | Чем загружается |
+|---|---|---|---|
+| CSV кейса: компании (85,5 тыс.), платежи (1,38 млн), связи физлиц | [«Данные для участников»](https://drive.google.com/drive/folders/1Ep8wWoEHTg5Q8kwrLx2j_xFyxGUEVxFq) | `data/case/` | `init` (сам), принудительно — `python -m backend.db.init --load-case --force-case` |
+| 9 обзоров ЦМИ (сканы PDF, 64 стр.) | [«Аналитические материалы»](https://drive.google.com/drive/folders/15xZTLF1lZ65p6o5xpNA_fRbxjoV-UlG1) | `data/bank/pdf/` | снимок (`data/snapshot/`) или заново: `python -m backend.bank.ocr` (Qwen3-VL, ≈8,5 ₽) → `python -m backend.bank.positions` (Kimi, ≈15 ₽) |
+| Архив Telegram 01.04–23.10 (15 каналов, 40 тыс. постов, выгрузка Telethon) | пакет «источники», `tg_export.py` | любая папка | `python -m backend.ingest.tg_archive <папка с tg_*.jsonl>` |
+
+Без CSV `init` загружает синтетику из `data/case_synthetic/` (200 компаний той же структуры) — демо-клиенты
+`U_DEMO_*` работают и на ней, но граф контрагентов и отраслевые доли — только на настоящих CSV.
+
+Архив Telegram нужен двум шагам: консенсусу рынка перед заседаниями ЦБ (неофициальные каналы за 10 дней до решения)
+и «Статистику» (похожие случаи за 120 дней). Импорт идемпотентен, id постов совпадают с живым сбором `t.me/s`,
+после импорта сбор продолжает с последнего поста архива. Реестр источников дополнен из пакета «источники»
+(ведомства, отраслевые каналы и ленты; веса — `w_card` пакета): `config/sources.yaml`.
 
 ## Демо-база с нуля
 
@@ -37,7 +53,8 @@ Postgres доступен с хоста на `localhost:55432` (порт зад�
 uv run python -m backend.db.demo --export
 ```
 
-Передать папку `data/snapshot/` (и CSV кейса в `data/case/`) на стенд, затем там:
+Передать папку `data/snapshot/` (и CSV кейса в `data/case/`) на стенд не через git (файлообменник), положить в корень
+проекта, затем там:
 
 ```bash
 docker compose up -d --build
@@ -51,8 +68,8 @@ docker compose run --rm -e LLM_MODE=live backend python -m backend.db.demo --llm
 или `U_DEMO_DEPOSITOR` / `treasurer`).
 
 Стенд по умолчанию (`docker-compose.yml`, переопределяется в `.env`): `backend` — `LLM_MODE=live`, `TOOL_SOURCE=db`,
-`CARD_STORE=pipeline`, `CACHE_BACKEND=redis`, `FEED_DEEP_PER_REQUEST=1`, `FEED_MIN_SCORE=0.05`, `CRITIC_LLM_ENABLED=true`,
-`LABELING_ENABLED=false`; `ingest` — `EXTRACT_LLM=false` (для демо: `EXTRACT_LLM=true docker compose up -d ingest`,
+`CARD_STORE=pipeline`, `CACHE_BACKEND=redis`, `CRITIC_LLM_ENABLED=true`, `LABELING_ENABLED=false` (порог ленты и число
+глубоких разборов — `feed` в `config/scoring.yaml`); `ingest` — `EXTRACT_LLM=false` (для демо: `EXTRACT_LLM=true docker compose up -d ingest`,
 до 60 вызовов Gemma за проход раз в 5 минут, ≈1 ₽). Ключ `LLM_API_KEY` — только в `.env`.
 
 Перед показом — прогрев демо-кеша (глубокие карточки топ-сюжетов, ≈0,4 ₽ за карточку, кеш в Redis):
@@ -63,6 +80,16 @@ uv run python scripts/warm_demo_cache.py --stories 30 --max-rub 40
 
 Проверка ленты без браузера — `uv run python scripts/check_feed_top.py --company U_DEMO_BORROWER --role cfo`
 (топ-20 по скорингу и сюрприз по решению ЦБ).
+
+### Если что-то не так
+
+- **Нет ключа модели** — `LLM_MODE=fixture` в `.env`: лента и карточки из фикстур, без ₽.
+- **Нет снимка** — `docker compose run --rm -e LLM_MODE=live backend python -m backend.db.demo --llm`: консенсус заново
+  по архиву каналов; реестр ЦМИ — `python -m backend.bank.ocr` и `python -m backend.bank.positions` (≈25 ₽, PDF в `data/bank/pdf/`).
+- **В карточке решения ЦБ пустая строка «Банк ждал»** — нет позиций ЦМИ по ставке: `SELECT count(*) FROM bank_positions`.
+- **Решение ЦБ в ленте несколькими карточками** — `python -m backend.stories.cluster --hours 96` и
+  `python -m backend.extract.run --hours 96 --force`: решения с одной датой и ставкой склеиваются в один сюжет.
+- **`compose up` падает на `SESSION_SECRET`** — `echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env`.
 
 Все вызовы моделей идут через `backend/llm/client.py` (бюджет и журнал команды). Исключение — OCR сканов ЦМИ
 (`backend/bank/vision.py`, Qwen3-VL): клиент не передаёт картинки; это разовая подготовка, страницы уже в снимке.

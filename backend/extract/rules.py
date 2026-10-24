@@ -27,11 +27,25 @@ RUMOR = re.compile(
 FORECAST = re.compile(r"\b(прогноз\w*|ожида\w+|ждут|ожидани\w+)\b", re.IGNORECASE)
 # типы-меры, которые отрицание отменяет: «не ввели санкции» — не санкции
 NEGATABLE = {"sanctions", "secondary_sanctions", "sanctions_relief"}
+# типы-меры: от модели принимаются, только если мера есть в тексте (живой прогон 24.10: «ВСУ атаковали Орёл»
+# модель назвала supply_disruption, анонс заседания ЦБ — rate_decision)
+MEASURE_TYPES = NEGATABLE | {
+    "supply_disruption", "tariff_duty", "export_duty", "import_duty", "export_ban_quota", "rate_decision",
+}
 # отрицание и условие: «не ввели», «нужно, чтобы сняли», «если продлят»
 _NEG = re.compile(r"\b(не|чтобы|если|когда|пока)(\s+\w+){0,2}\s*$", re.IGNORECASE)
 _EXEMPT = re.compile(r"\bисключени\w*\b|\bиз-под санкци\w*", re.IGNORECASE)
 # ставка иностранного регулятора — не решение Банка России: «Центробанк Турции снизил ставку», «ФРС сохранила»
 MONETARY = {"rate_decision", "monetary_signal"}
+# анонс заседания: «заседание впереди», «чего ждать от ЦБ» — без глагола решения это ещё не rate_decision
+_ANNOUNCE = re.compile(
+    r"\b(впереди|предстоящ\w*|накануне|в преддверии|перед заседанием|ожида\w*|ждут|ждём|ждем|прогноз\w*"
+    r"|консенсус\w*|сделает|примет|эфир\w*)\b|\bдо (решени|заседани)\w*|\bк заседани\w*",
+    re.IGNORECASE,
+)
+_DECIDED = re.compile(
+    r"\b(сохранил\w*|оставил\w*|осталась|снизил\w*|понизил\w*|повысил\w*|принял\w* решение)\b", re.IGNORECASE
+)
 _FOREIGN_CB = re.compile(
     r"\b((?i:центробанк\w*|центральн\w+ банк\w*|нацбанк\w*|национальн\w+ банк\w*)|ЦБ)\s+"
     r"(?!России\b|РФ\b|Российской\b)[А-ЯЁ][а-яё]+(и|а|ы|ии)\b"
@@ -140,6 +154,12 @@ def has_measure(etype: str, text: str) -> bool:
                 continue
             if etype in MONETARY and _FOREIGN_CB.search(part):
                 continue
+            if (
+                etype == "rate_decision"
+                and not _DECIDED.search(part)
+                and (_ANNOUNCE.search(part) or m.group(0).lower().startswith("решени"))
+            ):
+                continue
             if not (etype in NEGATABLE and _negated(part, m.start())):
                 return True
     return False
@@ -157,6 +177,11 @@ def event_type(title: str, lead: str | None) -> tuple[str, str | None]:
                     continue  # исключение из пакета, вывод из-под санкций — не новая мера
                 if m and et.name in MONETARY and (foreign_cb or _FOREIGN_CB.search(part)):
                     continue  # ставка чужого регулятора
+                if m and et.name == "rate_decision" and not _DECIDED.search(part):
+                    if _ANNOUNCE.search(part):
+                        return "monetary_signal", part  # анонс заседания и ожидания — ещё не решение
+                    if m.group(0).lower().startswith("решени"):
+                        continue  # «фактор для принятия решения по ключевой ставке» — не само решение
                 if m and not (et.name in NEGATABLE and _negated(part, m.start())):
                     return et.name, part
     return "other", None

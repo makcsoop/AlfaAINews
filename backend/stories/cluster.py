@@ -118,7 +118,63 @@ def cluster_items(items: list[RawItem], *, entity_keys: list[set[str]] | None = 
             d.idx.append(i)
             d.keys |= keys[i]
             story_of[i] = best
-    return drafts
+    return merge_decisions(drafts)
+
+
+# решение Банка России по ставке: «ЦБ сохранил ключевую ставку на уровне 14%», «ставка осталась 14%»
+_RATE_DECISION = re.compile(
+    r"ключев\w* ставк\w*.{0,60}?\b(сохран\w*|остав\w*|осталась|сниз\w*|пониз\w*|повыс\w*)"
+    r"|\b(сохранил\w*|оставил\w*|снизил\w*|понизил\w*|повысил\w*|принял\w* решение \w+)\s+ключев\w* ставк",
+    re.IGNORECASE,
+)
+_RATE_VALUE = re.compile(r"(\d{1,2}(?:[,.]\d{1,2})?)\s*%")
+_MSK = timedelta(hours=3)
+
+
+def decision_key(item: RawItem, title_only: bool = False) -> str | None:
+    """Ключ решения ЦБ: дата по Москве и ставка из заголовка или лида; анонсы и ожидания — без ключа."""
+    from backend.extract.rules import _ANNOUNCE, _DECIDED, _FOREIGN_CB
+
+    for part in (item.title,) if title_only else (item.title, item.lead or ""):
+        if not _RATE_DECISION.search(part) or _FOREIGN_CB.search(part):
+            continue
+        if _ANNOUNCE.search(part) and not _DECIDED.search(part):
+            continue
+        if v := _RATE_VALUE.search(part):
+            day = (item.published_at + _MSK).date().isoformat()
+            return f"{day}:{float(v.group(1).replace(',', '.')):g}"
+    return None
+
+
+def merge_decisions(drafts: list[_Draft]) -> list[_Draft]:
+    """Одно решение ЦБ — один сюжет: сюжеты с одним ключом решения сливаются в самый крупный.
+
+    Склейка по TF-IDF разводит «ЦБ сохранил ставку 14%» и «Банк России принял решение сохранить
+    ключевую ставку на уровне 14,00% годовых» по разным сюжетам — в ленте это выглядело дублями.
+    """
+    by_key: dict[str, list[int]] = {}
+    for n, d in enumerate(drafts):
+        keys = {k for i in d.items if (k := decision_key(i))}
+        if len(keys) == 1:  # сюжет с двумя разными ставками в заголовках не трогаем
+            by_key.setdefault(keys.pop(), []).append(n)
+    absorbed: set[int] = set()
+    for group in by_key.values():
+        if len(group) < 2:
+            continue
+        main, *rest = sorted(group, key=lambda n: (-len(drafts[n].items), drafts[n].items[0].published_at))
+        target = drafts[main]
+        for n in rest:
+            src = drafts[n]
+            target.items += src.items
+            target.idx += src.idx
+            target.copies |= src.copies
+            target.keys |= src.keys
+            absorbed.add(n)
+        its = target.items
+        order = sorted(range(len(its)), key=lambda k: (its[k].published_at, its[k].id))
+        target.items = [target.items[k] for k in order]
+        target.idx = [target.idx[k] for k in order]
+    return [d for n, d in enumerate(drafts) if n not in absorbed]
 
 
 def to_story(d: _Draft, sources: dict) -> Story:

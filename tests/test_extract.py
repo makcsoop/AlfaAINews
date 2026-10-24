@@ -353,3 +353,53 @@ def test_windfall_tax_not_bankruptcy():
 
     title = "Минфин заявил о готовности обсудить налог на сверхдоходы"
     assert event_type(title, "Отдельно обсуждали риск дефолтов эмитентов.")[0] == "windfall_tax"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Заседание Банка России по ключевой ставке впереди, а ожидания по нему уже в торгах",
+        "Аналитики ждут, что ЦБ сохранит ключевую ставку: решение по ключевой ставке в пятницу",
+    ],
+)
+def test_meeting_announcement_is_not_rate_decision(title):
+    assert rules.event_type(title, None)[0] != "rate_decision"
+    assert rules.event_type("Рынок готовится", title)[0] != "rate_decision"
+
+
+def test_decision_with_expectations_word_kept():
+    assert rules.event_type("ЦБ сохранил ключевую ставку 14%, как и ожидали аналитики", None)[0] == "rate_decision"
+
+
+@pytest.mark.parametrize(
+    ("etype", "text"),
+    [
+        ("supply_disruption", "ВСУ совершили ракетную атаку по гражданскому объекту в Орле, есть пострадавшие."),
+        ("supply_disruption", "Депутат заявил, что Запад проиграет информационную войну."),
+        ("sanctions", "Делегации продолжат переговоры в Стамбуле на следующей неделе."),
+    ],
+)
+def test_llm_measure_type_needs_measure_in_text(etype, text):
+    assert etype in rules.MEASURE_TYPES
+    assert not rules.has_measure(etype, text)
+
+
+def test_keep_llm_typing_drops_measure_type_rules_did_not_find():
+    from backend.extract.run import keep_llm_typing
+    from backend.schemas import EventFacts
+
+    old = EventFacts(story_id="st_x", event_type="supply_disruption", status="fact", summary="s", extractor_model="qwen")
+    new = EventFacts(story_id="st_x", event_type="other", status="fact", summary="s", extractor_model="rules")
+    assert keep_llm_typing(old, new).event_type == "other"
+    old2 = EventFacts(story_id="st_x", event_type="state_support", status="fact", summary="s", extractor_model="qwen")
+    assert keep_llm_typing(old2, new).event_type == "state_support"
+
+
+def test_hour_before_decision_is_not_rate_decision():
+    assert rules.event_type("Остался час до решения по ключевой ставке", None)[0] != "rate_decision"
+
+
+def test_mention_of_decision_is_not_rate_decision():
+    t = "В ЦБ не видят рисков для финансовой стабильности, это не могло быть фактором для принятия решения по ключевой ставке"
+    assert rules.event_type(t, None)[0] != "rate_decision"
+    assert rules.event_type("Банк России принял решение по ключевой ставке: сохранил 14%", None)[0] == "rate_decision"

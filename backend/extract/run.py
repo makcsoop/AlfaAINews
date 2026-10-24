@@ -13,6 +13,7 @@ from sqlalchemy import Connection, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from backend.db import models as m
+from backend.extract import rules
 from backend.extract.extractor import extract
 from backend.extract.llm_port import JsonLLM
 from backend.schemas import EventFacts, RawItem, Story
@@ -104,6 +105,8 @@ def keep_llm_typing(old: EventFacts, new: EventFacts) -> EventFacts:
         return new
     if not old.extractor_model or old.extractor_model.startswith("rules"):
         return new
+    if old.event_type in rules.MEASURE_TYPES and new.event_type != old.event_type:
+        return new  # тип-мера от модели, которую правила в тексте не нашли, не переносим
     seen = {(n.value, n.unit) for n in old.numbers}
     return new.model_copy(
         update={

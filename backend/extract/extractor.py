@@ -169,6 +169,15 @@ def extract_rules(story: Story, items: list[RawItem]) -> EventFacts:
             etype, etype_part = rules.event_type(it.title, it.lead)
             if etype != "other":
                 break
+    if etype == "other" or etype in rules.MONETARY:
+        # решение ЦБ в заголовке материала сюжета важнее заявлений с пресс-конференции: представительный
+        # материал — самый длинный официальный, а это обычно заявление Набиуллиной, а не пресс-релиз о решении
+        from backend.stories.cluster import decision_key
+
+        by_time = sorted(items, key=lambda i: i.published_at)
+        decided = next((it for it in by_time if decision_key(it, title_only=True)), None)
+        if decided is not None:
+            etype, etype_part = "rate_decision", decided.title
     st, intent, rumor = rules.status(text)
     types, _ = rules._config()
     channels: list[str] = next((t.channels for t in types if t.name == etype), [])
@@ -239,9 +248,9 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
     rule_type = facts.event_type
     if ans.get("event_type") in types:  # и «other»: модель отличает меру от разговоров о ней
         facts.event_type = ans["event_type"]
-        # тип-мера (санкции) от модели — только если мера есть в тексте: живой прогон 23.10 — модель ставила
-        # sanctions «иноагенту», ордеру на арест, ударам по Ирану
-        if facts.event_type in rules.NEGATABLE and not rules.has_measure(facts.event_type, _head(rep)):
+        # тип-мера от модели — только если мера есть в тексте: живой прогон 23.10 — модель ставила
+        # sanctions «иноагенту», ордеру на арест, ударам по Ирану; 24.10 — supply_disruption ракетной атаке
+        if facts.event_type in rules.MEASURE_TYPES and not rules.has_measure(facts.event_type, _head(rep)):
             log.info("%s: тип %s от модели без меры в тексте → other", rep.id, facts.event_type)
             facts.event_type = "other"
     if ans.get("status") in {"fact", "announced", "planned", "rumor", "forecast"}:
