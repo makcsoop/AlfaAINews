@@ -222,3 +222,91 @@ def test_published_run_logged():
     store.list_cards(BORROWER, "cfo")
     (run,) = store.deep_runs(BORROWER)
     assert run.status == "published" and run.trace_id
+
+
+# ---------- фоновые разборы (живые модели): /feed не ждёт модель ----------
+def make_background_store(k: int = 1, fail: bool = False):
+    """Разбор в фоне; модель «отвечает», только когда тест откроет gate."""
+    import threading
+
+    gate, started = threading.Event(), threading.Event()
+    calls: list[str] = []
+    holder: dict = {}
+
+    def runner(story_id, company_id, role, *, sector, story_version, handlers):
+        calls.append(story_id)
+        started.set()
+        assert gate.wait(5), "тест не открыл gate"
+        if fail:
+            raise RuntimeError("модель недоступна")
+        fast = holder["store"]._cards[f"card_{story_id}_{company_id}_{role}"]
+        now = datetime.now(UTC)
+        trace = RunTrace(run_id=f"run_{story_id}", story_id=story_id, company_id=company_id,
+                         started_at=now, finished_at=now)
+        rel = fast.relevance.model_copy(update={"deep_analysis": True})
+        return fast.model_copy(update={"trace_id": trace.run_id, "relevance": rel}), trace
+
+    store = PipelineCardStore(source=MultiSource(), runner=runner, deep_per_request=k, background=True)
+    holder["store"] = store
+    return store, calls, gate, started
+
+
+def test_background_feed_answers_before_model_and_upgrades_later():
+    store, calls, gate, started = make_background_store(k=1)
+    cards = store.list_cards(BORROWER, "cfo")  # разбор ещё идёт — лента уже есть
+    assert len(cards) == 4 and not any(c.relevance.deep_analysis for c in cards)
+    assert started.wait(5)
+    # пока модель думает, блокировка свободна: карточка и трасса отвечают сразу
+    assert store.get_card(cards[0].card_id, BORROWER) is not None
+    gate.set()
+    assert store.wait_idle(5)
+    deep = [c for c in store.list_cards(BORROWER, "cfo") if c.relevance.deep_analysis]
+    assert [c.event.story_id for c in deep] == calls[:1]
+    assert store.deep_runs(BORROWER)[0].status == "published"
+
+
+def test_background_polling_does_not_queue_more_than_k_or_repeat():
+    store, calls, gate, started = make_background_store(k=1)
+    for _ in range(5):  # фронт перечитывает ленту, пока разбор не готов
+        store.list_cards(BORROWER, "cfo")
+    assert started.wait(5)
+    gate.set()
+    assert store.wait_idle(5)
+    assert len(calls) == 1  # пять запросов — один разбор
+    store.list_cards(BORROWER, "cfo")  # следующий запрос — следующий сюжет, не повтор
+    assert store.wait_idle(5)
+    assert len(calls) == 2 and len(set(calls)) == 2
+
+
+def test_background_skips_when_budget_ran_out_while_queued(monkeypatch):
+    store, calls, gate, _ = make_background_store(k=1)
+    monkeypatch.setattr(store, "_budget", lambda: (0.0, 500.0))
+    store._start_worker = lambda: None  # поток не стартует, пока тест не исчерпает бюджет
+    store.list_cards(BORROWER, "cfo")
+    feed = store._feeds[(BORROWER, "cfo")]
+    ((_, story_id),) = list(store._jobs.queue)
+    monkeypatch.setattr(store, "_budget", lambda: (500.0, 500.0))
+    gate.set()
+    del store._start_worker
+    store._start_worker()
+    assert store.wait_idle(5)
+    assert calls == [] and story_id not in feed.attempted  # бюджет вернётся — разберём позже
+    assert not feed.pending
+
+
+def test_background_failure_logged_and_worker_survives():
+    store, _, gate, _ = make_background_store(k=1, fail=True)
+    gate.set()
+    store.list_cards(BORROWER, "cfo")
+    assert store.wait_idle(5)
+    (run,) = store.deep_runs(BORROWER)
+    assert run.status == "failed" and "модель недоступна" in (run.reason or "")
+    on_review = store.get_card(store._feeds[(BORROWER, "cfo")].cards[run.story_id], BORROWER)
+    assert on_review is not None and on_review.review_status == "on_review"  # быстрая карточка осталась
+    store.list_cards(BORROWER, "cfo")  # поток жив и берёт следующий сюжет
+    assert store.wait_idle(5)
+    assert len(store.deep_runs(BORROWER)) == 2
+
+
+def test_background_off_in_fixture_mode():
+    assert PipelineCardStore(source=MultiSource())._background is False

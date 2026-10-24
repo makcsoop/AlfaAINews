@@ -2,6 +2,7 @@
 
 import logging
 import os
+import queue
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -89,6 +90,15 @@ DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один 
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
 
 
+def feed_background() -> bool:
+    """Глубокие разборы в фоне: /feed отдаёт ленту сразу, разбор догружается (фронт перечитывает ленту).
+    На фикстуре (тесты) — синхронно, чтобы результат был детерминированным.
+    FEED_BACKGROUND=false — синхронно и на живых моделях, как раньше."""
+    if os.environ.get("LLM_MODE", "").strip().lower() == "fixture":
+        return False
+    return os.environ.get("FEED_BACKGROUND", "true").strip().lower() not in ("0", "false", "no")
+
+
 def _feed_cfg() -> FeedCfg | None:
     try:
         return load_scoring().feed
@@ -165,6 +175,7 @@ class _Feed:
     cards: dict[str, str] = field(default_factory=dict)  # story_id -> card_id (сейчас в ленте)
     deep: set[str] = field(default_factory=set)  # сюжеты с глубокой карточкой
     attempted: set[str] = field(default_factory=set)  # по ним глубокий разбор уже запускали или он не нужен
+    pending: set[str] = field(default_factory=set)  # в очереди фонового разбора или разбираются сейчас
     pinned: set[str] = field(default_factory=set)  # прислал пользователь (/analyze): из ленты не убираем
 
 
@@ -174,7 +185,9 @@ class PipelineCardStore:
     Сюжеты берутся из источника данных (`TOOL_SOURCE=db` — БД Р1, иначе фикстура). Для пары
     «компания из сессии × роль» все сюжеты оцениваются `score_pair`, быстрая карточка есть у каждого
     сюжета выше порога; глубокий разбор — только для `select_deep(...)` по остатку бюджета и не более
-    K за обращение (`FEED_DEEP_PER_REQUEST`). Глубокая карточка заменяет быструю того же сюжета.
+    K за обращение (`FEED_DEEP_PER_REQUEST`). На живых моделях разбор идёт в фоновом потоке
+    (`FEED_BACKGROUND`): /feed отвечает сразу, в очереди у ленты не больше K.
+    Глубокая карточка заменяет быструю того же сюжета.
     Разбор отрасли переиспользуется кешем «сюжет × отрасль × версия». Ошибка конвейера не роняет запрос:
     остаётся быстрая карточка со статусом «на проверке».
     """
@@ -187,6 +200,7 @@ class PipelineCardStore:
         source: ToolDataSource | None = None,
         runner: Callable[..., tuple[InsightCard, RunTrace]] | None = None,
         deep_per_request: int | None = None,
+        background: bool | None = None,
     ) -> None:
         # kv=None — взять из CACHE_BACKEND (redis -> клиент, иначе память)
         kv = kv if kv is not None else make_kv()
@@ -209,6 +223,10 @@ class PipelineCardStore:
         self._lock = threading.RLock()
         self._demo_done = False
         self.runs = 0  # сколько раз запускался конвейер (для тестов и мониторинга)
+        self._background = feed_background() if background is None else background
+        # один фоновый поток на хранилище: разборы идут по одному, бюджет и лимит модели не перегружаются
+        self._jobs: queue.Queue[tuple[_Feed, str]] = queue.Queue()
+        self._worker: threading.Thread | None = None
 
     # --- данные ---
 
@@ -334,8 +352,71 @@ class PipelineCardStore:
             return
         spent, limit = self._budget()
         pairs = select_deep(todo, {feed.company_id: feed.sector}, spent_rub=spent, limit_rub=limit)
-        for pair in pairs[: self._deep_per_request]:
-            self._run_deep(feed, pair.story_id)
+        if not self._background:
+            for pair in pairs[: self._deep_per_request]:
+                self._run_deep(feed, pair.story_id)
+            return
+        # в очереди у ленты не больше K: фронт перечитывает ленту, пока есть быстрые карточки, и каждый
+        # запрос не должен добавлять новые разборы, пока прежние не сделаны
+        free = self._deep_per_request - len(feed.pending)
+        for pair in pairs[: max(0, free)]:
+            feed.attempted.add(pair.story_id)
+            feed.pending.add(pair.story_id)
+            self._jobs.put((feed, pair.story_id))
+        if free > 0 and pairs:
+            self._start_worker()
+
+    def _start_worker(self) -> None:
+        if self._worker is None or not self._worker.is_alive():
+            self._worker = threading.Thread(target=self._work, name="deep-analysis", daemon=True)
+            self._worker.start()
+
+    def _work(self) -> None:
+        while True:
+            feed, story_id = self._jobs.get()
+            try:
+                self._run_deep_background(feed, story_id)
+            except Exception as e:  # поток не должен умирать: следующий разбор очереди важнее
+                log.warning("фоновый разбор %s для %s/%s: %r", story_id, feed.company_id, feed.role, e)
+            finally:
+                with self._lock:
+                    feed.pending.discard(story_id)
+                self._jobs.task_done()
+
+    def _run_deep_background(self, feed: _Feed, story_id: str) -> None:
+        """Модель — вне блокировки (лента, /card и /trace не ждут), результат — под блокировкой."""
+        with self._lock:
+            rel = feed.scores.get(story_id)
+            if rel is None:
+                return  # сюжет уже убран из ленты
+            spent, limit = self._budget()  # бюджет мог кончиться, пока разбор ждал в очереди
+            if not select_deep([rel], {feed.company_id: feed.sector}, spent_rub=spent, limit_rub=limit):
+                feed.attempted.discard(story_id)  # бюджет освободится — разберём позже
+                return
+            handlers = self._get_handlers()
+            self.runs += 1
+        try:
+            result = self._runner(
+                story_id, feed.company_id, feed.role, sector=feed.sector,
+                story_version=feed.story_version.get(story_id, 1), handlers=handlers,
+            )
+        except Exception as e:
+            with self._lock:
+                self._apply_failure(feed, story_id, e)
+            return
+        with self._lock:
+            self._apply_result(feed, story_id, *result)
+
+    def wait_idle(self, timeout: float = 30.0) -> bool:
+        """Дождаться, пока очередь фоновых разборов опустеет (тесты, прогрев кеша). False — не дождались."""
+        done = threading.Event()
+
+        def join() -> None:
+            self._jobs.join()
+            done.set()
+
+        threading.Thread(target=join, daemon=True).start()
+        return done.wait(timeout)
 
     def _log_run(
         self, feed: _Feed, story_id: str, status: str, *, reason: str | None = None,
@@ -362,22 +443,32 @@ class PipelineCardStore:
             self._cards.pop(old, None)
         feed.scores.pop(story_id, None)
 
-    def _run_deep(self, feed: _Feed, story_id: str) -> None:
-        feed.attempted.add(story_id)
+    def _get_handlers(self) -> Mapping[State, Callable[[PipelineContext], Any]]:
         if self._handlers is None:
             self._handlers = make_handlers(self._bundle_name, source=self._src(), cache=self.analysis_cache)
+        return self._handlers
+
+    def _run_deep(self, feed: _Feed, story_id: str) -> None:
+        feed.attempted.add(story_id)
+        handlers = self._get_handlers()
         self.runs += 1
         try:
             card, trace = self._runner(
                 story_id, feed.company_id, feed.role, sector=feed.sector,
-                story_version=feed.story_version.get(story_id, 1), handlers=self._handlers,
+                story_version=feed.story_version.get(story_id, 1), handlers=handlers,
             )
         except Exception as e:
-            log.warning("конвейер для %s/%s/%s упал: %r", story_id, feed.company_id, feed.role, e)
-            failed = self._degraded(feed, story_id, e)
-            reason = f"{type(e).__name__}: {str(e)[:200]}"
-            self._log_run(feed, story_id, "failed", reason=reason, trace=failed)
+            self._apply_failure(feed, story_id, e)
             return
+        self._apply_result(feed, story_id, card, trace)
+
+    def _apply_failure(self, feed: _Feed, story_id: str, e: Exception) -> None:
+        log.warning("конвейер для %s/%s/%s упал: %r", story_id, feed.company_id, feed.role, e)
+        failed = self._degraded(feed, story_id, e)
+        reason = f"{type(e).__name__}: {str(e)[:200]}"
+        self._log_run(feed, story_id, "failed", reason=reason, trace=failed)
+
+    def _apply_result(self, feed: _Feed, story_id: str, card: InsightCard, trace: RunTrace) -> None:
         self._traces[trace.run_id] = trace
         if _is_degraded(trace):
             self._log_run(feed, story_id, "failed", reason="pipeline_failed", trace=trace)
