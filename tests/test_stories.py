@@ -115,3 +115,31 @@ def test_decision_key_rate_day_and_foreign_bank():
     assert decision_key(item(3, "prime", "ЦБ Турции сохранил ключевую ставку на уровне 40%")) is None
     assert decision_key(item(4, "tass", "ЦБ снизил ключевую ставку до 13%", minutes=60 * 24 * 40)) == "2026-11-30:13"
     assert decision_key(item(5, "rbc", "Аналитики ждут, что ключевая ставка останется 14%")) is None
+
+
+@pytest.mark.parametrize(
+    ("title", "key"),
+    [
+        ("ЦБ снизил ключевую ставку на 0,5% до 16%", "2026-10-21:16"),
+        ("При инфляции 6% ЦБ сохранил ключевую ставку 14%", "2026-10-21:14"),
+        ("Банк России сохранил ключевую ставку на уровне 14,00% годовых", "2026-10-21:14"),
+        ("Сбербанк снизил ставки по вкладам после того, как ЦБ сохранил ключевую ставку 14%", None),
+        ("Набиуллина: ключевая ставка 14% сохранится долго", None),
+    ],
+)
+def test_decision_key_rate_value_and_subordinate(title, key):
+    from backend.stories.cluster import decision_key
+
+    assert decision_key(item(1, "interfax", title)) == key
+
+
+def test_decision_without_number_and_paste_join_the_decision():
+    from backend.stories.cluster import decision_key
+
+    assert decision_key(item(1, "cbr_press", "Банк России принял решение по ключевой ставке")) == "2026-10-21:?"
+    assert decision_key(item(2, "user_paste", "ЦБ сохранил ключевую ставку на уровне 14%", minutes=1440)) is None
+    items = [
+        item(1, "cbr_press", "Банк России принял решение по ключевой ставке"),
+        item(2, "interfax", "ЦБ сохранил ключевую ставку на уровне 14% годовых", minutes=3),
+    ]
+    assert len(cluster_items(items, entity_keys=[set(), set()])) == 1

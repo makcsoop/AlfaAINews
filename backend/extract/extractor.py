@@ -253,6 +253,10 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
         if facts.event_type in rules.MEASURE_TYPES and not rules.has_measure(facts.event_type, _head(rep)):
             log.info("%s: тип %s от модели без меры в тексте → other", rep.id, facts.event_type)
             facts.event_type = "other"
+        if rule_type == "rate_decision":
+            # решение ЦБ правила нашли по заголовку материала сюжета (decision_key); представительный
+            # материал — заявление с пресс-конференции: по нему модель не видит решения и ставила other
+            facts.event_type = "rate_decision"
     if ans.get("status") in {"fact", "announced", "planned", "rumor", "forecast"}:
         facts.status = ans["status"]
         facts.is_rumor = facts.is_rumor or ans["status"] == "rumor"

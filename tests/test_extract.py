@@ -408,3 +408,31 @@ def test_mention_of_decision_is_not_rate_decision():
 def test_repatriation_of_people_is_not_fx_control():
     assert rules.event_type("Суд в Индии постановил организовать репатриацию 23 моряков с танкера", None)[0] != "fx_control"
     assert rules.event_type("Правительство продлило требование о репатриации валютной выручки", None)[0] == "fx_control"
+
+
+@pytest.mark.parametrize("model_type", ["rate_decision", "other", "monetary_signal"])
+def test_model_cannot_downgrade_decision_found_in_title(model_type):
+    """Независимая проверка 24.10: представительный материал — длинное заявление без глагола решения,
+    по нему модель понижала решение ЦБ до other (тип и факторы пропадали)."""
+    release = _item(title="Банк России принял решение сохранить ключевую ставку на уровне 14,00% годовых",
+                    text="Совет директоров Банка России 23 октября принял решение сохранить ключевую ставку.")
+    statement = RawItem(
+        **{**release.model_dump(), "id": "it2", "native_id": "2", "source_id": "cbr_press",
+           "title": "Заявление Председателя Банка России по итогам заседания Совета директоров",
+           "text": "Инфляционное давление снижается, но остаётся высоким. " * 30}
+    )
+    story = Story(id="st1", title="t", item_ids=["it1", "it2"], corroboration=1, first_seen=T0, last_seen=T0)
+    ans = {**GOOD, "event_type": model_type, "summary_quote": "Инфляционное давление снижается"}
+    if model_type == "other":
+        ans["channels"] = []
+    facts = extract(story, [release, statement], FixtureLLM(ans))
+    assert facts.event_type == "rate_decision"
+
+
+def test_keep_llm_typing_does_not_override_rule_decision():
+    from backend.extract.run import keep_llm_typing
+    from backend.schemas import EventFacts
+
+    old = EventFacts(story_id="st_x", event_type="other", status="fact", summary="s", extractor_model="qwen")
+    new = EventFacts(story_id="st_x", event_type="rate_decision", status="fact", summary="s", extractor_model="rules")
+    assert keep_llm_typing(old, new).event_type == "rate_decision"

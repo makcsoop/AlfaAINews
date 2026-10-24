@@ -41,6 +41,7 @@ class QualityCfg(_Cfg):
     rumor: float
     intent: float
     default: float
+    forecast: float = 1.0  # факты — ожидание или прогноз, а не свершившееся событие
 
 
 class FreshnessCfg(_Cfg):

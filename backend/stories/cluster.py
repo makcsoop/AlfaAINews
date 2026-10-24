@@ -122,12 +122,24 @@ def cluster_items(items: list[RawItem], *, entity_keys: list[set[str]] | None = 
 
 
 # решение Банка России по ставке: «ЦБ сохранил ключевую ставку на уровне 14%», «ставка осталась 14%»
+# глаголы — только прошедшее время: «сохранится долго» — прогноз, не решение
+_PAST = (
+    r"(сохранил\w*|сохранена|оставил\w*|оставлена|осталась|снизил\w*|снижена|понизил\w*|повысил\w*"
+    r"|повышена)"
+)
 _RATE_DECISION = re.compile(
-    r"ключев\w* ставк\w*.{0,60}?\b(сохран\w*|остав\w*|осталась|сниз\w*|пониз\w*|повыс\w*)"
-    r"|\b(сохранил\w*|оставил\w*|снизил\w*|понизил\w*|повысил\w*|принял\w* решение \w+)\s+ключев\w* ставк",
+    rf"ключев\w* ставк\w*.{{0,60}}?\b{_PAST}|\b({_PAST}|принял\w* решение \w+)\s+ключев\w* ставк",
     re.IGNORECASE,
 )
-_RATE_VALUE = re.compile(r"(\d{1,2}(?:[,.]\d{1,2})?)\s*%")
+# решение ЦБ в придаточном: «Сбербанк снизил ставки по вкладам после того, как ЦБ сохранил…»
+_SUBORDINATE = re.compile(
+    r"после того,? как|вслед за|на фоне (решени|сохранени|снижени|повышени)", re.IGNORECASE
+)
+# ставка — число после «до», «на уровне», «ставку»: «снизил на 0,5% до 16%» → 16, «при инфляции 6% … 14%» → 14
+_RATE_VALUE = re.compile(
+    r"(?:\bдо|уровн\w*|ставк\w*|\bна)\s+(\d{1,2}(?:[,.]\d{1,2})?)\s*%(?!\s*(?:г/г|годовых\s+инфляц))",
+    re.IGNORECASE,
+)
 _MSK = timedelta(hours=3)
 
 
@@ -135,14 +147,20 @@ def decision_key(item: RawItem, title_only: bool = False) -> str | None:
     """Ключ решения ЦБ: дата по Москве и ставка из заголовка или лида; анонсы и ожидания — без ключа."""
     from backend.extract.rules import _ANNOUNCE, _DECIDED, _FOREIGN_CB
 
+    if item.source_id == "user_paste":
+        return None  # дата вставки — время вставки, а не публикации решения
     for part in (item.title,) if title_only else (item.title, item.lead or ""):
-        if not _RATE_DECISION.search(part) or _FOREIGN_CB.search(part):
+        if not _RATE_DECISION.search(part) or _FOREIGN_CB.search(part) or _SUBORDINATE.search(part):
             continue
         if _ANNOUNCE.search(part) and not _DECIDED.search(part):
             continue
-        if v := _RATE_VALUE.search(part):
-            day = (item.published_at + _MSK).date().isoformat()
-            return f"{day}:{float(v.group(1).replace(',', '.')):g}"
+        values = [m for m in _RATE_VALUE.finditer(part)]
+        # «на 0,5% до 16%»: «на» — шаг; берём число после «до», «уровне», «ставку», «на» — в последнюю очередь
+        named = [m for m in values if not m.group(0).lower().startswith("на ")]
+        day = (item.published_at + _MSK).date().isoformat()
+        if found := (named or values):
+            return f"{day}:{float(found[-1].group(1).replace(',', '.')):g}"
+        return f"{day}:?"  # «Банк России принял решение по ключевой ставке» — без числа в заголовке
     return None
 
 
@@ -152,13 +170,28 @@ def merge_decisions(drafts: list[_Draft]) -> list[_Draft]:
     Склейка по TF-IDF разводит «ЦБ сохранил ставку 14%» и «Банк России принял решение сохранить
     ключевую ставку на уровне 14,00% годовых» по разным сюжетам — в ленте это выглядело дублями.
     """
-    by_key: dict[str, list[int]] = {}
+    # сюжеты с общим ключом — одна группа (union-find): в сюжете может оказаться и материал другого дня
+    parent = list(range(len(drafts)))
+
+    def root(n: int) -> int:
+        while parent[n] != n:
+            parent[n] = parent[parent[n]]
+            n = parent[n]
+        return n
+
+    owner: dict[str, int] = {}
     for n, d in enumerate(drafts):
-        keys = {k for i in d.items if (k := decision_key(i))}
-        if len(keys) == 1:  # сюжет с двумя разными ставками в заголовках не трогаем
-            by_key.setdefault(keys.pop(), []).append(n)
+        # Банк России принимает не больше одного решения в день: группа — по дню, ставка в ключе — для журнала
+        for k in {k.split(":")[0] for i in d.items if (k := decision_key(i))}:
+            if k in owner:
+                parent[root(n)] = root(owner[k])
+            else:
+                owner[k] = n
+    groups: dict[int, list[int]] = {}
+    for n in range(len(drafts)):
+        groups.setdefault(root(n), []).append(n)
     absorbed: set[int] = set()
-    for group in by_key.values():
+    for group in groups.values():
         if len(group) < 2:
             continue
         main, *rest = sorted(group, key=lambda n: (-len(drafts[n].items), drafts[n].items[0].published_at))

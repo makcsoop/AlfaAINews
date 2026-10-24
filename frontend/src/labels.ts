@@ -155,6 +155,16 @@ const SOURCE_NAMES: Record<string, string> = {
   tg_minpromtorg_ru: "Минпромторг",
   tg_duma_gov_ru: "Госдума",
   tg_rosstat_official: "Росстат",
+  tg_spimexofficial: "СПбМТСБ",
+  tg_kommersant: "Коммерсантъ",
+  tg_vedomosti: "Ведомости",
+  tg_agroinvestor: "Агроинвестор",
+  tg_neftegazchannel: "Neftegaz.RU",
+  tg_russianmacro: "MMI",
+  tg_interfaxonline: "Интерфакс",
+  tg_tass_agency: "ТАСС",
+  tg_prime1: "ПРАЙМ",
+  tg_rbc_news: "РБК",
 };
 
 export function sourceName(sourceId: string, title?: string | null): string {

@@ -301,3 +301,17 @@ def test_rate_level_weaker_for_statements_than_decision():
         return next((abs(c.value) for c in r.contributions if c.factor == "key_rate"), 0.0)
 
     assert 0 < kr("monetary_signal") < kr("rate_decision")
+
+
+def test_surprise_hold_kept_when_superseded_after_story():
+    from datetime import date
+
+    from backend.schemas import Forecast
+
+    oct23 = STORY.model_copy(update={"first_seen": STORY.first_seen.replace(month=10, day=23)})
+    hold = B["bank_position"][0].model_copy(
+        update={"id": "cmi#hold", "doc_date": date(2026, 9, 11), "direction": 0.0, "superseded_by": "cmi#nov",
+                "forecast": Forecast(metric="key_rate_eoy_2026", value=14.0, unit="%", horizon="конец 2026")}
+    )
+    s = find_surprise(oct23, FACTS, bank_positions=[hold])  # cmi#nov вышел после 23.10 — не в списке «до события»
+    assert s is not None and s.bank_expected == 14.0

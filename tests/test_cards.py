@@ -449,3 +449,12 @@ def test_inference_reuses_multi_ref_fact_instead_of_duplicate(bundle):
     assert len(facts) == 1  # what_happened с двумя ссылками; выводы опираются на него
     infer = [c for c in card.claims if c.type == "model_inference"]
     assert infer and all(facts[0].claim_id in (c.based_on or {}).get("facts", []) for c in infer)
+
+
+def test_bank_voice_only_for_the_bank_itself():
+    from backend.cards.build import _bank_voice
+
+    assert _bank_voice("Альфа-Банк ожидает сохранения ставки до конца года")
+    assert _bank_voice("По мнению банка, ставка снизится")
+    assert not _bank_voice("Коммерческие банки ожидают роста просрочки")
+    assert not _bank_voice("Центробанк прогнозирует инфляцию 4%")

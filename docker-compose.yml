@@ -78,7 +78,8 @@ services:
       # true — подтверждённые сюжеты типирует модель (шаг extract общего клиента, до 60 вызовов за проход);
       # нужен ключ LLM_API_KEY в .env; модель воркер зовёт только при EXTRACT_LLM=true
       EXTRACT_LLM: ${EXTRACT_LLM:-false}
-      LLM_MODE: live
+      # офлайн-проверка без ключа: LLM_MODE=fixture в .env (модель воркер зовёт только при EXTRACT_LLM=true)
+      LLM_MODE: ${LLM_MODE:-live}
     depends_on:
       init:
         condition: service_completed_successfully

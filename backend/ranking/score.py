@@ -102,6 +102,7 @@ def quality(
     if facts is not None:
         base *= q.rumor if facts.is_rumor else 1.0
         base *= q.intent if facts.is_intent else 1.0
+        base *= q.forecast if facts.status == "forecast" else 1.0
     return round(max(0.0, min(1.0, base)), 3)
 
 

@@ -6,6 +6,7 @@
 структурные ошибки (чужие id, неверные метки, «банк ожидает» вне раздела банка).
 """
 
+import logging
 import re
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
@@ -45,6 +46,8 @@ from backend.schemas import (
 from backend.schemas.common import BANK_SOURCE_PREFIX, Confidence, Polarity, UserRole
 from backend.schemas.insight import CardEvent, Condition, StorySource, Surprise
 
+log = logging.getLogger(__name__)
+
 MARKET_SOURCE_PREFIX = "mk_"
 
 # виды элементов досье, на которые опирается факт или вывод
@@ -54,8 +57,10 @@ WHAT_HAPPENED_KINDS = frozenset({"fact", "news", "story", "calc"})
 CLIENT_KINDS = frozenset({"profile", "counterparties"})
 
 # «позиция банка» вне раздела банка
+# «банк» в единственном числе и не «центробанк»: «Коммерческие банки ожидают…», «Центробанк прогнозирует…» —
+# не позиция Альфа-Банка
 _BANK_VOICE = re.compile(
-    r"(банк\w*\s+(ожида|ждёт|ждет|ждал|прогнозир|считает|полагает|оценива)"
+    r"((?<!центро)(?<![а-яё])банк\s+(ожида|ждёт|ждет|ждал|прогнозир|считает|полагает|оценива)"
     r"|по\s+(мнению|оценке|прогнозу)\s+(банка|цми)"
     r"|цми\s+(ожида|ждёт|ждет|ждал|прогнозир|считает|полагает|оценива))",
     re.IGNORECASE,
@@ -587,6 +592,9 @@ def assemble_card(
     surprise = find_surprise(story, facts, bank_positions=bank_models, market=market_models)
     if surprise is None:
         surprise = _build_surprise(draft.surprise, dossier, dossier.story_published_at)
+    if dropped:
+        log.info("карточка %s/%s: выброшены утверждения с голосом банка вне раздела банка: %s",
+                 story.id, profile.company_id, ", ".join(dropped))
     return InsightCard(
         card_id=f"card_{story.id}_{profile.company_id}_{role}",
         company_id=profile.company_id,

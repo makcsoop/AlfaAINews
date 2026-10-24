@@ -8,3 +8,12 @@ data/telegram
 data/raw
 frontend/node_modules
 frontend/dist
+# данные организаторов и снимок монтируются томом ./data, в контекст сборки не нужны
+data/case
+data/bank
+data/snapshot
+data/llm_cache
+data/llm_journal
+*.zip
+*.docx
+CLAUDE.local.md

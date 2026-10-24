@@ -105,6 +105,8 @@ def keep_llm_typing(old: EventFacts, new: EventFacts) -> EventFacts:
         return new
     if not old.extractor_model or old.extractor_model.startswith("rules"):
         return new
+    if new.event_type == "rate_decision" and old.event_type != "rate_decision":
+        return new  # решение ЦБ правила нашли по заголовку материала — прошлый тип модели его не перебивает
     if old.event_type in rules.MEASURE_TYPES and new.event_type != old.event_type:
         return new  # тип-мера от модели, которую правила в тексте не нашли, не переносим
     seen = {(n.value, n.unit) for n in old.numbers}

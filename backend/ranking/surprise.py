@@ -55,6 +55,7 @@ def bank_expectation(
         if p.forecast.metric.startswith(m.forecast_prefix)  # type: ignore[union-attr]
         and (stamp in p.forecast.metric or (p.forecast.horizon or "").endswith(day.strftime("%d.%m.%Y")))  # type: ignore[union-attr]
     ]
+    published_ids = {p.id for p in published}
     if not found and m.hold_prefix:
         found = [
             p
@@ -62,7 +63,8 @@ def bank_expectation(
             if p.forecast.metric == f"{m.hold_prefix}_{day.year}"  # type: ignore[union-attr]
             and p.direction is not None
             and abs(p.direction) < 1e-9
-            and p.superseded_by is None
+            # заменён позже даты сюжета — для этого сюжета прогноз ещё действовал
+            and (p.superseded_by is None or p.superseded_by not in published_ids)
         ]
     return max(found, key=lambda p: p.doc_date, default=None)
 
