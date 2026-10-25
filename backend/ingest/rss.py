@@ -51,6 +51,17 @@ async def poll_feed(fetcher: Fetcher, src: Source, etag: str | None, last_modifi
     )
 
 
+def _modified(value: str | None) -> datetime | None:
+    """Дата правки из RSS (RFC 2822). Битая — None, без зоны — UTC (а не местное время сервера)."""
+    if not value:
+        return None
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+
+
 def native_id(entry: dict) -> str:
     return str(entry.get("rbc_news_news_id") or entry.get("id") or entry.get("link"))
 
@@ -92,7 +103,7 @@ def entry_to_item(
         text=text,
         is_partial=src.is_partial or not text,
         published_at=published,
-        updated_at=parsedate_to_datetime(updated).astimezone(UTC) if updated else None,
+        updated_at=_modified(updated),
         fetched_at=fetched_at,
         source_tags=[t["term"] for t in entry.get("tags", []) if t.get("term")]
         + ([f"city:{city}"] if city else []),

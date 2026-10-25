@@ -38,10 +38,14 @@ async def ingest_rss(fetcher: Fetcher, src: Source) -> int:
     fetched_at = datetime.now(UTC)
     items = []
     for entry in fresh:
-        page_text = None
-        if src.full_text == "fetch" and not src.is_partial and entry.get("link"):
-            page_text = await fetch_text(fetcher, entry["link"])
-        item = entry_to_item(src, entry, fetched_at, page_text)
+        try:
+            page_text = None
+            if src.full_text == "fetch" and not src.is_partial and entry.get("link"):
+                page_text = await fetch_text(fetcher, entry["link"])
+            item = entry_to_item(src, entry, fetched_at, page_text)
+        except Exception as e:  # один битый элемент не роняет проход всей ленты
+            log.warning("%s: элемент %s пропущен: %r", src.id, entry.get("link") or entry.get("id"), e)
+            continue
         if item:
             items.append(item)
 
@@ -148,8 +152,13 @@ def _rebuild_stories() -> dict:
         llm = ClientJsonLLM(max_calls=EXTRACT_LLM_CALLS)
     with get_engine().begin() as conn:
         stats = rebuild(conn)
-    with get_engine().begin() as conn:
-        stats["facts"] = extract_facts(conn, llm=llm)["stories"]
+    # промежуточные коммиты: сбой посреди прохода не откатывает уже оплаченные разборы моделью
+    with get_engine().connect() as conn:
+        facts = extract_facts(conn, llm=llm, commit_every=10)
+        conn.commit()
+    stats["facts"] = facts["stories"]
+    if facts.get("failed"):
+        stats["facts_failed"] = facts["failed"]
     if llm:
         stats["llm_rub"] = round(llm.usage.cost, 3)
     return stats

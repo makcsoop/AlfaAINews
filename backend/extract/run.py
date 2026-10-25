@@ -149,18 +149,27 @@ def run(
     stories = [s for s in for_llm if s.id in llm_ids] + [s for s in stories if s.id not in llm_ids]
     stats = {"stories": len(stories), "llm": 0, "unverified": 0, "kept_llm": 0}
     for story in stories:
-        rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(story.item_ids))).scalars()
-        items = [RawItem.model_validate(r) for r in rows]
-        if not items:
+        try:  # сбой одного сюжета откатывает только его (точка сохранения), а не весь проход
+            with conn.begin_nested():
+                rows = conn.execute(
+                    select(m.raw_items.c.data).where(m.raw_items.c.id.in_(story.item_ids))
+                ).scalars()
+                items = [RawItem.model_validate(r) for r in rows]
+                if not items:
+                    continue
+                facts = extract(story, items, llm if story.id in llm_ids else None)
+                old_raw = conn.execute(
+                    select(m.event_facts.c.data).where(m.event_facts.c.story_id == story.id)
+                ).scalar()
+                old = EventFacts.model_validate(old_raw) if old_raw else None
+                if old and (kept := keep_llm_typing(old, facts)) is not facts:
+                    facts = kept
+                    stats["kept_llm"] += 1
+                save_facts(conn, facts)
+        except Exception as e:
+            log.warning("факты сюжета %s не извлечены: %r", story.id, e)
+            stats["failed"] = stats.get("failed", 0) + 1
             continue
-        facts = extract(story, items, llm if story.id in llm_ids else None)
-        old_raw = conn.execute(
-            select(m.event_facts.c.data).where(m.event_facts.c.story_id == story.id)
-        ).scalar()
-        if old_raw and (kept := keep_llm_typing(EventFacts.model_validate(old_raw), facts)) is not facts:
-            facts = kept
-            stats["kept_llm"] += 1
-        save_facts(conn, facts)
         done = stats.get("done", 0) + 1
         stats["done"] = done
         if commit_every and done % commit_every == 0:  # долгий прогон с моделью: обрыв не теряет сделанное

@@ -355,3 +355,38 @@ def test_tme_web_saved_above_finds_gap(engine):
         insert_items(conn, posts)
         assert saved_above(conn, "tg_gap", 100) == (120, 1000)  # числовое сравнение, не строковое
         assert saved_above(conn, "tg_gap", 1000) == (None, None)
+
+
+def test_extract_failure_of_one_story_keeps_others(engine, monkeypatch):
+    # сбой одного сюжета откатывает только его: факты остальных сохраняются в том же проходе
+    from datetime import timedelta
+
+    from backend.extract import run as extract_run
+    from backend.stories.cluster import rebuild
+
+    now = datetime.now(UTC)
+    titles = {"fail_1": "Сбербанк открыл офис в Казани", "fail_2": "ВТБ снизил ставки по ипотеке"}
+    items = [
+        RawItem(id=k, source_id="interfax", native_id=k, tier=1, title=t, lead=t + " сегодня.",
+                published_at=now - timedelta(hours=1), fetched_at=now, content_hash=k)
+        for k, t in titles.items()
+    ]
+    real = extract_run.extract
+
+    def flaky(story, its, llm=None):
+        if any(i.id == "fail_1" for i in its):
+            raise RuntimeError("модель вернула мусор")
+        return real(story, its, llm)
+
+    monkeypatch.setattr(extract_run, "extract", flaky)
+    with engine.connect() as conn:
+        insert_items(conn, items)
+        rebuild(conn, hours=72, now=now)
+        stats = extract_run.run(conn, hours=72)
+        sid = {k: conn.execute(select(m.raw_items.c.story_id).where(m.raw_items.c.id == k)).scalar_one() for k in titles}
+        saved = {
+            k: conn.execute(select(m.event_facts.c.story_id).where(m.event_facts.c.story_id == s)).first()
+            for k, s in sid.items()
+        }
+        conn.rollback()
+    assert stats["failed"] == 1 and saved["fail_1"] is None and saved["fail_2"] is not None

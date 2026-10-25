@@ -31,7 +31,11 @@ BATCH = 500
 
 
 def _dt(v: str | None) -> datetime | None:
-    return datetime.fromisoformat(v).astimezone(UTC) if v else None
+    """Поля *_utc выгрузки: без зоны — это UTC, а не местное время машины, где идёт импорт."""
+    if not v:
+        return None
+    dt = datetime.fromisoformat(v)
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
 
 
 def to_message(post: dict) -> SimpleNamespace:
