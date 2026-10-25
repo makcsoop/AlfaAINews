@@ -61,6 +61,10 @@ def story_id(first_item_id: str) -> str:
     return "st_" + hashlib.sha1(first_item_id.encode()).hexdigest()[:12]
 
 
+def _chunks(ids: list[str], size: int = 5000) -> list[list[str]]:
+    return [ids[k : k + size] for k in range(0, len(ids), size)]
+
+
 def cluster_items(items: list[RawItem], *, entity_keys: list[set[str]] | None = None) -> list[_Draft]:
     """Жадная склейка материалов в порядке публикации. Детерминирована при одинаковом входе."""
     items = sorted(items, key=lambda i: (i.published_at, i.id))
@@ -241,8 +245,43 @@ def to_story(d: _Draft, sources: dict) -> Story:
     )
 
 
+def _assign_ids(drafts: list[_Draft], prior: dict[str, str], first_seen: dict[str, datetime]) -> list[str]:
+    """id сюжета переживает пересборку: черновик наследует сюжет, с которым у него больше общих материалов.
+
+    Каждый прежний сюжет достаётся одному черновику (больше общих материалов, при равенстве — раньше начатый
+    сюжет). Без наследника — новый id от первого материала; совпал с занятым — от следующего материала.
+    """
+    pairs = []
+    for n, d in enumerate(drafts):
+        votes: dict[str, int] = {}
+        for i in d.items:
+            if sid := prior.get(i.id):
+                votes[sid] = votes.get(sid, 0) + 1
+        late = datetime.max.replace(tzinfo=UTC)
+        pairs += [(-cnt, first_seen.get(sid, late), sid, n) for sid, cnt in votes.items()]
+    ids: list[str | None] = [None] * len(drafts)
+    taken: set[str] = set()
+    for _, _, sid, n in sorted(pairs):
+        if ids[n] is None and sid not in taken:
+            ids[n] = sid
+            taken.add(sid)
+    for n, d in enumerate(drafts):
+        if ids[n] is None:
+            free = (c for i in d.items if (c := story_id(i.id)) not in taken)
+            sid = next(free, story_id(d.items[0].id + "#"))
+            ids[n] = sid
+            taken.add(sid)
+    return [sid for sid in ids if sid is not None]
+
+
 def rebuild(conn: Connection, hours: float = 72, now: datetime | None = None) -> dict:
-    """Пересобирает сюжеты по неотсеянным материалам за окно. Сюжеты, начавшиеся раньше окна, не трогает."""
+    """Пересобирает сюжеты по неотсеянным материалам за окно.
+
+    id сюжета стабилен: черновик наследует прежний сюжет по общим материалам, поэтому выход первого
+    материала из окна или запоздавший материал с ранней датой не плодят дубли и не теряют факты и тип.
+    Материалы унаследованного сюжета, вышедшие из окна, остаются в нём. Прежний сюжет без наследника
+    удаляется, если весь был в окне, иначе в нём остаются только материалы вне окна.
+    """
     now = now or datetime.now(UTC)
     since = now - timedelta(hours=hours)
     rows = conn.execute(
@@ -251,12 +290,67 @@ def rebuild(conn: Connection, hours: float = 72, now: datetime | None = None) ->
         )
     ).scalars()
     items = [RawItem.model_validate(r) for r in rows]
+    in_window = {i.id for i in items}
     sources = {s.id: s for s in load_sources()}
     drafts = cluster_items(items)
-    stories = [to_story(d, sources) for d in drafts]
+
+    prior: dict[str, str] = {}
+    for chunk in _chunks(sorted(in_window)):
+        prior.update(
+            conn.execute(
+                select(m.raw_items.c.id, m.raw_items.c.story_id).where(
+                    m.raw_items.c.id.in_(chunk), m.raw_items.c.story_id.is_not(None)
+                )
+            ).all()
+        )
+    touched = set(prior.values())
+    old_rows = {
+        r.id: r
+        for r in conn.execute(
+            select(m.stories.c.id, m.stories.c.first_seen, m.stories.c.event_type, m.stories.c.data).where(
+                m.stories.c.id.in_(touched)
+            )
+        )
+    }
+    ids = _assign_ids(drafts, prior, {sid: r.first_seen for sid, r in old_rows.items()})
+
+    # материалы прежних сюжетов, вышедшие из окна: остаются в своём сюжете
+    outside_ids = {
+        iid for r in old_rows.values() for iid in r.data.get("item_ids", []) if iid not in in_window
+    }
+    outside_rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(outside_ids))).scalars()
+    outside = {it.id: it for it in (RawItem.model_validate(d) for d in outside_rows)}
+
+    def kept_outside(sid: str) -> list[RawItem]:
+        r = old_rows.get(sid)
+        return [outside[i] for i in (r.data.get("item_ids", []) if r else []) if i in outside]
+
+    stories = []
+    for sid, d in zip(ids, drafts, strict=True):
+        if old := kept_outside(sid):
+            d = _Draft(
+                items=sorted(old + d.items, key=lambda i: (i.published_at, i.id)),
+                copies=d.copies,
+                keys=d.keys,
+            )
+        s = to_story(d, sources)
+        s.id = sid
+        if sid in old_rows:  # тип события ведёт экстрактор: пересборка его не сбрасывает
+            s.event_type = old_rows[sid].event_type
+        stories.append(s)
+    new_ids = {s.id for s in stories}
+    # прежний сюжет без наследника, но с материалами вне окна — остаётся с ними
+    for sid in sorted(touched - new_ids):
+        if old := kept_outside(sid):
+            s = to_story(_Draft(items=sorted(old, key=lambda i: (i.published_at, i.id))), sources)
+            s.id = sid
+            s.event_type = old_rows[sid].event_type
+            s.entities = old_rows[sid].data.get("entities", [])
+            stories.append(s)
+            new_ids.add(sid)
 
     old_ids = set(conn.execute(select(m.stories.c.id).where(m.stories.c.first_seen >= since)).scalars())
-    new_ids = {s.id for s in stories}
+    old_ids |= touched
     # версию ведёт экстрактор (существенное изменение фактов) — пересборка её не сбрасывает
     versions = dict(
         conn.execute(select(m.stories.c.id, m.stories.c.version).where(m.stories.c.id.in_(new_ids))).all()

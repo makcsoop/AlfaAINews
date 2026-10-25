@@ -286,3 +286,57 @@ def test_worker_keeps_llm_typing_when_model_silent(engine):
     assert first["event_type"] == "other" and after["event_type"] == "other"  # правила дали бы sanctions
     assert stats["kept_llm"] >= 1 and "keep_3" in after["source_item_ids"]
     assert after["extractor_model"].endswith("(+правила)")
+
+
+def test_story_id_survives_window_slide_and_late_item(engine):
+    # id сюжета стабилен: первый материал вышел из окна или пришёл материал с более ранней датой —
+    # тот же сюжет, без дубля, с типом события от экстрактора
+    from datetime import timedelta
+
+    from backend.stories.cluster import rebuild, story_id
+
+    now = datetime.now(UTC)
+
+    def item(n, src, title, at):
+        return RawItem(
+            id=f"stab_{n}", source_id=src, native_id=f"s{n}", tier=1, title=title,
+            lead=title + ", сообщила компания.", published_at=at, fetched_at=now, content_hash=f"s{n}",
+        )
+
+    nickel = "Норникель снизил выпуск никеля на Кольской площадке"
+    flights = "Аэрофлот увеличил пассажиропоток на внутренних линиях"
+
+    def story_of(conn, item_id):
+        return conn.execute(select(m.raw_items.c.story_id).where(m.raw_items.c.id == item_id)).scalar_one()
+
+    def row(conn, sid):
+        return conn.execute(select(m.stories).where(m.stories.c.id == sid)).mappings().one()
+
+    with engine.begin() as conn:
+        # 1. сдвиг окна: первый материал выходит за 72 ч
+        insert_items(conn, [item(1, "interfax", nickel, now - timedelta(hours=70)),
+                            item(2, "tass", nickel, now - timedelta(hours=60))])
+        rebuild(conn, hours=72, now=now)
+        sid = story_of(conn, "stab_1")
+        assert story_of(conn, "stab_2") == sid
+        conn.execute(m.stories.update().where(m.stories.c.id == sid).values(event_type="production"))
+        rebuild(conn, hours=72, now=now + timedelta(hours=5))
+        slid = row(conn, sid)
+        dup = conn.execute(select(m.stories.c.id).where(m.stories.c.id == story_id("stab_2"))).first()
+
+        # 2. запоздавший материал с более ранней датой
+        insert_items(conn, [item(3, "interfax", flights, now - timedelta(hours=10)),
+                            item(4, "tass", flights, now - timedelta(hours=9))])
+        rebuild(conn, hours=72, now=now)
+        fid = story_of(conn, "stab_3")
+        insert_items(conn, [item(5, "rbc", flights, now - timedelta(hours=12))])
+        rebuild(conn, hours=72, now=now)
+        late = row(conn, fid)
+        late_ids = {story_of(conn, f"stab_{n}") for n in (3, 4, 5)}
+        gone = conn.execute(select(m.stories.c.id).where(m.stories.c.id == story_id("stab_5"))).first()
+
+    assert slid["data"]["item_ids"] == ["stab_1", "stab_2"] and slid["event_type"] == "production"
+    assert slid["data"]["event_type"] == "production" and dup is None
+    assert slid["first_seen"] == now - timedelta(hours=70)
+    assert late_ids == {fid} and gone is None
+    assert late["data"]["item_ids"][0] == "stab_5" and late["first_seen"] == now - timedelta(hours=12)
