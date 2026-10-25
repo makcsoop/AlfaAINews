@@ -6,7 +6,7 @@ import re
 import threading
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Generic, Literal, Protocol, TypeVar
+from typing import Any, Generic, Literal, Protocol, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -44,6 +44,12 @@ class LlmResult(BaseModel, Generic[T]):  # noqa: UP046
     provider_cost: float | None = None
 
 
+class TextAnswer(BaseModel):
+    """Ответ свободным текстом (call_text): распознанная страница и т. п."""
+
+    text: str
+
+
 # --- транспорт ---
 
 
@@ -60,7 +66,8 @@ class _Retryable(Exception):
 class CompletionRequest(BaseModel):
     step: str
     model: ModelSpec
-    messages: list[dict[str, str]]
+    # content — строка или части (текст и картинка) в формате OpenAI: картинки только у шага vision
+    messages: list[dict[str, Any]]
     temperature: float
     max_tokens: int | None = None
     fixture_key: str | None = None
@@ -83,6 +90,15 @@ class Transport(Protocol):
 
 def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
+
+
+def _text_of(content: Any) -> str:
+    """Текст сообщения: строка или текстовые части составного сообщения (картинки не считаются)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
+    return ""
 
 
 class FixtureTransport:
@@ -245,7 +261,7 @@ class HttpTransport:
             raise TransportError("неожиданный формат ответа провайдера") from None
         if not isinstance(usage, dict):
             usage = {}
-        est_in = sum(estimate_tokens(m.get("content", "")) for m in req.messages)
+        est_in = sum(estimate_tokens(_text_of(m.get("content"))) for m in req.messages)
         tin = int(usage.get("prompt_tokens") or est_in)
         tout = int(usage.get("completion_tokens") or estimate_tokens(text))
         cost_rub, cost_raw = parse_provider_cost(
@@ -363,6 +379,63 @@ class LLMClient:
         if spec is None or spec.provider_name not in ALLOWED_PROVIDER_NAMES:
             raise ValueError(f"модель {model_override} не входит в список разрешённых")
         return spec
+
+    def call_text(
+        self,
+        *,
+        step: str,
+        messages: list[dict[str, Any]],
+        trace_id: str,
+        dev: str = "r1",
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> LlmResult[TextAnswer]:
+        """Ответ свободным текстом, без JSON-схемы (распознавание сканов, шаг vision).
+
+        Тот же путь, что у call: модель шага из белого списка, бюджет до вызова, журнал и учёт ₽ после.
+        Повторов нет: невалидным свободный текст не бывает. Сбой провайдера — LLMUnavailable.
+        """
+        step_spec = self.config.step(step)
+        spec = self.config.model(step_spec.model)
+        self.budget.check(step)
+        prompt_hash = sha256_json([{**m, "content": _text_of(m.get("content"))} for m in messages])
+        req = CompletionRequest(
+            step=step, model=spec, messages=messages, temperature=temperature,
+            max_tokens=max_tokens or step_spec.max_tokens, reasoning_effort=step_spec.reasoning_effort,
+        )
+
+        def log(tin: int, tout: int, cost: float, error: str | None, base: str | None = None,
+                pcost: float | None = None, praw: float | None = None) -> None:
+            self.journal.record(
+                JournalEntry(
+                    trace_id=trace_id, step=step, dev=dev, model=spec.provider_name, attempt=1,
+                    tokens_in=tin, tokens_out=tout, cost_rub=cost, base=base,  # type: ignore[arg-type]
+                    provider_cost=pcost, provider_cost_raw=praw, prompt_hash=prompt_hash,
+                    validation="error" if error else "ok", error=error,
+                    mode=self.settings.llm_mode,  # type: ignore[arg-type]
+                )
+            )
+
+        try:
+            resp = self.transport.complete(req)
+        except TransportError as e:
+            log(0, 0, 0.0, _short(str(e)))
+            if e.budget:
+                raise BudgetExceeded(step, "provider") from None
+            raise LLMUnavailable(step, _short(str(e))) from None
+        fixture = self.settings.llm_mode == "fixture"
+        pcost = resp.provider_cost_rub
+        cost = 0.0 if fixture else pcost if pcost else spec.cost_rub(resp.tokens_in, resp.tokens_out)
+        self.budget.record(step, dev, resp.tokens_in, resp.tokens_out, cost)
+        if not fixture and resp.key_spend_rub is not None:
+            self.budget.observe_key_spend(resp.key_spend_rub)
+        log(resp.tokens_in, resp.tokens_out, cost, None, resp.base, pcost, resp.provider_cost_raw)
+        return LlmResult[TextAnswer](
+            value=TextAnswer(text=resp.text.strip()), step=step, model=spec.provider_name,
+            fallback_used=False, attempts=1,
+            tokens_in=resp.tokens_in, tokens_out=resp.tokens_out, cost_rub=cost, cached=False,
+            trace_id=trace_id, base=resp.base, provider_cost=pcost,  # type: ignore[arg-type]
+        )
 
     def call(
         self,

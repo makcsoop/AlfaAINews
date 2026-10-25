@@ -91,8 +91,8 @@ uv run python scripts/warm_demo_cache.py --stories 30 --max-rub 40
   `python -m backend.extract.run --hours 96 --force`: решения с одной датой и ставкой склеиваются в один сюжет.
 - **`compose up` падает на `SESSION_SECRET`** — `echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env`.
 
-Все вызовы моделей идут через `backend/llm/client.py` (бюджет и журнал команды). Исключение — OCR сканов ЦМИ
-(`backend/bank/vision.py`, Qwen3-VL): клиент не передаёт картинки; это разовая подготовка, страницы уже в снимке.
+Все вызовы моделей идут через `backend/llm/client.py` (бюджет и журнал команды), в том числе OCR сканов ЦМИ
+(`backend/bank/vision.py`, Qwen3-VL, шаг `vision`): картинка уходит составным сообщением через `call_text`.
 
 ## Разработка без Docker
 
