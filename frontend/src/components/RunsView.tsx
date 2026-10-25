@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Api } from "../api";
 import { errorText } from "../api";
+import { rub, rubNum } from "../format";
 import type { DeepRun } from "../types";
 import { SkeletonRows } from "./bits";
 import { IconAlert, IconChevron } from "./icons";
@@ -13,7 +14,6 @@ const STATUS: Record<DeepRun["status"], string> = {
   failed: "не удался",
 };
 
-const rub = (v: number) => `${v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
 
 export function RunsView({ api, onTrace, titles }: { api: Api; onTrace: (id: string) => void; titles: Map<string, string> }) {
   const [runs, setRuns] = useState<DeepRun[] | null>(null);
@@ -78,7 +78,7 @@ export function RunsView({ api, onTrace, titles }: { api: Api; onTrace: (id: str
                     {r.reason && <div className="muted small">{r.reason}</div>}
                   </td>
                   <td className="num">{r.score == null ? "—" : Math.round(r.score * 100)}</td>
-                  <td className="num">{r.cost_rub.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</td>
+                  <td className="num">{rubNum(r.cost_rub)}</td>
                   <td>
                     {r.trace_id && (
                       <button className="link" onClick={() => onTrace(r.trace_id!)}>

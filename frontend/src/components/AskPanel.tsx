@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { Api } from "../api";
 import { errorText } from "../api";
+import { rub } from "../format";
 import { CLAIM_LABELS, sourceLabel } from "../labels";
 import { completeStep } from "../onboarding";
 import type { AskResponse, InsightCard } from "../types";
@@ -113,6 +114,11 @@ export function AskPanel({ api, card }: { api: Api; card: InsightCard }) {
                   )}
                   {x.reply.tools_used.length > 0 && (
                     <div className="qa-meta">Смотрели: {x.reply.tools_used.map((t) => TOOL_NAMES[t] ?? t).join(", ")}</div>
+                  )}
+                  {x.reply.cost_rub != null && (
+                    <div className="qa-meta">
+                      Стоимость ответа: {x.reply.cached ? "0 ₽ · из кеша" : `≈${rub(x.reply.cost_rub)}`}
+                    </div>
                   )}
                 </div>
               )}

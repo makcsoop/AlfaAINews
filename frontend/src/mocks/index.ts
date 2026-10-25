@@ -96,6 +96,8 @@ export const mockApi: Api = {
         refs: [],
         tools_used: [],
         trace_id: "mock_ask",
+        cost_rub: 0,
+        cached: false,
         status: "refused" as const,
       });
     }
@@ -106,6 +108,8 @@ export const mockApi: Api = {
         refs: ["cp:supplier:1", "cp:supplier:2"],
         tools_used: ["get_counterparties"],
         trace_id: "mock_ask",
+        cost_rub: 0.02,
+        cached: false,
         status: "ok" as const,
       });
     }
@@ -115,6 +119,8 @@ export const mockApi: Api = {
       refs: facts.map((c) => c.claim_id),
       tools_used: [],
       trace_id: "mock_ask",
+      cost_rub: 0.004,
+      cached: false,
       status: card ? ("ok" as const) : ("degraded" as const),
     });
   },

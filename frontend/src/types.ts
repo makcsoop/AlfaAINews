@@ -192,6 +192,9 @@ export interface AskResponse {
   tools_used: string[];
   trace_id: string;
   status: "ok" | "refused" | "degraded" | "unclear";
+  cost_rub: number; // ₽ на вызовы моделей для ответа; из кеша — 0
+  cached: boolean; // все вызовы взяты из кеша
+
 }
 
 export type FeedbackKind = "useful" | "not_relevant" | "wrong" | "click_source";

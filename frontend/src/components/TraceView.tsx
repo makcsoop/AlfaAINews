@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Api } from "../api";
 import { errorText } from "../api";
+import { rub } from "../format";
 import type { RunTrace, TraceCost } from "../types";
 import { TOOL_NAMES } from "./AskPanel";
 import { SkeletonRows } from "./bits";
@@ -61,7 +62,6 @@ export function phases(steps: string[]): { phases: Phase[]; notes: string[] } {
   return { phases: out, notes };
 }
 
-const rub = (v: number) => `${v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
 const time = (iso: string) => new Date(iso).toLocaleTimeString("ru-RU");
 
 export function TraceView({ api, traceId, onBack }: { api: Api; traceId: string; onBack: () => void }) {
@@ -109,6 +109,9 @@ export function TraceView({ api, traceId, onBack }: { api: Api; traceId: string;
     ? Math.round((Date.parse(trace.finished_at) - Date.parse(trace.started_at)) / 1000)
     : null;
   const hasCost = !!cost && Object.keys(cost.cost_by_step).length > 0;
+  // все вызовы взяты из кеша — «0 ₽» объясняем пометкой, а не выдаём за бесплатный разбор
+  const allCached = trace.llm_calls.length > 0 && trace.llm_calls.every((c) => c.cached);
+  const costLabel = `${rub(cost?.cost_rub ?? trace.cost_rub)}${allCached ? " — из кеша" : ""}`;
 
   return (
     <div className="view">
@@ -120,7 +123,7 @@ export function TraceView({ api, traceId, onBack }: { api: Api; traceId: string;
           </span>
           <h1>Как получена карточка</h1>
           <div className="stats">
-            <Stat label="Стоимость разбора" value={rub(cost?.cost_rub ?? trace.cost_rub)} />
+            <Stat label="Стоимость разбора" value={costLabel} />
             <Stat label="Кругов проверки" value={String(trace.verify_rounds)} />
             <Stat label="Вызовов моделей" value={String(trace.llm_calls.length)} />
             {seconds !== null && <Stat label="Время" value={`${seconds} с`} />}
