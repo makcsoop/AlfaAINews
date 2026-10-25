@@ -66,7 +66,7 @@ def make_store(k: int = 2):
 def test_feed_has_card_per_story_sorted_with_limited_deep():
     store, calls = make_store(k=2)
     cards = store.list_cards(BORROWER, "cfo")
-    assert {c.event.story_id if hasattr(c, "event") else None for c in cards} or cards
+    assert {c.event.story_id for c in cards} == {"st_2026-09-11_keyrate", "s_2", "s_3", "s_4"}
     assert len(cards) == 4  # rate_14 + три синтетических
     scores = [c.relevance.score for c in cards]
     assert scores == sorted(scores, reverse=True)
