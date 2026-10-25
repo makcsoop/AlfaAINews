@@ -156,7 +156,7 @@ def test_card_valid_and_labelled(bundle, tmp_path, company, role):
             assert c.type == "bank_offer" and c.is_advertising
     # метки и обоснование: у каждого утверждения есть либо источник, либо based_on
     assert all(c.evidence or any(c.based_on.values()) for c in card.claims)
-    assert res.cost_rub == 0.0 and res.prompt_version == "card-v3"
+    assert res.cost_rub == 0.0 and res.prompt_version == "card-v4"
 
 
 def test_confidence_and_surprise_set_by_code(bundle, tmp_path):
@@ -190,7 +190,7 @@ def test_two_clients_get_different_cards(bundle, tmp_path):
         assert len(acts) == 1 and acts[0].is_advertising
         assert [c for c in res.card.claims if c.type == "bank_offer"]
         offers[res.card.company_id] = acts[0].text
-    assert offers["U_DEMO_BORROWER"] == "Фиксация ставки по новым траншам"
+    assert offers["U_DEMO_BORROWER"].startswith("Фиксация ставки по новым траншам. Почему вам: ")
     assert offers["U_DEMO_DEPOSITOR"].startswith("Депозит на более длинный срок")
 
 
@@ -404,11 +404,11 @@ def test_role_focus_in_prompt(bundle, role):
 
 def test_prompt_version_in_header_and_journal(bundle, tmp_path):
     version, system, _user = load_prompt()
-    assert version == "card-v3" and "cmi_" in system and "mk_" in system
+    assert version == "card-v4" and "cmi_" in system and "mk_" in system
     client = fixture_client(tmp_path)
     res = write(env(bundle, *CASES[0]), client, sources=bundle["source"])
     entries = client.journal.by_trace(res.card.trace_id)
-    assert entries and all(en["prompt_version"] == "card-v3" and en["step"] == "card" for en in entries)
+    assert entries and all(en["prompt_version"] == "card-v4" and en["step"] == "card" for en in entries)
     assert sum(en["cost_rub"] for en in entries) == 0.0
 
 
@@ -523,3 +523,36 @@ def test_best_sentence_takes_whole_text_when_numbers_split():
     text = "Прогноз по ставке на конец 2027 года повышен. Он составляет 12,5–13,5%."
     q = _best_sentence(text, "Прогноз ставки на конец 2027 года — 12,5–13,5%")
     assert "12,5" in q and "2027" in q
+
+
+def _rel(factor: str, value: float, feats=("payments: 40% входящих от ОКВЭД 41",)):
+    from backend.schemas import RelevanceScore
+    from backend.schemas.insight import Contribution
+
+    return RelevanceScore(
+        story_id="s", company_id="C", score=0.3, quality=0.9,
+        contributions=[Contribution(factor=factor, value=value, sign=-1, client_features=list(feats))],
+    )
+
+
+def test_offer_for_counterparty_defaults_with_why_and_next_step():
+    # CRITERIA_CHECK 7д: у сюжета о неплатежах предложения не было; предложение — только название продукта
+    from backend.cards.offers import find_offer
+    from backend.schemas import CompanyProfile
+
+    p = CompanyProfile(company_id="C", okved_code="46.69", sector="46", products={"factoring": True})
+    offer = find_offer(profile=p, relevance=_rel("counterparty_defaults", 0.3), analyses=[])
+    assert offer is not None and offer.trigger_id == "receivables_protection"
+    assert "факторинг" in offer.why and offer.next_step and "Почему вам" in offer.text
+    assert not any(ch.isdigit() for ch in offer.why + offer.next_step)  # числа — только из признаков
+    plain = CompanyProfile(company_id="C", okved_code="46.69", sector="46", products={})
+    assert find_offer(profile=plain, relevance=_rel("counterparty_defaults", 0.3), analyses=[]) is None
+
+
+def test_offer_for_capital_controls_needs_fea():
+    from backend.cards.offers import find_offer
+    from backend.schemas import CompanyProfile
+
+    p = CompanyProfile(company_id="C", okved_code="24.10", sector="24", fts_flag=True, fts_country="Турция")
+    offer = find_offer(profile=p, relevance=_rel("capital_controls", 0.2), analyses=[])
+    assert offer is not None and offer.trigger_id == "fx_control_support" and "Турция" in offer.why

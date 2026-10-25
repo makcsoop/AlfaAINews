@@ -285,3 +285,16 @@ def test_main_fact_quote_contains_its_number(bundle, tmp_path):
     _, card = _llm_card(bundle, tmp_path, CASES[0])
     f1 = next(c for c in card.claims if c.claim_id == card.what_happened[0])
     assert "14" in " ".join(ev.quote for ev in f1.evidence)
+
+
+def test_exporter_called_importer_fails(bundle, tmp_path):
+    # CRITERIA_CHECK 7д: у вкладчика (ОКВЭД 24, «скорее экспортёр») карточка писала «давит на импорт из Турции»
+    e, card = _llm_card(bundle, tmp_path, CASES[1])
+    assert "скорее экспортёр" in " ".join(allowed_features(e["profile"], e["graph"], e["relevance"]))
+    cid = card.why_it_matters[0]
+    bad = _with_text(card, cid, "Жёсткость ЦБ давит на импорт из Турции и платежи по нему.")
+    assert "fea_role_mismatch" in _codes(_check(e, bad))
+    bad_head = card.model_copy(update={"headline": "Ставка 14% давит на импорт компании"})
+    assert "fea_role_mismatch" in _codes(_check(e, bad_head))
+    ok = _with_text(card, cid, "Сильный рубль снижает рублёвую выручку от экспорта.")
+    assert "fea_role_mismatch" not in _codes(_check(e, ok))

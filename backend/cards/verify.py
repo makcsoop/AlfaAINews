@@ -151,6 +151,20 @@ class _Pool:
         return any(d == sd and m == sm and (y is None or y == sy) for sd, sm, sy in self.dates)
 
 
+_IMPORT = re.compile(r"\bимпорт(?!озамещ)\w*", re.IGNORECASE)
+_EXPORT = re.compile(r"\bэкспорт\w*", re.IGNORECASE)
+_ROLE_WORD = {"exporter": "экспортёр", "importer": "импортёр"}
+
+
+def _fea_role(features: Sequence[str]) -> str | None:
+    text = " ".join(features).casefold()
+    if "скорее экспортёр" in text and "скорее импортёр" not in text:
+        return "exporter"
+    if "скорее импортёр" in text and "скорее экспортёр" not in text:
+        return "importer"
+    return None
+
+
 def _is_year(n: str) -> bool:
     return n.isdigit() and 1990 <= int(n) <= 2100
 
@@ -336,6 +350,22 @@ def verify_card(
     if len(own) < min(2, len(available)):
         fail("why_features", f"why_it_matters опирается на {len(own)} признаков компании, нужно ≥ 2")
 
+    # (f2) направление ВЭД: у экспортёра (признак «скорее экспортёр» по отрасли) не пишем про его импорт —
+    # модель видела «ВЭД: Турция» и додумывала направление. Только выводы модели и заголовок: факты новости
+    # про импорт или экспорт сами по себе законны
+    role = _fea_role(profile_features)
+    if role is not None:
+        other = _IMPORT if role == "exporter" else _EXPORT
+        word = "импорт" if role == "exporter" else "экспорт"
+        if not any(word in f.casefold() for f in profile_features):
+            texts: list[tuple[str | None, str]] = [
+                (c.claim_id, c.text) for c in card.claims if c.type == "model_inference"
+            ]
+            texts.append((None, card.headline or ""))
+            for cid, text in texts:
+                if other.search(text):
+                    fail("fea_role_mismatch", f"компания скорее {_ROLE_WORD[role]}, а в тексте «{word}»", cid)
+
     # (g) предложение банка — только по триггеру
     offers = [c for c in card.claims if c.type == "bank_offer"]
     if len(offers) > 1:
@@ -360,6 +390,7 @@ _CHECKS: dict[str, tuple[str, ...]] = {
     "refs": ("no_support", "unknown_source", "unknown_feature", "unknown_claim"),
     "label": (
         "bank_view_source", "bank_view_expired", "market_view_source", "fact_opinion_source", "bank_voice",
+        "fea_role_mismatch",
     ),
     "numbers": ("number_not_in_source",),
     "dates": ("date_not_in_source",),
