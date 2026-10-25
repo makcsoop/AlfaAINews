@@ -58,6 +58,7 @@ class PairRow:
     date: str
     story: str
     sources: str
+    item_ids: tuple[str, ...] = ()  # материалы сюжета: по ним метрики найдут пару после пересклейки
 
 
 @dataclass
@@ -70,6 +71,7 @@ class LabelRow:
     main_channel: str | None
     sign: int | None
     comment: str | None
+    item_ids: tuple[str, ...] = ()
 
 
 @dataclass
@@ -131,9 +133,9 @@ def write_sheet(
     meta = wb.create_sheet(META)
     meta.append(["labeler", labeler])
     meta.append(["batch", batch])
-    meta.append(["pair_id", "story_id", "company_id"])
+    meta.append(["pair_id", "story_id", "company_id", "item_ids"])
     for r in rows:
-        meta.append([r.pair_id, r.story_id, r.company_id])
+        meta.append([r.pair_id, r.story_id, r.company_id, " ".join(r.item_ids)])
     meta.sheet_state = "hidden"
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
@@ -157,11 +159,11 @@ def _text(v: object) -> str | None:
     return s or None
 
 
-def read_meta(path: Path) -> tuple[str, dict[str, tuple[str, str]]]:
-    """Разметчик и pair_id → (story_id, company_id) из скрытого листа файла, который выдали разметчику."""
+def read_meta(path: Path) -> tuple[str, dict[str, tuple[str, str, tuple[str, ...]]]]:
+    """Разметчик и pair_id → (story_id, company_id, материалы) из скрытого листа выданного файла."""
     meta = load_workbook(path, data_only=True)[META]
     ids = {
-        str(r[0]): (str(r[1]), str(r[2]))
+        str(r[0]): (str(r[1]), str(r[2]), tuple(str(r[3] or "").split()) if len(r) > 3 else ())
         for r in meta.iter_rows(min_row=4, values_only=True)
         if r[0] is not None
     }
@@ -226,8 +228,8 @@ def read_sheet(
             out.warnings.append(f"{where}: при значимости ≥ 1 нужны канал и знак")
         if rel >= 2 and comment is None:
             out.warnings.append(f"{where}: при значимости 2–3 нужен комментарий")
-        sid, cid = ids[pid]
-        out.labels.append(LabelRow(pid, sid, cid, labeler, rel, channel, sign, comment))
+        sid, cid, items = ids[pid]
+        out.labels.append(LabelRow(pid, sid, cid, labeler, rel, channel, sign, comment, items))
     return out
 
 

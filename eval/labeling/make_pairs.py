@@ -352,7 +352,8 @@ def make_pairs(
                     "batch": batch,
                     "story_id": sid,
                     "company_id": p.company_id,
-                    "data": {"story": snap, "client": client, "selection": why},
+                    "data": {"story": snap, "client": client, "selection": why,
+                             "item_ids": list(story_by_id[sid].item_ids)},
                 }
             )
             by_client[p.company_id].append(pid)
@@ -366,6 +367,7 @@ def make_pairs(
                 date=story_by_id[sid].first_seen.astimezone(MSK).strftime("%d.%m.%Y %H:%M"),
                 story=story_text(snap),
                 sources=sources_text(snap["items"], names),
+                item_ids=tuple(story_by_id[sid].item_ids),  # пересклейка меняет id сюжета, материалы — нет
             )
     per_labeler, common = assign(by_client, labelers, rng)
     for r in rows:

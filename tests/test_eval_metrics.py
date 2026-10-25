@@ -91,3 +91,39 @@ def test_labeling_export_format(tmp_path: Path):
     rep = agreement(read_labels(f))
     assert rep.pairs[0].n == 3 and rep.disputed == [("p2", {"ann": 0, "bob": 1})]
     assert rep.pairs[0].exact == pytest.approx(0.667, abs=0.001)
+
+
+def test_precision_ceiling_with_one_important_pair_per_client():
+    # CRITERIA_CHECK 3: при одной важной паре на клиента p@5 не выше 0,2 у любого ранжировщика
+    pairs = [
+        PairEval(f"{c}{i}", c, f"s{i}", 1.0 if i == 0 else 0.0, system=1 - i / 10, baseline=i / 10, covered=False)
+        for c in "AB"
+        for i in range(10)
+    ]
+    m = evaluate(pairs)
+    assert m.precision == m.precision_ceiling == pytest.approx(0.2)
+    assert "Потолок precision@5 на этой разметке: 0.200" in format_report(m)
+
+
+def test_pairs_relinked_by_items_after_reclustering():
+    from backend.eval.metrics import LinkStats, resolve_stories
+
+    gold = {"p1": ("old1", "C", 1.0), "p2": ("alive", "C", 0.0), "p3": ("old3", "C", 0.0)}
+    items = {"p1": ["it_a", "it_b", "it_c"], "p3": ["it_x"]}
+    item_story = {"it_a": "new1", "it_b": "new1", "it_c": "other", "it_x": None}
+    linked, link = resolve_stories(gold, items, existing={"alive"}, item_story=item_story)
+    assert linked == {"p1": "new1", "p2": "alive"}  # p3: материал не в сюжете — пара потеряна
+    assert link == LinkStats(total=3, direct=1, relinked=1) and link.lost == 1
+    text = format_report(evaluate([PairEval("p1", "C", "new1", 1.0, 0.5, 0.5, False)]), link=link)
+    assert "Пар найдено в базе: 2 из 3" in text and "потеряно — 1" in text and "Внимание" in text
+
+
+def test_item_ids_roundtrip_through_csv(tmp_path):
+    from backend.eval.metrics import items_from_csv
+    from eval.labeling.import_labels import write_csv
+    from eval.labeling.sheet import LabelRow
+
+    out = tmp_path / "labels.csv"
+    write_csv(out, [LabelRow("p1", "s1", "C", "r", 2, None, None, None, ("it_a", "it_b"))])
+    assert items_from_csv(out) == {"p1": ["it_a", "it_b"]}
+    assert gold_from_csv(out) == {"p1": ("s1", "C", 1.0)}

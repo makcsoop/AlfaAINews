@@ -33,6 +33,7 @@ COLUMNS = [
     "sign",
     "comment",
     "labeled_at",
+    "item_ids",
 ]
 
 
@@ -55,6 +56,7 @@ def write_csv(path: Path, labels: Sequence[LabelRow]) -> None:
                     "" if x.sign is None else x.sign,
                     x.comment or "",
                     at,
+                    " ".join(x.item_ids),
                 ]
             )
 
@@ -112,9 +114,13 @@ def run_metrics(path: Path) -> None:
         print(text)
     else:
         print("согласие не считается: разметчик один")
-    result = metrics.evaluate(metrics.load_pairs(path))
+    stats: list[metrics.LinkStats] = []
+    result = metrics.evaluate(metrics.load_pairs(path, stats))
     metrics.REPORT.write_text(
-        metrics.format_report(result, note=f"Источник разметки: `{path.name}`."), encoding="utf-8"
+        metrics.format_report(
+            result, note=f"Источник разметки: `{path.name}`.", link=stats[0] if stats else None
+        ),
+        encoding="utf-8",
     )
     print(metrics.REPORT.read_text(encoding="utf-8"))
 
