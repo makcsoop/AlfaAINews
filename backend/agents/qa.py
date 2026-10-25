@@ -89,6 +89,7 @@ class QAResult(BaseModel):
     tools_used: list[str] = Field(default_factory=list)
     status: Literal["ok", "refused", "degraded", "unclear"]
     trace_id: str
+    story_id: str | None = None  # сюжет, по которому собрано досье (для трассы /ask)
 
 
 # --- промпт --------------------------------------------------------------------------------------
@@ -526,6 +527,7 @@ def answer_question(
         log.warning("qa: контекст не собран trace_id=%s: %s", trace_id, e.code)
         return QAResult(answer=DEGRADED_TEXT, status="degraded", trace_id=trace_id)
 
+    sid = dossier.story_id
     key = fixture_key or ("counterparties" if "get_counterparties" in used else None)
     try:
         res = client.call(
@@ -534,16 +536,20 @@ def answer_question(
         )
     except (LLMUnavailable, BudgetExceeded) as e:
         log.warning("qa: модель недоступна trace_id=%s: %s", trace_id, type(e).__name__)
-        return QAResult(answer=DEGRADED_TEXT, tools_used=used, status="degraded", trace_id=trace_id)
+        return QAResult(
+            answer=DEGRADED_TEXT, tools_used=used, status="degraded", trace_id=trace_id, story_id=sid
+        )
 
     value = res.value
     if value.intent != "answer":  # вопрос не понят или не по теме: досье не пересказываем
         text = CLARIFY_TEXT if value.intent == "unclear" else OFF_TOPIC_TEXT
-        return QAResult(answer=text, tools_used=used, status="unclear", trace_id=trace_id)
+        return QAResult(answer=text, tools_used=used, status="unclear", trace_id=trace_id, story_id=sid)
     kept = verify_statements(value.statements, dossier, session)
     if not kept:
-        return QAResult(answer=NO_DATA_TEXT, tools_used=used, status="ok", trace_id=trace_id)
+        return QAResult(answer=NO_DATA_TEXT, tools_used=used, status="ok", trace_id=trace_id, story_id=sid)
     # текст ответа собирается только из проверенных утверждений: свободный `answer` модели не доверен
     answer = " ".join(s.text for s in kept)
     refs = list(dict.fromkeys(r for s in kept for r in s.refs))
-    return QAResult(answer=answer, refs=refs, tools_used=used, status="ok", trace_id=trace_id)
+    return QAResult(
+        answer=answer, refs=refs, tools_used=used, status="ok", trace_id=trace_id, story_id=sid
+    )

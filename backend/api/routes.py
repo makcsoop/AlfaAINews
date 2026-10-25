@@ -1,6 +1,7 @@
 """Эндпоинты /session /feed /card /trace /ask /feedback /analyze. company_id и роль — только из сессии."""
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
@@ -88,6 +89,8 @@ class AskResponse(BaseModel):
     status: Literal["ok", "refused", "degraded", "unclear"] = Field(
         default="ok", description="unclear — вопрос не понят или не по теме: в answer просьба уточнить"
     )
+    cost_rub: float = Field(default=0.0, description="₽ на вызовы моделей для этого ответа; из кеша — 0")
+    cached: bool = Field(default=False, description="все вызовы моделей взяты из кеша")
 
 
 @router.post("/session", response_model=LoginResponse, tags=["session"], summary="Демо-вход")
@@ -269,21 +272,44 @@ def ask(
     """Ответ по досье карточки и инструментам своей компании. Компания берётся только из сессии."""
     if not ask_limiter.allow(ask_limiter.key_of(session)):
         raise HTTPException(status_code=429, detail="Слишком много вопросов, попробуйте через минуту")
-    if body.card_id and store.get_card(body.card_id, session.company_id) is None:
+    card = store.get_card(body.card_id, session.company_id) if body.card_id else None
+    if body.card_id and card is None:
         owner = store.card_owner(body.card_id)
         if owner is not None and owner != session.company_id:
             audit_foreign(audit, request, session, owner)
         raise HTTPException(status_code=404, detail="Карточка не найдена")
+    client = get_client()
+    tid = trace_id_of(request) or uuid.uuid4().hex
+    started = datetime.now(UTC)
     result = answer_question(
         body.question,
         session=session,
         card_id=body.card_id,
         store=store,
-        client=get_client(),
-        trace_id=trace_id_of(request) or "",
+        client=client,
+        trace_id=tid,
         audit=audit,
     )
-    return AskResponse(**result.model_dump(include={"answer", "refs", "tools_used", "status", "trace_id"}))
+    # трасса ответа: /trace/{id} и /trace/{id}/cost работают и для /ask (принадлежность — по company_id)
+    calls = client.journal.to_llm_calls(tid)
+    cost = round(sum(c.cost_rub for c in calls), 6)
+    store.put_trace(
+        RunTrace(
+            run_id=tid,
+            story_id=result.story_id or (card.event.story_id if card else ""),
+            company_id=session.company_id,
+            steps=[f"qa:{result.status}", *(f"tool:{t}" for t in result.tools_used)],
+            llm_calls=calls,
+            cost_rub=cost,
+            started_at=started,
+            finished_at=datetime.now(UTC),
+        )
+    )
+    return AskResponse(
+        **result.model_dump(include={"answer", "refs", "tools_used", "status", "trace_id"}),
+        cost_rub=cost,
+        cached=bool(calls) and all(c.cached for c in calls),
+    )
 
 
 @router.post(

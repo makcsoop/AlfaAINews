@@ -56,6 +56,10 @@ class CardStore(Protocol):
         """Трассировка по id; проверку принадлежности делает вызывающий (по trace.company_id)."""
         ...
 
+    def put_trace(self, trace: RunTrace) -> None:
+        """Сохраняет трассу вне конвейера (вопрос-ответ /ask), чтобы её отдавали /trace и /trace/{id}/cost."""
+        ...
+
 
 class FixtureCardStore:
     def __init__(self, bundle_name: str = "rate_14") -> None:
@@ -79,6 +83,13 @@ class FixtureCardStore:
 
     def get_trace(self, trace_id: str) -> RunTrace | None:
         return self._traces.get(trace_id)
+
+    def put_trace(self, trace: RunTrace) -> None:
+        # трассы фикстуры не вытесняются; сверх TRACES_MAX уходит самая старая трасса /ask
+        asked = [k for k, t in self._traces.items() if t.steps[:1] and t.steps[0].startswith("qa:")]
+        if len(self._traces) >= TRACES_MAX and asked:
+            del self._traces[asked[0]]
+        self._traces[trace.run_id] = trace
 
 
 log = logging.getLogger(__name__)
@@ -671,6 +682,10 @@ class PipelineCardStore:
         self._ensure_demo()
         with self._lock:
             return self._traces.get(trace_id)
+
+    def put_trace(self, trace: RunTrace) -> None:
+        with self._lock:
+            self._add_trace(trace)
 
 
 _stores: dict[str, CardStore] = {}

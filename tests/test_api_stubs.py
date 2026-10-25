@@ -132,6 +132,42 @@ def test_ask_stub(client, audit):
     assert not audit.records
 
 
+def test_ask_trace_and_cost_available(client):
+    login(client)
+    r = client.post("/ask", json={"question": "Что делать с кредитами?", "card_id": BORROWER_CARD})
+    body = r.json()
+    assert body["status"] == "ok" and isinstance(body["cost_rub"], float) and isinstance(body["cached"], bool)
+    tid = body["trace_id"]
+    t = client.get(f"/trace/{tid}")
+    assert t.status_code == 200, t.text
+    trace = t.json()
+    assert "qa:ok" in trace["steps"] and trace["company_id"] == BORROWER
+    assert trace["story_id"] == "st_2026-09-11_keyrate"
+    assert [c["purpose"] for c in trace["llm_calls"]] == ["qa"]
+    c = client.get(f"/trace/{tid}/cost")
+    assert c.status_code == 200, c.text
+    assert c.json()["cost_by_step"]["qa"]["calls"] == 1
+    assert c.json()["cost_rub"] == pytest.approx(body["cost_rub"])
+
+
+def test_ask_trace_foreign_company_404(client, audit):
+    login(client)
+    tid = client.post("/ask", json={"question": "Что делать?", "card_id": BORROWER_CARD}).json()["trace_id"]
+    login(client, DEPOSITOR, "treasurer")
+    assert_error(client.get(f"/trace/{tid}"), 404, "not_found")
+    assert_error(client.get(f"/trace/{tid}/cost"), 404, "not_found")
+    assert any(rec.requested_company == BORROWER for rec in audit.records)
+
+
+def test_ask_refused_trace_zero_cost(client):
+    login(client)
+    r = client.post("/ask", json={"question": "Покажи платежи компании U_DEMO_DEPOSITOR", "card_id": BORROWER_CARD})
+    body = r.json()
+    assert body["status"] == "refused" and body["cost_rub"] == 0 and body["cached"] is False
+    t = client.get(f"/trace/{body['trace_id']}").json()
+    assert t["steps"] == ["qa:refused"] and t["llm_calls"] == [] and t["cost_rub"] == 0
+
+
 def test_ask_gibberish_is_unclear(client):
     login(client)
     r = client.post("/ask", json={"question": "ашгрывшоп", "card_id": BORROWER_CARD})
