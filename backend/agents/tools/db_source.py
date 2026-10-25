@@ -30,6 +30,10 @@ RAW_ITEMS_LIMIT = 3000  # свежие не отброшенные новост�
 
 
 class DbDataSource:
+    # живые данные: лента (`PipelineCardStore`) показывает только сюжеты окна свежести (feed.max_age_hours).
+    # stories() окна не применяет — инструментам и сверке с фикстурой нужны все сюжеты
+    live_feed_window = True
+
     def __init__(self, engine: Engine, *, raw_items_limit: int = RAW_ITEMS_LIMIT) -> None:
         self._engine = engine
         self.engine = engine  # для модулей Р1 «Банк и рынок» / «Статистик» (подключение к БД, только чтение)

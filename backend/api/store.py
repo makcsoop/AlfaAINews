@@ -7,7 +7,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel
@@ -101,6 +101,7 @@ DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_
 # переменные окружения — переопределение для стенда
 DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
+DEFAULT_FEED_MAX_AGE_H = 72.0  # живая лента (источник — БД): сюжеты старше окна не показываются
 DEFAULT_FEED_REFRESH_S = 300.0  # как часто лента досчитывает новые сюжеты (склейка в ingest — раз в 5 минут)
 DEEP_LOG_MAX = 5000  # журнал глубоких разборов в памяти — последние записи
 TRACES_MAX = 5000  # трассы в памяти: сверх — вытесняются самые старые, кроме трасс карточек в лентах
@@ -140,6 +141,12 @@ def feed_deep_per_request() -> int:
 def feed_min_score() -> float:
     cfg = _feed_cfg()
     return _env_float("FEED_MIN_SCORE", getattr(cfg, "min_score", DEFAULT_FEED_MIN_SCORE))
+
+
+def feed_max_age_hours() -> float:
+    """Окно свежести живой ленты, ч: scoring.yaml feed.max_age_hours, env FEED_MAX_AGE_HOURS; 0 — без окна."""
+    cfg = _feed_cfg()
+    return _env_float("FEED_MAX_AGE_HOURS", getattr(cfg, "max_age_hours", None) or DEFAULT_FEED_MAX_AGE_H)
 
 
 def _is_degraded(trace: RunTrace) -> bool:
@@ -190,6 +197,7 @@ class _Ctx:
     positions: list[BankPosition]
     market: list[MarketKnowledge]
     fixture_mode: bool
+    stale: set[str] = field(default_factory=set)  # сюжеты вне окна свежести живой ленты
 
 
 @dataclass
@@ -324,7 +332,16 @@ class PipelineCardStore:
         if ctx is None:
             return None
         out: list[_Scored] = []
-        for story in self._src().stories():
+        src = self._src()
+        # живые данные (БД): сюжеты старше окна в ленту не идут — иначе фикстура 11.09 и сюжеты прошлой
+        # недели держатся на нижней границе свежести. Фикстура (тесты, демо) окна не имеет: «сейчас» там —
+        # дата сюжета
+        hours = feed_max_age_hours() if getattr(src, "live_feed_window", False) else 0.0
+        since = datetime.now(UTC) - timedelta(hours=hours) if hours > 0 else None
+        for story in src.stories():
+            if since is not None and story.last_seen < since:
+                ctx.stale.add(story.id)
+                continue
             if seen.get(story.id) == story.version:
                 continue
             if not story_visible(story, company_id, ctx.items):
@@ -341,6 +358,9 @@ class PipelineCardStore:
     def _apply_scan(self, feed: _Feed, ctx: _Ctx, scored: list[_Scored]) -> None:
         """Под блокировкой: новые сюжеты — в ленту; изменившиеся — новая быстрая карточка и новый разбор."""
         min_score = self._min_score()
+        for sid in ctx.stale - feed.pinned:  # вышел из окна свежести — из ленты убираем
+            if sid in feed.cards:
+                self._drop(feed, sid)
         for story, rel, card in scored:
             changed = feed.story_version.get(story.id, story.version) != story.version
             if changed and story.id in feed.pending:

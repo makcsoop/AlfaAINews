@@ -513,3 +513,63 @@ def test_add_story_scores_without_global_lock():
     store._score_story = probe
     assert store.add_story("s_2", BORROWER, "cfo") is not None
     assert free and all(free)
+
+
+# --- окно свежести живой ленты (TOOL_SOURCE=db) -------------------------------------------------
+
+
+class LiveLikeSource(MultiSource):
+    """Как DbDataSource: живые данные, лента режет сюжеты старше окна. Фикстура 11.09 — «старая»."""
+
+    live_feed_window = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        fresh = datetime.now(UTC) - timedelta(hours=2)
+        stories = self._b["story"]
+        for n, s in enumerate(stories):
+            if s.id in ("s_2", "s_4"):
+                stories[n] = s.model_copy(update={"first_seen": fresh, "last_seen": fresh})
+
+
+def test_db_feed_skips_stories_older_than_window(monkeypatch):
+    monkeypatch.delenv("FEED_MAX_AGE_HOURS", raising=False)
+    src = LiveLikeSource()
+    store = PipelineCardStore(source=src, runner=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")),
+                              deep_per_request=0)
+    ids = {c.event.story_id for c in store.list_cards(BORROWER, "cfo")}
+    assert ids == {"s_2", "s_4"}  # фикстура 11.09 и s_3 той же даты — вне окна 72 ч
+
+
+def test_feed_window_from_env_and_disabled(monkeypatch):
+    monkeypatch.setenv("FEED_MAX_AGE_HOURS", "0")  # 0 — окно выключено
+    store = PipelineCardStore(source=LiveLikeSource(), runner=lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError("x")), deep_per_request=0)
+    assert len(store.list_cards(BORROWER, "cfo")) == 4
+
+
+def test_fixture_source_has_no_window(monkeypatch):
+    monkeypatch.delenv("FEED_MAX_AGE_HOURS", raising=False)
+    store, _ = make_store(k=0)  # фикстура: «сейчас» — дата сюжета, окно не применяется
+    assert "st_2026-09-11_keyrate" in {c.event.story_id for c in store.list_cards(BORROWER, "cfo")}
+
+
+def test_story_aging_out_leaves_feed(monkeypatch):
+    monkeypatch.delenv("FEED_MAX_AGE_HOURS", raising=False)
+    monkeypatch.setenv("FEED_REFRESH_S", "0")
+    src = LiveLikeSource()
+    store = PipelineCardStore(source=src, runner=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")),
+                              deep_per_request=0)
+    assert "s_2" in {c.event.story_id for c in store.list_cards(BORROWER, "cfo")}
+    old = datetime.now(UTC) - timedelta(hours=100)
+    stories = src._b["story"]
+    for n, s in enumerate(stories):
+        if s.id == "s_2":
+            stories[n] = s.model_copy(update={"last_seen": old})
+    assert "s_2" not in {c.event.story_id for c in store.list_cards(BORROWER, "cfo")}
+
+
+def test_db_source_declares_live_window():
+    from backend.agents.tools.db_source import DbDataSource
+
+    assert DbDataSource.live_feed_window is True

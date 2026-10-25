@@ -133,6 +133,7 @@ cd frontend && npm run dev                                          # http://loc
 | `CARD_STORE` | `pipeline` (по умолчанию) / `fixture` | карточки из конвейера или готовые из фикстуры |
 | `TOOL_SOURCE` | `fixture` (по умолчанию) / `db` | откуда агенты и скоринг читают данные: фикстура или таблицы Р1 (JSONB `data`) |
 | `FEED_DEEP_PER_REQUEST`, `FEED_MIN_SCORE` | из `config/scoring.yaml` (`feed`: `1`, `0.05`) | переопределение настроек ленты: глубоких разборов за обращение (остальное — быстрые карточки) и порог значимости сюжета |
+| `FEED_MAX_AGE_HOURS` | из `config/scoring.yaml` (`feed.max_age_hours`: `72`) | окно свежести живой ленты при `TOOL_SOURCE=db`: сюжеты старше в ленту не идут; `0` — без окна. На фикстуре окна нет |
 | `SESSION_SECRET` | случайная строка (`openssl rand -hex 32`) | подпись сессий; на стенде задать обязательно, в git не хранить |
 | `FEEDBACK_STORE` | `db` / `memory` (по умолчанию `db` при `TOOL_SOURCE=db`) | куда пишет `POST /feedback`: таблица `feedback` или память |
 | `CACHE_BACKEND`, `CACHE_TTL_S` | `memory` / `redis`, секунды (24 ч) | кеш разбора, карточек и трасс |

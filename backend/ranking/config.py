@@ -122,6 +122,7 @@ class FeedCfg(_Cfg):
     deep_per_request: int
     feedback_weight: float
     feedback_cap: float
+    max_age_hours: float | None = None  # окно свежести живой ленты (источник — БД); None — 72 ч в store
 
 
 class ScoringConfig(_Cfg):
