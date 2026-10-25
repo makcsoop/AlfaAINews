@@ -14,6 +14,8 @@ from backend.schemas import ChannelExposure, CompanyProfile, CounterpartyGraph
 
 # продукт → флаг CSV, которым он подтверждается (driver для «почему вы это видите»)
 PRODUCT_FLAG = {key: f"{col}=1" for col, key in PRODUCT_COLUMNS.items()}
+# причина вклада «общий фактор»: такой вклад касается всех компаний, а не клиента
+BASELINE_DRIVER = "общий фактор для всех компаний"
 
 
 class _Acc:
@@ -74,7 +76,7 @@ def compute_exposures(
     matrix = matrix or load_matrix()
     cfg = cfg or load_scoring().profile
     acc = _Acc()
-    acc.add(cfg.baseline, 1.0, "общий фактор для всех компаний", assumption=True)
+    acc.add(cfg.baseline, 1.0, BASELINE_DRIVER, assumption=True)
 
     if profile.sector and profile.sector in matrix.okved:
         acc.add(matrix.okved[profile.sector], cfg.sector_weight, f"MAINOKVED_CODE={profile.okved_code}")
@@ -101,7 +103,25 @@ def compute_exposures(
 
     if graph is not None:
         _add_counterparties(acc, graph, matrix, cfg)
+    _rate_floor(acc, profile, cfg)
     return acc.exposures()
+
+
+def _rate_floor(acc: _Acc, profile: CompanyProfile, cfg: ProfileCfg) -> None:
+    """Кредит или лизинг и депозит гасят ставку по знаку, но клиенту она важна в обе стороны:
+    |чувствительность| не ниже rate_products_min, знак — по сумме (ноль — как у долга)."""
+    used = [p for p in cfg.rate_products if profile.products.get(p)]
+    v = acc.value.get("key_rate", 0.0)
+    if not used or cfg.rate_products_min <= 0 or abs(v) >= cfg.rate_products_min:
+        return
+    acc.value["key_rate"] = cfg.rate_products_min * (1 if v > 0 else -1)
+    for p in used:
+        if PRODUCT_FLAG[p] not in acc.drivers["key_rate"]:
+            acc.drivers["key_rate"].append(PRODUCT_FLAG[p])
+    signs = {(cfg.products.get(p) or {}).get("key_rate", 0) > 0 for p in used}
+    if len(signs) == 2:
+        acc.drivers["key_rate"].append("ставка важна в обе стороны: долг дороже, доход по депозитам выше")
+    acc.firm["key_rate"] = True
 
 
 def _add_counterparties(acc: _Acc, graph: CounterpartyGraph, matrix: ChannelsMatrix, cfg: ProfileCfg) -> None:

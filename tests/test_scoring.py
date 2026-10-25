@@ -340,3 +340,56 @@ def test_fuel_wholesaler_gets_subsector_row():
     fuel = {e.channel: e for e in _company("FW", "46.71.2").exposures}
     other = {e.channel: e for e in _company("OW", "46.69").exposures}
     assert fuel["petroleum_products"].sensitivity > 0 and "petroleum_products" not in other
+
+
+# ---------- шум ленты: регион и общий фактор (CRITERIA_CHECK 1, 7в) ----------
+
+
+def _regional(profile: CompanyProfile, region: str = "Москва"):
+    p = profile.model_copy(update={"region": region})
+    s = _story("hall", "other", "Москва примет чемпионат мира по тяжёлой атлетике")
+    return p, s, _facts(s, geography=[region])
+
+
+def test_region_alone_does_not_pass_feed_threshold():
+    cfg = load_scoring()
+    p, s, f = _regional(_company("U_FUEL", "46.71", leasing=True, deposits=True, fts=True))
+    r = score_pair(s, p, now=NOW, facts=f)
+    assert r.score < cfg.feed.min_score
+    assert all(c.factor != "direct:region" or c.value == 0 for c in r.contributions)
+
+
+def test_region_kept_when_economic_channel_present():
+    p = _company("U_BUILD", "42.99", loans=True).model_copy(update={"region": "Иркутская область"})
+    s = _story("reg_rate", "rate_decision", "Иркутская область: ставка по кредитам выросла")
+    f = _facts(s, channels=[("key_rate", "up", 0.5)], geography=["Иркутская область"])
+    r = score_pair(s, p, now=NOW, facts=f)
+    assert any(c.factor == "direct:region" for c in r.contributions)
+
+
+def test_rate_decision_reaches_company_with_leasing_and_deposits():
+    """U_57706-подобный профиль: лизинг и депозиты гасят друг друга по знаку, но ставка ему важна."""
+    cfg = load_scoring()
+    p = _company("U_FUEL", "46.71", leasing=True, deposits=True, fts=True)
+    key = next(e for e in p.exposures if e.channel == "key_rate")
+    assert abs(key.sensitivity) >= cfg.profile.rate_products_min
+    s = _story("rate14", "rate_decision", "ЦБ сохранил ключевую ставку 14%", hours_ago=48)
+    r = score_pair(s, p, now=NOW, facts=_facts(s, channels=[("key_rate", "up", 0.4)]), role="treasurer")
+    assert r.score >= cfg.feed.min_score
+
+
+def test_baseline_only_story_below_rate_decision_and_not_a_reason():
+    from backend.ranking.select import top_contributions
+
+    p = _company("U_DEP", "24.10", deposits=True, fts=True)
+    tax = _story("windfall", "tax_change", "Минфин готов обсудить налог на сверхдоходы")
+    rate = _story("rate", "rate_decision", "ЦБ сохранил ключевую ставку 14%")
+    r_tax = score_pair(tax, p, now=NOW, facts=_facts(tax))
+    r_rate = score_pair(rate, p, now=NOW, facts=_facts(rate, channels=[("key_rate", "up", 0.6)]))
+    assert r_tax.score < r_rate.score
+    # общий фактор не показывается причиной, когда есть конкретные
+    mixed = score_pair(
+        rate, p, now=NOW, facts=_facts(rate, channels=[("key_rate", "up", 0.6), ("tax_burden", "up", 0.6)])
+    )
+    assert any(c.factor == "tax_burden" for c in mixed.contributions)
+    assert all(c.factor != "tax_burden" for c in top_contributions(mixed))

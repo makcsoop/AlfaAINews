@@ -92,7 +92,12 @@ def factor_label(factor: str) -> str:
 
 
 def top_contributions(r: RelevanceScore, n: int = 3) -> list[Contribution]:
-    return sorted(r.contributions, key=lambda c: -c.value)[:n]
+    """Главные вклады; «общий фактор для всех компаний» — только если конкретных причин нет."""
+    from backend.ranking.score import is_baseline
+
+    ranked = sorted(r.contributions, key=lambda c: -c.value)
+    specific = [c for c in ranked if not is_baseline(c)]
+    return (specific or ranked)[:n]
 
 
 def why_you_see(r: RelevanceScore, n: int = 3) -> list[str]:

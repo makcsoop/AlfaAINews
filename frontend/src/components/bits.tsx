@@ -89,9 +89,15 @@ export function FoundationMeter({ score }: { score: number }) {
   );
 }
 
+// «Общий фактор для всех компаний» (налоги из baseline профиля) — не причина попадания, если есть конкретные
+const BASELINE_DRIVER = "общий фактор для всех компаний";
+const isBaseline = (c: Contribution) => c.client_features.length > 0 && c.client_features.every((f) => f === BASELINE_DRIVER);
+
 // Три главных вклада скоринга → «почему вы это видите»
 export function topContributions(card: InsightCard, n = 3): Contribution[] {
-  return [...card.relevance.contributions].sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, n);
+  const ranked = [...card.relevance.contributions].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const specific = ranked.filter((c) => !isBaseline(c));
+  return (specific.length ? specific : ranked).slice(0, n);
 }
 
 export function whyFeatures(card: InsightCard): string[] {

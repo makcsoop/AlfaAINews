@@ -31,6 +31,10 @@ class ProfileCfg(_Cfg):
     counterparty_min_share: float
     hhi_high: float
     hhi_defaults: Signed
+    # кредит или лизинг и депозит одновременно гасят ставку по знаку, но важна она клиенту в обе стороны:
+    # |чувствительность| к ставке не ниже порога (знак — по сумме)
+    rate_products: list[str] = []
+    rate_products_min: float = 0.0
 
 
 class QualityCfg(_Cfg):
@@ -63,6 +67,7 @@ class DirectCfg(_Cfg):
     counterparty_sector: float
     linked_sector: float
     region: float
+    region_alone: float = 1.0  # множитель региона, если других содержательных вкладов нет
 
 
 class SurpriseMetric(_Cfg):
@@ -136,6 +141,7 @@ class ScoringConfig(_Cfg):
     roles: dict[str, RoleCfg]
     confidence: ConfidenceCfg
     off_sector: float
+    baseline_alone: float = 1.0  # множитель вклада «общего фактора», если он единственный
     prior_unscoped: float
     prior_unscoped_types: list[str]
     saturation: float

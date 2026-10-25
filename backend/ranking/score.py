@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
+from backend.profile.exposures import BASELINE_DRIVER
 from backend.profile.taxonomy import ChannelsMatrix, load_event_types, load_matrix
 from backend.ranking.config import ScoringConfig, load_scoring, role_weight
 from backend.schemas import (
@@ -263,6 +264,36 @@ def surprise_contribution(s: Surprise | None, cfg: ScoringConfig) -> Contributio
     )
 
 
+def is_baseline(c: Contribution) -> bool:
+    """Вклад только «общего фактора для всех компаний» (налоги и т. п.) — не про клиента лично."""
+    return bool(c.client_features) and all(f == BASELINE_DRIVER for f in c.client_features)
+
+
+def _damp_weak_reasons(
+    contribs: list[Contribution], cfg: ScoringConfig, role: UserRole | None = None
+) -> list[Contribution]:
+    """Регион без канала, сюрприза или другого прямого совпадения — direct.region_alone (0: не повод для
+    карточки); общий фактор без конкретных причин — baseline_alone. Общий фактор в фокусе роли (налоги для
+    главбуха) — уже личная причина: его не ослабляем."""
+
+    def personal(c: Contribution) -> bool:
+        return not is_baseline(c) or role_weight(cfg, role, c.factor) > 1.0
+
+    meaningful = [c for c in contribs if c.value >= cfg.min_contribution]
+    specific = [c for c in meaningful if c.factor != "direct:region" and personal(c)]
+    if specific:
+        return contribs
+    out = []
+    for c in contribs:
+        k = 1.0
+        if c.factor == "direct:region":
+            k = cfg.direct.region_alone
+        elif not personal(c):
+            k = cfg.baseline_alone
+        out.append(c if k == 1.0 else c.model_copy(update={"value": round(c.value * k, 3)}))
+    return out
+
+
 def polarity_of(contribs: Sequence[Contribution], cfg: ScoringConfig) -> Polarity:
     risk = sum(c.value for c in contribs if c.sign < 0)
     opp = sum(c.value for c in contribs if c.sign > 0)
@@ -306,6 +337,7 @@ def score_pair(
     contribs += direct_contributions(profile, facts, story, graph, cfg, matrix)
     if (s := surprise_contribution(surprise, cfg)) is not None:
         contribs.append(s)
+    contribs = _damp_weak_reasons(contribs, cfg, role)
     contribs = sorted((c for c in contribs if c.value >= cfg.min_contribution), key=lambda c: -c.value)
     raw = sum(c.value for c in contribs)
     q = quality(story, facts, sources or {}, cfg)
