@@ -237,7 +237,6 @@ class PipelineCardStore:
             else feed_deep_per_request()
         )
         self.deep_log: list[DeepRun] = []  # журнал глубоких разборов, в т. ч. неудачных и отброшенных
-        self._fallback = FixtureCardStore(bundle_name)
         self._handlers: Mapping[State, Callable[[PipelineContext], Any]] | None = None
         self.analysis_cache = AnalysisCache(backend=self._redis)
         self._cards: dict[str, InsightCard] = {}
@@ -530,8 +529,8 @@ class PipelineCardStore:
     def _apply_failure(self, feed: _Feed, story_id: str, e: Exception) -> None:
         log.warning("конвейер для %s/%s/%s упал: %r", story_id, feed.company_id, feed.role, e)
         failed = self._degraded(feed, story_id, e)
-        reason = f"{type(e).__name__}: {str(e)[:200]}"
-        self._log_run(feed, story_id, "failed", reason=reason, trace=failed)
+        # наружу (/feed/runs) — только код причины: текст исключения может раскрыть хосты и порты (в лог выше)
+        self._log_run(feed, story_id, "failed", reason=f"pipeline_failed:{type(e).__name__}", trace=failed)
         feed.retry_at[story_id] = time.monotonic() + feed_retry_s()
 
     def _apply_degraded(self, feed: _Feed, story_id: str, card: InsightCard, trace: RunTrace) -> None:
@@ -583,10 +582,8 @@ class PipelineCardStore:
             )
         trace.steps.append(f"pipeline_failed:{type(exc).__name__}")
         self._traces[trace.run_id] = trace
+        # сюжета уже нет в ленте — ничего не подставляем (карточка фикстуры перезаписала бы настоящую)
         card = self._cards.get(feed.cards.get(story_id, ""))
-        if card is None:
-            cards = self._fallback.list_cards(feed.company_id, feed.role)  # type: ignore[arg-type]
-            card = cards[0] if cards else None
         if card is not None:
             degraded = card.model_copy(update={"review_status": "on_review", "trace_id": trace.run_id})
             old = feed.cards.get(story_id)

@@ -214,7 +214,33 @@ def test_failed_deep_run_logged_with_reason():
     store = PipelineCardStore(source=MultiSource(), runner=boom, deep_per_request=1)
     store.list_cards(BORROWER, "cfo")
     (run,) = store.deep_runs(BORROWER)
-    assert run.status == "failed" and "модель недоступна" in run.reason and run.trace_id
+    assert run.status == "failed" and run.reason == "pipeline_failed:RuntimeError" and run.trace_id
+
+
+def test_failed_run_reason_hides_exception_text(caplog):
+    """B15: текст исключения (хосты, порты БД) наружу через /feed/runs не уходит, только в лог."""
+    def boom(*a, **kw):
+        raise RuntimeError("connection to server at 10.0.0.7, port 5432 failed")
+
+    store = PipelineCardStore(source=MultiSource(), runner=boom, deep_per_request=1)
+    with caplog.at_level("WARNING"):
+        store.list_cards(BORROWER, "cfo")
+    (run,) = store.deep_runs(BORROWER)
+    assert "10.0.0.7" not in (run.reason or "") and "5432" not in (run.reason or "")
+    assert "10.0.0.7" in caplog.text
+
+
+def test_degraded_run_without_story_card_does_not_borrow_fixture_card():
+    """B14: сюжета уже нет в ленте — чужую карточку rate_14 на его место не подставляем."""
+    store, _ = make_store(k=0)
+    store.list_cards(BORROWER, "cfo")
+    feed = store._feeds[(BORROWER, "cfo")]
+    before = {cid: c.model_copy() for cid, c in store._cards.items()}
+    store._drop(feed, "s_2")
+    store._apply_failure(feed, "s_2", RuntimeError("модель недоступна"))
+    assert "s_2" not in feed.cards
+    for cid, card in store._cards.items():
+        assert card.review_status == before[cid].review_status and card.trace_id == before[cid].trace_id
 
 
 def test_published_run_logged():
@@ -300,7 +326,7 @@ def test_background_failure_logged_and_worker_survives():
     store.list_cards(BORROWER, "cfo")
     assert store.wait_idle(5)
     (run,) = store.deep_runs(BORROWER)
-    assert run.status == "failed" and "модель недоступна" in (run.reason or "")
+    assert run.status == "failed" and run.reason == "pipeline_failed:RuntimeError"
     on_review = store.get_card(store._feeds[(BORROWER, "cfo")].cards[run.story_id], BORROWER)
     assert on_review is not None and on_review.review_status == "on_review"  # быстрая карточка осталась
     store.list_cards(BORROWER, "cfo")  # поток жив и берёт следующий сюжет
