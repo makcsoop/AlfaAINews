@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 
+from backend.ingest.normalize import RUMOR
 from backend.schemas import ChannelImpact, NumberFact
 
 EVENT_TYPES = Path(__file__).resolve().parents[2] / "config" / "event_types.yaml"
@@ -18,10 +19,6 @@ EVENT_TYPES = Path(__file__).resolve().parents[2] / "config" / "event_types.yaml
 _SENT = re.compile(r"(?<=[.!?…])\s+(?=[А-ЯЁA-Z«\"])")
 INTENT = re.compile(
     r"\b(планиру\w*|намерен\w*|собира\w*|рассматрива\w*|предлага\w*|может|могут|готов\w+ к|допуска\w+)\b",
-    re.IGNORECASE,
-)
-RUMOR = re.compile(
-    r"по (данным|информации|словам) (источник|собеседник)|источники? (в|из|знаком|близк)|якобы|по слухам",
     re.IGNORECASE,
 )
 FORECAST = re.compile(r"\b(прогноз\w*|ожида\w+|ждут|ожидани\w+)\b", re.IGNORECASE)

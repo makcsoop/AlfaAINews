@@ -35,7 +35,7 @@ from backend.extract.entities import extract_entities
 from backend.extract.extractor import extract
 from backend.extract.llm_port import JsonLLM
 from backend.extract.run import save_facts
-from backend.ingest.normalize import clean_text, content_hash, item_id, simhash
+from backend.ingest.normalize import clean_text, clean_title, content_hash, item_id, simhash
 from backend.ingest.private import PASTE_SOURCE_ID, has_paste, owner_tag
 from backend.ingest.store import insert_items
 from backend.schemas import RawItem, Story
@@ -127,7 +127,7 @@ def make_item(*, url: str | None, text: str, title: str | None, now: datetime, o
     text = clean_text(text[:MAX_TEXT]) or ""
     if len(text) < 20:
         raise PasteError("слишком короткий текст")
-    title = clean_text(title) or text.split("\n", 1)[0]
+    title = clean_title(title) or clean_title(text.split("\n", 1)[0]) or text.split("\n", 1)[0]
     if len(title) > TITLE_MAX:
         title = title[: TITLE_MAX - 1].rsplit(" ", 1)[0] + "…"
     native = hashlib.sha1(f"{owner}\n{url or text}".encode()).hexdigest()[:16]

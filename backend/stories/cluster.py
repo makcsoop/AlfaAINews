@@ -30,7 +30,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from backend.db import models as m
 from backend.extract.entities import extract_entities
-from backend.ingest.normalize import hamming
+from backend.ingest.normalize import RUMOR, hamming
 from backend.ingest.private import PASTE_SOURCE_ID
 from backend.ingest.registry import load_sources
 from backend.schemas import RawItem, Story
@@ -45,11 +45,6 @@ SIM_NO_ENTITY = 0.55  # без сущностей у одной из сторо�
 SIM_RELATED = 0.20
 RELATED_WINDOW = timedelta(hours=36)
 SIMHASH_COPY = 3
-RUMOR = re.compile(
-    r"по (данным|информации|словам) (источник|собеседник)|источники? (в|из|знаком|близк)|якобы|по слухам"
-    r"|сообщают (сми|источники)|по неофициальным данным",
-    re.IGNORECASE,
-)
 
 
 @dataclass

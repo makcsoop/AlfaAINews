@@ -22,6 +22,43 @@ _DATELINES = [
 _DATELINE_WINDOW = 600  # trafilatura кладёт перед датлайном заголовок и подзаголовок
 
 
+# слух и неподтверждённые сведения: общий шаблон для склейки (статус сюжета) и экстрактора (is_rumor)
+RUMOR = re.compile(
+    r"по (данным|информации|словам) (источник|собеседник)|источники? (в|из|знаком|близк)|якобы|по слухам"
+    r"|сообщают (сми|источники)|по неофициальным данным|неофициальн\w*|сообщил\w* источник"
+    r"|не\s+подтвержд\w*|неподтвержд\w*|из (закрытого|анонимного) (чата|канала)",
+    re.IGNORECASE,
+)
+
+# заголовок вставки пользователя: маркеры срочности, повторы пунктуации, разделители «;;;» и «|»
+_TITLE_MARKERS = re.compile(r"\b(срочно|молния|breaking|эксклюзив|exclusive)\b[:!.\s-]*", re.IGNORECASE)
+_TITLE_SPLIT = re.compile(r"\s*(?:[;|]{1,}|[!?.:]{2,}|\s[-–—]{2,}\s)\s*")
+
+
+def clean_title(s: str | None) -> str | None:
+    """«!!! СРОЧНО ;;; ЦБ поднимет ставку ;;; данные не подтверждены» → «ЦБ поднимет ставку»:
+    первая содержательная часть без маркеров; капслок — в обычный регистр."""
+    s = clean_text(s)
+    if not s:
+        return None
+    parts = [_TITLE_MARKERS.sub("", p).strip(" -–—:;|") for p in _TITLE_SPLIT.split(s)]
+    parts = [p for p in parts if p]
+    if not parts:
+        return None
+    title = next((p for p in parts if len(p.split()) >= 3), parts[0])
+    letters = [c for c in title if c.isalpha()]
+    if letters and sum(c.isupper() for c in letters) / len(letters) > 0.7 and len(title.split()) > 3:
+        title = " ".join(w if _is_acronym(w) else w.lower() for w in title.split())
+        title = title[0].upper() + title[1:]
+    return title
+
+
+def _is_acronym(word: str) -> bool:
+    """ЦБ, ОФЗ, НДС — короткие слова капслоком оставляем как есть."""
+    core = word.strip(".,:;!?%«»\"()")
+    return 1 < len(core) <= 3 and core.isupper()
+
+
 def clean_text(s: str | None) -> str | None:
     if not s:
         return None

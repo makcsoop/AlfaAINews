@@ -114,3 +114,52 @@ def test_fetch_rejects_redirect_inside_and_caps_body(dns, monkeypatch):
     big = httpx.MockTransport(lambda r: httpx.Response(200, content=stream()))
     paste.fetch_page("https://news.example/big", transport=big)
     assert len(chunks) <= 2
+
+
+SHOUT = "!!! СРОЧНО ;;; ЦБ экстренно поднимет ставку до 20% в понедельник ;;; данные не подтверждены"
+
+
+def test_paste_title_cleaned_of_markers_and_punctuation():
+    # CRITERIA_CHECK 7г: заголовок вставки — первая строка как есть, с «!!!», «;;;» и «СРОЧНО»
+    it = make_item(url=None, text=SHOUT + "\nПодробностей нет.", title=None, now=NOW, owner="U_A")
+    assert it.title == "ЦБ экстренно поднимет ставку до 20% в понедельник"
+    assert "данные не подтверждены" in it.text  # текст не трогаем: по нему статус «слух»
+
+
+@pytest.mark.parametrize(
+    "raw, clean",
+    [
+        ("МОЛНИЯ: ЦБ СОХРАНИЛ СТАВКУ 14%", "ЦБ сохранил ставку 14%"),
+        ("BREAKING | Минфин разместил ОФЗ", "Минфин разместил ОФЗ"),
+        ("Обычный заголовок без шума", "Обычный заголовок без шума"),
+    ],
+)
+def test_clean_title(raw, clean):
+    from backend.ingest.normalize import clean_title
+
+    assert clean_title(raw) == clean
+
+
+def test_unconfirmed_paste_becomes_rumor():
+    from backend.ingest.registry import load_sources
+    from backend.stories.cluster import _Draft, to_story
+
+    it = make_item(url=None, text=SHOUT + "\nПодробностей нет.", title=None, now=NOW, owner="U_A")
+    story = to_story(_Draft(items=[it], idx=[0]), {s.id: s for s in load_sources()})
+    assert story.status == "rumor"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Данные не подтверждены: ЦБ поднимет ставку",
+        "По неподтверждённым данным, банк закроют",
+        "Как сообщил источник, сделка сорвалась",
+        "Информация из закрытого чата трейдеров",
+    ],
+)
+def test_rumor_markers(text):
+    from backend.extract import rules
+    from backend.stories import cluster
+
+    assert cluster.RUMOR.search(text) and rules.RUMOR.search(text)
