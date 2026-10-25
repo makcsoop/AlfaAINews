@@ -130,6 +130,10 @@ class FeedCfg(_Cfg):
     max_age_hours: float | None = None  # окно свежести живой ленты (источник — БД); None — 72 ч в store
 
 
+class ImpactCfg(_Cfg):
+    full_at: float
+
+
 class ScoringConfig(_Cfg):
     version: str
     profile: ProfileCfg
@@ -145,6 +149,7 @@ class ScoringConfig(_Cfg):
     prior_unscoped: float
     prior_unscoped_types: list[str]
     saturation: float
+    impact: ImpactCfg = ImpactCfg(full_at=1.0)
     min_contribution: float
     polarity: PolarityCfg
     deep: DeepCfg

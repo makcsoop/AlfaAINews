@@ -204,6 +204,33 @@ def test_drivers_priority_analysis_facts_prior():
     assert story_drivers(_story("x", "rate_decision", "ставка")) == []  # направление неизвестно без фактов
 
 
+def test_impact_is_strength_without_freshness():
+    """Сила влияния для показа: свежесть не срезает её (это порядок ленты), шкала линейная и с потолком 1."""
+    b = load_bundle("rate_14")
+    story, facts = b["story"][0], b["event_facts"][0]
+    profile = next(p for p in b["company_profile"] if p.company_id == "U_DEMO_BORROWER")
+    fresh = score_pair(story, profile, now=story.last_seen, facts=facts, role="cfo")
+    old = score_pair(story, profile, now=story.last_seen + timedelta(hours=48), facts=facts, role="cfo")
+    assert old.score < fresh.score * 0.6  # за двое суток значимость для порядка падает вдвое
+    assert old.impact == fresh.impact
+    raw = sum(c.value for c in fresh.contributions)
+    full_at = load_scoring().impact.full_at
+    assert fresh.impact == pytest.approx(fresh.quality * min(1.0, raw / full_at), abs=1e-3)
+    # решение ЦБ для заёмщика с кредитами выглядит сильным, а не «21 из 100»
+    assert fresh.impact is not None and fresh.impact >= 0.67 and fresh.impact > fresh.score
+
+
+def test_impact_scale_weak_for_small_contributions():
+    b = load_bundle("rate_14")
+    story, facts = b["story"][0], b["event_facts"][0]
+    profile = next(p for p in b["company_profile"] if p.company_id == "U_DEMO_BORROWER")
+    cfg = load_scoring().model_copy(update={"impact": load_scoring().impact.model_copy(update={"full_at": 100.0})})
+    r = score_pair(story, profile, now=story.last_seen, facts=facts, role="cfo", cfg=cfg)
+    assert r.impact is not None and r.impact < 0.05 and r.score == score_pair(
+        story, profile, now=story.last_seen, facts=facts, role="cfo"
+    ).score  # шкала показа не меняет порядок ленты
+
+
 def test_freshness_and_quality():
     cfg = load_scoring()
     fresh, old = _story("a", "other", "a", hours_ago=0), _story("b", "other", "b", hours_ago=96)

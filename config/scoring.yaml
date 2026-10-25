@@ -125,6 +125,11 @@ transmission:
   oil_gas: {petroleum_products: 0.7}
 
 saturation: 1.2                  # raw = 1,2 → score ≈ 0,63 × quality × freshness
+# сила влияния для показа (impact): score сжат насыщением и свежестью — решение ЦБ по ставке выглядело как 21 из 100.
+# impact = min(1, raw / full_at) × quality: 1 — сильный сдвиг (сила 1) фактора с чувствительностью 1;
+# средний сдвиг ключевого фактора ≈ 0,5. Порядок ленты и пороги по-прежнему по score
+impact:
+  full_at: 1.0
 min_contribution: 0.02            # мельче — не показываем во вкладах
 
 polarity:

@@ -461,6 +461,20 @@
           "default": null,
           "title": "Freshness"
         },
+        "impact": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Impact"
+        },
         "contributions": {
           "items": {
             "$ref": "#/$defs/Contribution"

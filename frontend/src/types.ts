@@ -45,6 +45,7 @@ export interface RelevanceScore {
   score: number;
   quality: number;
   freshness?: number | null;
+  impact?: number | null; // сила влияния для показа: без свежести, 1 — сильный сдвиг значимого фактора
   contributions: Contribution[];
   polarity: Polarity;
   deep_analysis: boolean;

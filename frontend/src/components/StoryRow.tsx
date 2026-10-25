@@ -6,6 +6,7 @@ import {
   PolarityMark,
   Significance,
   StageFlags,
+  strengthOf,
   dayLabel,
   mainChannel,
   sourceNames,
@@ -68,7 +69,7 @@ export function StoryRow({ card, isNew, onOpen, onHide, rank, compact = false }:
         )}
       </div>
       <div className="story-side">
-        <Significance score={card.relevance.score} size={compact ? "s" : "m"} />
+        <Significance score={strengthOf(card.relevance)} size={compact ? "s" : "m"} />
         {onHide && (
           <button className="story-hide" onClick={onHide} title="Не про нас — скрыть" aria-label={`Не про нас: скрыть «${card.event.title}»`}>
             <IconEyeOff size={18} />

@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { CLAIM_LABELS, POLARITY_LABELS, channelLabel, featureLabel, formatNum, sourceName } from "../labels";
 import { takeScrollTarget } from "../nav";
-import type { ClaimType, Contribution, InsightCard, Polarity } from "../types";
+import type { ClaimType, Contribution, InsightCard, Polarity, RelevanceScore } from "../types";
 
 export function ClaimTag({ type }: { type: ClaimType }) {
   return <span className={`tag tag-${type}`}>{CLAIM_LABELS[type]}</span>;
@@ -63,11 +63,19 @@ export function StageFlags({ card }: { card: InsightCard }) {
 }
 
 // Значимость 0–100: число и пять «сигнальных» делений
+// Сила влияния на компанию для показа. score сжат свежестью и насыщением (решение ЦБ — 21 из 100), он задаёт
+// только порядок ленты; impact — линейная шкала без свежести. У карточек без impact — score
+export const strengthOf = (r: RelevanceScore): number => r.impact ?? r.score;
+
+export function strengthWord(score: number): string {
+  return score >= 0.67 ? "сильное влияние" : score >= 0.34 ? "заметное влияние" : "слабое влияние";
+}
+
 export function Significance({ score, size = "m" }: { score: number; size?: "s" | "m" | "l" }) {
   const v = Math.max(0, Math.min(100, Math.round(score * 100)));
   const filled = Math.max(1, Math.ceil(v / 20));
   return (
-    <span className={`sig sig-${size}`} title={`Значимость для компании: ${v} из 100`}>
+    <span className={`sig sig-${size}`} title={`Сила влияния на компанию: ${v} из 100 — ${strengthWord(score)}`}>
       <b>{v}</b>
       <span className="sig-bars" aria-hidden="true">
         {[1, 2, 3, 4, 5].map((i) => (

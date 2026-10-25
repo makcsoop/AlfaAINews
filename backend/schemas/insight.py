@@ -34,6 +34,9 @@ class RelevanceScore(Schema):
     score: Score01
     quality: Score01
     freshness: Score01 | None = None
+    # сила влияния для показа: без свежести (она нужна порядку ленты, а не оценке события) и в линейной шкале,
+    # где 1 — сильный сдвиг фактора, к которому компания полностью чувствительна; × качество сюжета
+    impact: Score01 | None = None
     contributions: list[Contribution] = Field(default_factory=list)
     polarity: Polarity = "neutral"
     deep_analysis: bool = False

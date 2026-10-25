@@ -3,7 +3,7 @@ import { useState } from "react";
 import { channelLabel } from "../labels";
 import { go } from "../nav";
 import type { InsightCard, Polarity } from "../types";
-import { SkeletonRows } from "./bits";
+import { SkeletonRows, strengthOf } from "./bits";
 import { IconCross } from "./icons";
 import { StoryRow } from "./StoryRow";
 
@@ -50,7 +50,7 @@ export function Feed({ cards, unseen, onOpen, onHide, initial = "all", channel =
   const active = count(filter) > 0 ? filter : "all";
   const shown = byChannel
     .filter((c) => match(c, active))
-    .sort((a, b) => (sort === "score" ? b.relevance.score - a.relevance.score : b.event.first_seen.localeCompare(a.event.first_seen)));
+    .sort((a, b) => (sort === "score" ? strengthOf(b.relevance) - strengthOf(a.relevance) : b.event.first_seen.localeCompare(a.event.first_seen)));
   return (
     <div className="feed">
       <div className="toolbar">

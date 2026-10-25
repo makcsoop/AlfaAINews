@@ -343,6 +343,7 @@ def score_pair(
     q = quality(story, facts, sources or {}, cfg)
     f = freshness(story, now, cfg)
     score = q * f * (1 - math.exp(-raw / cfg.saturation))
+    impact = q * min(1.0, raw / cfg.impact.full_at)
     return RelevanceScore(
         story_id=story.id,
         company_id=profile.company_id,
@@ -350,6 +351,7 @@ def score_pair(
         score=round(min(1.0, score), 3),
         quality=q,
         freshness=f,
+        impact=round(impact, 3),
         contributions=contribs,
         polarity=polarity_of(contribs, cfg),
     )

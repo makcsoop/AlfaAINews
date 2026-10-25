@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { CONFIDENCE_LABELS, plural } from "../labels";
 import { go } from "../nav";
 import type { InsightCard } from "../types";
-import { PolarityMark, Significance, SkeletonRows, StageFlags, dayLabel, impactByChannel, mainChannel, useScrollTarget } from "./bits";
+import { PolarityMark, Significance, SkeletonRows, StageFlags, dayLabel, strengthOf, impactByChannel, mainChannel, useScrollTarget } from "./bits";
 import { Checklist } from "./Checklist";
 import { FaqTeaser } from "./Faq";
 import { IconChevron } from "./icons";
@@ -115,7 +115,7 @@ function LeadStory({ card, onOpen }: { card: InsightCard; onOpen: () => void }) 
       {lead && <p className="lead-dek">{lead.text}</p>}
       <Mechanism card={card} />
       <div className="lead-foot">
-        <Significance score={card.relevance.score} />
+        <Significance score={strengthOf(card.relevance)} />
         <span className="muted small">{CONFIDENCE_LABELS[card.confidence]}</span>
         <span className="lead-cta">
           Читать разбор

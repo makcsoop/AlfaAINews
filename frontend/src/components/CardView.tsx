@@ -26,6 +26,8 @@ import {
   formatDate,
   mainChannel,
   safeUrl,
+  strengthOf,
+  strengthWord,
   topContributions,
   useScrollTarget,
 } from "./bits";
@@ -108,7 +110,7 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
           <div className="why-see">
             <div className="why-see-head">
               <h3>Почему вы это видите</h3>
-              <span>вклад факторов в значимость {Math.round(card.relevance.score * 100)} из 100</span>
+              <span>вклад факторов в силу влияния {Math.round(strengthOf(card.relevance) * 100)} из 100</span>
             </div>
             <ContributionChart contribs={contribs} />
           </div>
@@ -247,12 +249,12 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
 
           <aside className="article-rail" aria-label="Значимость и содержание">
             <div className="rail-score">
-              <span className="rail-k">Значимость для компании</span>
+              <span className="rail-k">Сила влияния на компанию</span>
               <div className="rail-num">
-                <b>{Math.round(card.relevance.score * 100)}</b>
-                <span>из 100</span>
+                <b>{Math.round(strengthOf(card.relevance) * 100)}</b>
+                <span>из 100 · {strengthWord(strengthOf(card.relevance))}</span>
               </div>
-              <FoundationMeter score={card.relevance.score} />
+              <FoundationMeter score={strengthOf(card.relevance)} />
               <div className="confidence">
                 <ConfidenceMeter level={card.confidence} />
                 <span>{CONFIDENCE_LABELS[card.confidence]}</span>
