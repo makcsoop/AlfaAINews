@@ -8,6 +8,9 @@
    разрешат энкодеры). Материал сравнивается с сюжетом целиком — среднее по всем материалам сюжета,
    а не самый похожий материал: иначе цепочка похожих склеивает разные события.
 3. Присоединение: похожесть ≥ порога и хотя бы одна общая сущность (Natasha + словари), окно 72 ч.
+   Одно решение ЦБ — один сюжет; прогнозы и заявления ЦБ того же дня вливаются в сюжет решения.
+   Второй проход: пересказы одного события разными словами (похожесть ≥ 0,20, ниже порога) сливаются,
+   если у них общая отличительная сущность (не регулятор) и общее число из заголовка или лида («200%»).
 4. Статус: официальный источник или два независимых источника уровня 0–1 → confirmed;
    маркеры слуха без подтверждения → rumor; один источник → single; иначе unconfirmed.
 """
@@ -37,6 +40,10 @@ log = logging.getLogger(__name__)
 WINDOW = timedelta(hours=72)
 SIM_THRESHOLD = 0.30  # ТЗ: символьный TF-IDF ≥ 0,30; подбирается на размеченных парах (день 4)
 SIM_NO_ENTITY = 0.55  # без сущностей у одной из сторон склеиваем только почти одинаковые тексты
+# второй проход: общая отличительная сущность + общее число + похожесть ≥ SIM_RELATED в окне RELATED_WINDOW.
+# Порог SIM_THRESHOLD глобально не снижается: «Трамп и Канада» против «Трамп, Россия и Украина» — 0,185
+SIM_RELATED = 0.20
+RELATED_WINDOW = timedelta(hours=36)
 SIMHASH_COPY = 3
 RUMOR = re.compile(
     r"по (данным|информации|словам) (источник|собеседник)|источники? (в|из|знаком|близк)|якобы|по слухам"
@@ -123,7 +130,8 @@ def cluster_items(items: list[RawItem], *, entity_keys: list[set[str]] | None = 
             d.idx.append(i)
             d.keys |= keys[i]
             story_of[i] = best
-    return merge_decisions(drafts)
+    drafts = merge_decisions(drafts)
+    return merge_related(drafts, sim, keys, [_numbers(t) for t in texts])
 
 
 # решение Банка России по ставке: «ЦБ сохранил ключевую ставку на уровне 14%», «ставка осталась 14%»
@@ -146,6 +154,32 @@ _RATE_VALUE = re.compile(
     re.IGNORECASE,
 )
 _MSK = timedelta(hours=3)
+# пресс-события ЦБ в день решения: прогнозы, заявление Председателя, пресс-конференция.
+# Чужие прогнозы («Сбербанк ухудшил прогноз») сюда не попадают: субъект — ЦБ или Набиуллина
+_CB = r"(?:(?<![\w-])ЦБ(?:\s+РФ)?(?![\w-])|Центробанк\w*|Банк\w* России)"
+_NABIULLINA = r"(?:(?:Эльвир\w+\s+)?Набиуллин\w*)"
+_CBR_PRESS = re.compile(
+    rf"{_CB}\s+(?:\S+\s+){{0,3}}?(?:повысил|понизил|ухудшил|улучшил|сузил|расширил|скорректировал"
+    rf"|пересмотрел|сохранил|изменил|прогнозиру|ожида|дал)\w*\s+(?:\S+\s+){{0,2}}?прогноз"
+    rf"|{_CB}\s+прогнозиру|прогнозиру\w+\s+{_CB}|прогноз\w*\s+(?:ЦБ|Банка России|Центробанка)"
+    rf"|заявлени\w+\s+(?:Председател\w+|{_NABIULLINA})|{_NABIULLINA}\s*:"
+    rf"|(?:заявил|сообщил|отметил|рассказал|пояснил)\w*\s+(?:(?:глав|председател)\w+\s+(?:ЦБ|Банка России"
+    rf"|регулятора)|{_NABIULLINA})|пресс-конференци\w*[^.!?]{{0,60}}(?:ЦБ|Банка России|{_NABIULLINA})"
+    rf"|{_NABIULLINA}[^.!?]{{0,80}}пресс-конференц",
+    re.IGNORECASE,
+)
+
+
+def cbr_press_day(item: RawItem) -> str | None:
+    """Московская дата пресс-события ЦБ (прогноз, заявление, пресс-конференция) по заголовку; иначе None."""
+    from backend.extract.rules import _FOREIGN_CB
+
+    if item.source_id == PASTE_SOURCE_ID:
+        return None
+    t = item.title
+    if not _CBR_PRESS.search(t) or _FOREIGN_CB.search(t) or _SUBORDINATE.search(t):
+        return None
+    return (item.published_at + _MSK).date().isoformat()
 
 
 def decision_key(item: RawItem, title_only: bool = False) -> str | None:
@@ -192,6 +226,11 @@ def merge_decisions(drafts: list[_Draft]) -> list[_Draft]:
                 parent[root(n)] = root(owner[k])
             else:
                 owner[k] = n
+    # прогнозы и заявления ЦБ в день решения — часть решения (среднесрочный прогноз, пресс-конференция)
+    for n, d in enumerate(drafts):
+        for day in {k for i in d.items if (k := cbr_press_day(i))}:
+            if day in owner:
+                parent[root(n)] = root(owner[day])
     groups: dict[int, list[int]] = {}
     for n in range(len(drafts)):
         groups.setdefault(root(n), []).append(n)
@@ -200,19 +239,118 @@ def merge_decisions(drafts: list[_Draft]) -> list[_Draft]:
         if len(group) < 2:
             continue
         main, *rest = sorted(group, key=lambda n: (-len(drafts[n].items), drafts[n].items[0].published_at))
-        target = drafts[main]
         for n in rest:
-            src = drafts[n]
-            target.items += src.items
-            target.idx += src.idx
-            target.copies |= src.copies
-            target.keys |= src.keys
+            _absorb(drafts[main], drafts[n])
             absorbed.add(n)
-        its = target.items
-        order = sorted(range(len(its)), key=lambda k: (its[k].published_at, its[k].id))
-        target.items = [target.items[k] for k in order]
-        target.idx = [target.idx[k] for k in order]
     return [d for n, d in enumerate(drafts) if n not in absorbed]
+
+
+def _absorb(target: _Draft, src: _Draft) -> None:
+    """Материалы src переходят в target; порядок — по времени публикации."""
+    target.items += src.items
+    target.idx += src.idx
+    target.copies |= src.copies
+    target.keys |= src.keys
+    its = target.items
+    order = sorted(range(len(its)), key=lambda k: (its[k].published_at, its[k].id))
+    target.items = [target.items[k] for k in order]
+    target.idx = [target.idx[k] for k in order]
+
+
+_DATE = re.compile(r"\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b")
+_MONTHS = r"(?:январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)"
+_NUMBER = re.compile(rf"(?<![\d.,])(\d+(?:[.,]\d+)?)(?![.,]?\d)(\s*%)?(?!\s*{_MONTHS})", re.IGNORECASE)
+
+
+def _numbers(text: str) -> set[str]:
+    """Отличительные числа текста: «200%», «12,5», «117». Годы, даты и целые < 100 без % — не в счёт."""
+    out: set[str] = set()
+    for mt in _NUMBER.finditer(_DATE.sub(" ", text)):
+        raw, pct = mt.group(1).replace(",", "."), bool(mt.group(2))
+        v = float(raw)
+        # целые без % меньше 100 — это дни, туры, «Ми-24», «12 тыс.»: совпадают у разных событий
+        if not pct and raw.isdigit() and (v < 100 or 1900 <= v <= 2100):
+            continue
+        out.add(f"{v:g}{'%' if pct else ''}")
+    # «200%-ных» и «200% пошлин» — одно число; «200» без знака тоже совпадёт с «200%»
+    return out | {n.rstrip("%") for n in out}
+
+
+def _distinctive(keys: set[str]) -> set[str]:
+    """Сущности, которые различают события: регуляторы (Банк России, Минфин) есть почти везде."""
+    from backend.extract.entities import regulators
+
+    common = {f"org:{r}" for r in regulators()}
+    return keys - common
+
+
+def merge_related(
+    drafts: list[_Draft], sim: np.ndarray, keys: list[set[str]], numbers: list[set[str]]
+) -> list[_Draft]:
+    """Второй проход: сливает пересказы одного события, которые жадная склейка развела по порогу 0,30.
+
+    Условия для пары сюжетов: окно 36 ч, общая отличительная сущность, общее число из заголовка или лида
+    и средняя похожесть всех пар материалов ≥ SIM_RELATED. Пары перебираются от самой похожей; условия
+    перепроверяются на уже слитых группах, чтобы слабая цепочка не склеила разные события.
+    """
+    if len(drafts) < 2:
+        return drafts
+
+    # числа — только из первого материала каждого исходного сюжета: у крупного сюжета (сводки ПВО за 3 дня)
+    # объединение чисел велико и совпадает с чем угодно
+    heads: dict[int, set[str]] = {id(d): set(numbers[d.idx[0]]) for d in drafts}
+
+    def feats(d: _Draft) -> tuple[set[str], set[str]]:
+        return _distinctive(set().union(*(keys[i] for i in d.idx))), heads[id(d)]
+
+    def close(a: _Draft, b: _Draft) -> bool:
+        first = max(a.items[0].published_at, b.items[0].published_at)
+        last = min(a.items[-1].published_at, b.items[-1].published_at)
+        return first - last <= RELATED_WINDOW
+
+    def avg(a: _Draft, b: _Draft) -> float:
+        return float(np.mean(sim[np.ix_(a.idx, b.idx)]))
+
+    by_key: dict[str, list[int]] = {}
+    fs = [feats(d) for d in drafts]
+    for n, (ks, _) in enumerate(fs):
+        for k in ks:
+            by_key.setdefault(k, []).append(n)
+    candidates: list[tuple[float, int, int]] = []
+    seen: set[tuple[int, int]] = set()
+    for ns in by_key.values():
+        for x, a in enumerate(ns):
+            for b in ns[x + 1 :]:
+                if (a, b) in seen:
+                    continue
+                seen.add((a, b))
+                da, db = drafts[a], drafts[b]
+                if fs[a][1] & fs[b][1] and close(da, db) and (s := avg(da, db)) >= SIM_RELATED:
+                    candidates.append((s, a, b))
+    if not candidates:
+        return drafts
+
+    parent = list(range(len(drafts)))
+
+    def root(n: int) -> int:
+        while parent[n] != n:
+            parent[n] = parent[parent[n]]
+            n = parent[n]
+        return n
+
+    for _, a, b in sorted(candidates, key=lambda c: (-c[0], c[1], c[2])):
+        ra, rb = root(a), root(b)
+        if ra == rb:
+            continue
+        da, db = drafts[ra], drafts[rb]
+        (ka, na), (kb, nb) = feats(da), feats(db)
+        if ka & kb and na & nb and close(da, db) and avg(da, db) >= SIM_RELATED:
+            main, other = (ra, rb) if (-len(da.items), da.items[0].published_at) <= (
+                -len(db.items), db.items[0].published_at) else (rb, ra)
+            _absorb(drafts[main], drafts[other])
+            heads[id(drafts[main])] |= heads[id(drafts[other])]
+            parent[other] = main
+    return [d for n, d in enumerate(drafts) if root(n) == n]
 
 
 def to_story(d: _Draft, sources: dict) -> Story:

@@ -24,15 +24,25 @@ class Entities:
 
     def keys(self) -> set[str]:
         """Ключи для сравнения сущностей двух текстов. Валюты и страны не различают сюжеты —
-        они есть почти в каждой экономической новости, поэтому в ключи не входят."""
+        они есть почти в каждой экономической новости, поэтому в ключи не входят.
+
+        Персона — по фамилии (последнее слово нормальной формы): «Дональд Трамп» в одном тексте
+        и «Трамп» в другом дают один ключ `per:Трамп`.
+        """
         return (
             {f"org:{x}" for x in self.orgs}
-            | {f"per:{x}" for x in self.persons}
+            | {f"per:{sn}" for x in self.persons if (sn := surname(x))}
             | {f"com:{x}" for x in self.commodities}
         )
 
     def all_names(self) -> list[str]:
         return sorted(self.orgs | self.locations | self.persons)
+
+
+def surname(name: str) -> str | None:
+    """Фамилия из имени персоны: последнее слово, не инициал («Шохин А. С.» → «Шохин»)."""
+    words = [w for w in name.replace(".", ". ").split() if len(w) > 2 and not w.endswith(".")]
+    return words[-1] if words else None
 
 
 @lru_cache
@@ -45,7 +55,8 @@ def _dicts():
     skip = {_key(x) for x in cfg.get("media", []) + cfg.get("generic", [])}
     cur = {k: re.compile(v, re.IGNORECASE) for k, v in cfg["currencies"].items()}
     com = {k: re.compile(v, re.IGNORECASE) for k, v in cfg["commodities"].items()}
-    return alias, cur, com, set(cfg["regulators"]), skip
+    per = {k: re.compile(v, re.IGNORECASE) for k, v in (cfg.get("persons") or {}).items()}
+    return alias, cur, com, set(cfg["regulators"]), skip, per
 
 
 def _key(name: str) -> str:
@@ -114,5 +125,9 @@ def extract_entities(text: str, *, ner: bool = True) -> Entities:
             and re.search(rf"(?<!\w){re.escape(variant)}(?!\w)", low)
         ):
             ents.orgs.add(canon)
+    # ключевых персон Natasha иногда пропускает («Трамп заявил о …» без сущностей) — добираем по словарю
+    for canon, rx in _dicts()[5].items():
+        if rx.search(text) and not any(surname(p) == canon for p in ents.persons):
+            ents.persons.add(canon)
     ents.persons = _dedupe_persons(ents.persons)
     return ents
