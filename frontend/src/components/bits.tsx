@@ -218,7 +218,11 @@ export function safeUrl(u?: string | null): string | null {
   if (!u) return null;
   try {
     const x = new URL(u);
-    return x.protocol === "http:" || x.protocol === "https:" ? x.href : null;
+    if (x.protocol !== "http:" && x.protocol !== "https:") return null;
+    // пост Telegram «t.me/<канал>/<id>» без приложения зависает на переходе в tg:// — открываем веб-версию t.me/s
+    const tg = (x.hostname === "t.me" || x.hostname === "telegram.me") && x.pathname.match(/^\/([A-Za-z0-9_]{4,})\/(\d+)\/?$/);
+    if (tg) return `https://t.me/s/${tg[1]}/${tg[2]}`;
+    return x.href;
   } catch {
     return null;
   }
