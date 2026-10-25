@@ -30,6 +30,7 @@ from backend.security.ratelimit import analyze_limiter, ask_limiter, feedback_li
 from backend.security.session import (
     COOKIE_NAME,
     Session,
+    cookie_secure,
     current_session,
     demo_companies,
     issue_token,
@@ -112,7 +113,10 @@ def login(body: LoginRequest, request: Request, response: Response, audit: Audit
         user_id=body.user_id or f"demo_{body.company_id}_{body.role}",
     )
     token = issue_token(session)
-    response.set_cookie(COOKIE_NAME, token, max_age=ttl_seconds(), httponly=True, samesite="lax", path="/")
+    response.set_cookie(
+        COOKIE_NAME, token, max_age=ttl_seconds(), httponly=True, samesite="lax", path="/",
+        secure=cookie_secure(),
+    )
     return LoginResponse(
         **session.model_dump(include={"company_id", "role", "user_id"}), token=token, expires_in=ttl_seconds()
     )

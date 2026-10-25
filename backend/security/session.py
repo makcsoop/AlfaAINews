@@ -60,6 +60,12 @@ def _sign(payload: str) -> str:
     return _b64(hmac.new(_secret(), payload.encode(), hashlib.sha256).digest())
 
 
+def cookie_secure() -> bool:
+    """SESSION_COOKIE_SECURE=true — cookie только по HTTPS (сервер за TLS). На HTTP без домена — false,
+    иначе браузер не вернёт cookie и вход не сработает."""
+    return os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+
+
 def ttl_seconds() -> int:
     try:
         return int(os.environ.get("SESSION_TTL_SECONDS", DEFAULT_TTL_SECONDS))

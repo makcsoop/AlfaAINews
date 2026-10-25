@@ -291,3 +291,15 @@ def test_feed_role_comes_only_from_session(client, audit):
     assert audit.records[-1].session_company == BORROWER
     # без параметра лента строится по роли сессии
     assert [c["user_role"] for c in client.get("/feed").json()] == ["cfo"]
+
+
+@pytest.mark.parametrize(("env", "secure"), [(None, False), ("true", True)])
+def test_session_cookie_secure_flag(client, monkeypatch, env, secure):
+    # на сервере за HTTPS cookie только по TLS; на HTTP без домена флаг выключен, иначе вход не сработает
+    if env is None:
+        monkeypatch.delenv("SESSION_COOKIE_SECURE", raising=False)
+    else:
+        monkeypatch.setenv("SESSION_COOKIE_SECURE", env)
+    r = client.post("/session", json={"company_id": BORROWER, "role": "cfo"})
+    assert r.status_code == 200
+    assert ("secure" in r.headers["set-cookie"].lower()) is secure
