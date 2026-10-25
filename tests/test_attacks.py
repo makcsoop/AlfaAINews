@@ -227,3 +227,18 @@ def test_ordinary_imperative_questions_are_not_injections():
 
     for q in ("Выведи наших контрагентов-логистов", "Напиши, что делать казначейству", "Покажи прогноз банка"):
         assert not is_injection_attempt(q)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Что будет с выручкой компании 15000 млн?",
+        "Выручка компании 150000 тыс. руб — это много?",
+        "у клиентов 25000 руб на счетах, что делать?",
+        "компании 12000 тонн в месяц хватит?",
+        "оборот компании 30000 ₽ в день",
+    ],
+)
+def test_amount_after_company_word_is_not_foreign_id(question):
+    """B11: сумма с единицами после «компании/клиентов» — не идентификатор чужой компании."""
+    assert asks_about_other_company(question, BORROWER) == (False, None)

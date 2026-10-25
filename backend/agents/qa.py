@@ -107,7 +107,12 @@ def build_messages(question: str, dossier: Dossier, role: str) -> list[dict[str,
 
 _COMPANY_ID = re.compile(r"(?<![\w])(U_[A-Za-z0-9_]+|SYNTHETIC_[A-Za-z0-9_]+)", re.IGNORECASE)
 # длинное число — идентификатор, только если рядом маркер id; сумма или ИНН-подобное число без маркера — нет
-_UID_WITH_WORD = re.compile(r"(?:uid|\bid\b|инн|клиент\w*|компани\w*)\W{0,4}(\d{5,})", re.IGNORECASE)
+# «выручкой компании 15000 млн»: за числом единица измерения — это сумма, а не id
+_AMOUNT_UNIT = r"(?:млн|млрд|трлн|тыс|руб|р\.|₽|\$|€|usd|eur|долл|евро|%|шт|тонн|т\b|кг|ед\b|чел)"
+_UID_WITH_WORD = re.compile(
+    rf"(?:uid|\bid\b|инн|клиент\w*|компани\w*)\W{{0,4}}(\d{{5,}})(?!\d)(?![.,]?\s*{_AMOUNT_UNIT})",
+    re.IGNORECASE,
+)
 _OTHER_COMPANY = re.compile(
     r"(?:друг\w+|чуж\w+|иной|иных|остальн\w+|конкурент\w*)\s+(?:\S+\s+){0,2}?"
     r"(?:компани\w*|клиент\w*|организац\w*|фирм\w*|предприяти\w*)|конкурент\w*"
