@@ -38,7 +38,7 @@ class Source(Schema):
     audience: str | None = None
     publisher: str | None = Field(
         default=None,
-        description="издатель: ленты одного издателя (сайт и Telegram) — один независимый источник; None — id",
+        description="издатель: ленты одного издателя (сайт и Telegram) — один независимый источник",
     )
 
 

@@ -9,8 +9,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# 0.2.3: промежуточные результаты в RunTrace (план, инструменты, аналитики, арбитр), LlmCall.original_cost_rub,
-#        Source.publisher (независимость источников — по издателю)
+# 0.2.3: промежуточные результаты в RunTrace (план, инструменты, аналитики, арбитр),
+#        LlmCall.original_cost_rub, Source.publisher (независимость источников — по издателю)
 SCHEMA_VERSION = "0.2.3"  # 0.2.2: Evidence.feed_id; 0.2.1: headline, ссылки у действий и условий, id триггера
 # 0.2.0: контракты финальной архитектуры, факторы с направлением (У17), analysis
 
