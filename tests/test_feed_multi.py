@@ -436,3 +436,25 @@ def test_private_paste_visible_only_to_owner(monkeypatch):
     assert sid not in {c.event.story_id for c in theirs}
     assert not any("КОНФИДЕНЦИАЛЬНО" in c.event.title for c in theirs)
     assert store.add_story(sid, DEPOSITOR, "treasurer") is None  # чужую вставку закрепить нельзя
+
+
+def test_new_version_during_background_run_picked_up_later(monkeypatch):
+    """B5: новая версия сюжета, пришедшая во время фонового разбора, досчитывается после него."""
+    store, calls, gate, started = make_background_store(k=1)
+    store.list_cards(BORROWER, "cfo")
+    assert started.wait(5)
+    feed = store._feeds[(BORROWER, "cfo")]
+    (sid,) = tuple(feed.pending)
+    stories = store._explicit_source._b["story"]
+    i = next(n for n, s in enumerate(stories) if s.id == sid)
+    stories[i] = stories[i].model_copy(update={"version": 2, "title": "Новая версия сюжета"})
+    monkeypatch.setenv("FEED_REFRESH_S", "0")
+    store.list_cards(BORROWER, "cfo")  # разбор прежней версии ещё идёт
+    gate.set()
+    assert store.wait_idle(5)
+    for _ in range(3):
+        store.list_cards(BORROWER, "cfo")
+        assert store.wait_idle(5)
+    assert feed.story_version[sid] == 2
+    assert store._cards[feed.cards[sid]].event.title == "Новая версия сюжета"
+    assert calls.count(sid) == 2  # новая версия разобрана заново

@@ -330,12 +330,14 @@ class PipelineCardStore:
         """Под блокировкой: новые сюжеты — в ленту; изменившиеся — новая быстрая карточка и новый разбор."""
         min_score = self._min_score()
         for story, rel, card in scored:
+            changed = feed.story_version.get(story.id, story.version) != story.version
+            if changed and story.id in feed.pending:
+                # разбор прежней версии ещё идёт — досчитаем при следующем обновлении: версию не отмечаем
+                # увиденной, иначе следующий _scan сюжет пропустит
+                continue
             feed.seen[story.id] = story.version
             if rel is None or card is None:
                 continue
-            changed = feed.story_version.get(story.id, story.version) != story.version
-            if changed and story.id in feed.pending:
-                continue  # разбор прежней версии ещё идёт — досчитаем при следующем обновлении
             if changed:
                 feed.attempted.discard(story.id)
                 feed.deep.discard(story.id)
