@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import Engine
 
 from backend.agents.dossier import Dossier, DossierItem
-from backend.agents.planner import compute_gaps
+from backend.agents.planner import compute_gaps, market_title
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +63,8 @@ def bank_market_items(report: Any, dossier: Dossier) -> list[DossierItem]:
         if mid not in have:
             items.append(
                 DossierItem(
-                    id=mid, kind="market_knowledge", title=f"expectation: key_rate, заседание {m.meeting}",
+                    id=mid, kind="market_knowledge",
+                    title=f"{market_title('expectation', 'key_rate')}, заседание {m.meeting}",
                     text=_cut(m.statement),
                     data={
                         "kind": "expectation", "channel": "key_rate", "direction": None,

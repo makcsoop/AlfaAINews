@@ -22,7 +22,18 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from backend.agents.dossier import Dossier, DossierItem, PlanStep
 from backend.agents.tools import TOOLS, ToolContext, ToolError, canonical_hash, describe_tools, run_tool
 from backend.llm import BudgetExceeded, LLMClient, LLMUnavailable, get_client
+from backend.ranking.select import factor_label
 from backend.schemas import EventFacts, NumberFact, Story, ToolCall
+
+# Заголовок знания рынка в досье — по-русски: шаблонная карточка и модель берут его как подпись
+MARKET_KIND = {
+    "expectation": "Ожидание рынка", "forecast": "Прогноз рынка", "mechanism": "Механизм", "case": "Случай",
+}
+
+
+def market_title(kind: str, channel: str | None) -> str:
+    what = MARKET_KIND.get(kind, kind)
+    return f"{what}: {factor_label(channel).lower()}" if channel else what
 
 log = logging.getLogger(__name__)
 
@@ -263,7 +274,7 @@ def items_from_result(tool: str, out: BaseModel) -> list[DossierItem]:
         for m in d["knowledge"]:
             items.append(
                 DossierItem(
-                    id=m["id"], kind="market_knowledge", title=f"{m['kind']}: {m['channel'] or 'без канала'}",
+                    id=m["id"], kind="market_knowledge", title=market_title(m["kind"], m["channel"]),
                     text=_cut(m["statement"]),
                     data={k: m[k] for k in (
                         "kind", "channel", "event_type", "direction", "expected_value", "expected_unit",

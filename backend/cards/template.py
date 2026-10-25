@@ -187,7 +187,7 @@ def template_draft(
         bank_items = _bank_candidates(dossier, None, dossier.story_published_at, story_text)
     bank = [DraftItem(text=_bank_text(i), refs=[i.id], kind="bank_view") for i in bank_items]
     for i in dossier.by_kind("market_knowledge")[:1]:
-        text = i.title or i.text
+        text = i.text or i.title  # формулировка знания; заголовок — подпись досье
         real = i.id.startswith("mk_") and text and not text.upper().startswith("ЗАГЛУШКА")
         if real and (top_channel is None or i.data.get("channel") in (None, top_channel)):
             bank.append(DraftItem(text=text, refs=[i.id], kind="market_view"))

@@ -579,3 +579,12 @@ def test_offer_for_capital_controls_needs_fea():
     p = CompanyProfile(company_id="C", okved_code="24.10", sector="24", fts_flag=True, fts_country="Турция")
     offer = find_offer(profile=p, relevance=_rel("capital_controls", 0.2), analyses=[])
     assert offer is not None and offer.trigger_id == "fx_control_support" and "Турция" in offer.why
+
+
+def test_market_view_is_russian_statement_not_dossier_title():
+    """Мнение рынка в шаблоне — формулировка знания, а не техническая подпись «expectation: key_rate»."""
+    from backend.agents.planner import market_title
+
+    assert market_title("expectation", "key_rate") == "Ожидание рынка: ключевая ставка и стоимость денег"
+    assert market_title("case", None) == "Случай"
+    assert not any(ch.isascii() and ch.isalpha() for ch in market_title("forecast", "fx_rub"))
