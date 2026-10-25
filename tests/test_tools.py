@@ -120,11 +120,13 @@ def test_counterparty_person_id_hidden():
 
 def test_search_news_respects_story_boundary(ctx):
     out, _ = run_tool(ctx, "search_news", {"query": "ключевая ставка 14%"})
-    assert out.hits and all(h.published_at <= ctx.story_published_at for h in out.hits)
+    # граница — начало сюжета, но материалы самого сюжета (в т.ч. позже первого) видны целиком
+    assert len(out.hits) == 2 and all(h.in_story for h in out.hits)
+    assert ctx.story_published_at == datetime(2026, 9, 11, 10, 30, tzinfo=UTC)
     early = ToolContext(
         company_id=COMPANY,
         role="cfo",
-        story_id=STORY,
+        story_id="x",  # чужой сюжет: новости позже границы не видны
         story_published_at=datetime(2026, 9, 11, 10, 30, 30, tzinfo=UTC),
         trace_id="t",
         source=ctx.source,

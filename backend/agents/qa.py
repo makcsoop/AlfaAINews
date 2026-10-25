@@ -298,7 +298,7 @@ def build_context(
     dossier = Dossier(
         story_id=story.id, story_version=story.version, sector=(profile.sector if profile else "") or "",
         event_type=facts.event_type if facts else story.event_type,
-        story_published_at=story.last_seen, trace_id=trace_id,
+        story_published_at=story.first_seen, trace_id=trace_id,
     )
     if facts is not None:
         for item in story_and_fact_items(story, facts):

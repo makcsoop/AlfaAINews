@@ -22,7 +22,7 @@ class ToolContext:
     company_id: str  # из сессии; в аргументах инструментов его нет
     role: str
     story_id: str
-    story_published_at: datetime  # граница «только раньше сюжета» (инвариант 10)
+    story_published_at: datetime  # начало сюжета (first_seen): граница «только раньше сюжета» (инвариант 10)
     trace_id: str
     source: ToolDataSource
     allow_telegram_origin: bool = True
@@ -42,7 +42,10 @@ class ToolContext:
         trace_id: str,
         allow_telegram_origin: bool = True,
     ) -> "ToolContext":
-        """Граница — момент последнего материала сюжета: всё, что вошло в сюжет, уже «известно»."""
+        """Граница — начало сюжета (первый материал): знания аналитиков и прошлые случаи — только раньше него.
+
+        Материалы самого сюжета поиск новостей отдаёт целиком (search_news), граница их не режет.
+        """
         story = next((s for s in source.stories() if s.id == story_id), None)
         if story is None:
             raise ToolError("not_found", "сюжет не найден")
@@ -50,7 +53,7 @@ class ToolContext:
             company_id=company_id,
             role=role,
             story_id=story_id,
-            story_published_at=story.last_seen,
+            story_published_at=story.first_seen,
             trace_id=trace_id,
             source=source,
             allow_telegram_origin=allow_telegram_origin,

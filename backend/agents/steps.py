@@ -107,7 +107,7 @@ def planner_step(ctx: PipelineContext, source: ToolDataSource | None = None) -> 
         company_id=ctx.company_id or SECTOR_RUN_COMPANY,
         role=ctx.role or "analysis",
         story_id=ctx.story.id,
-        story_published_at=ctx.story.last_seen,
+        story_published_at=ctx.story.first_seen,  # инвариант 10: знания — только до начала события
         trace_id=ctx.trace_id,
         source=source or get_tool_source(),
     )

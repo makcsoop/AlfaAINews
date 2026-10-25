@@ -113,10 +113,12 @@ def get_counterparties(ctx: ToolContext, inp: GetCounterpartiesIn) -> Counterpar
 def search_news(ctx: ToolContext, inp: SearchNewsIn) -> SearchNewsOut:
     story = next((s for s in ctx.source.stories() if s.id == ctx.story_id), None)
     story_items = set(story.item_ids) if story else set()
+    # материалы самого сюжета — целиком; прочие новости — не позже последнего материала сюжета
+    news_until = story.last_seen if story else ctx.story_published_at
     tiers = {s.id: s.tier for s in ctx.source.sources()}
     scored = []
     for it in ctx.source.raw_items():
-        if it.published_at > ctx.story_published_at or it.dropped_reason:
+        if it.dropped_reason or (it.id not in story_items and it.published_at > news_until):
             continue
         in_story = it.id in story_items
         score = _overlap(inp.query, f"{it.title} {it.lead or ''} {it.text or ''}")
