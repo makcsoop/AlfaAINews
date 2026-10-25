@@ -12,7 +12,11 @@ interface Props {
 export function Feed({ cards, unseen, onOpen }: Props) {
   if (cards === null) return <div className="muted">Загрузка…</div>;
   if (cards.length === 0)
-    return <div className="empty">Для этой компании и роли пока нет карточек. Попробуйте другую роль.</div>;
+    return (
+      <div className="empty">
+        Новостей для вас пока нет. Как только появится событие, важное для вашей компании, оно будет здесь.
+      </div>
+    );
   return (
     <>
       <h1>Важно для вашего бизнеса</h1>

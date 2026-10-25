@@ -64,7 +64,7 @@ export function AskPanel({ api, card }: { api: Api; card: InsightCard }) {
           {x.error && <div className="error">{x.error}</div>}
           {x.reply && (
             <div className={`qa-a qa-${x.reply.status}`}>
-              {x.reply.status === "refused" && <div className="qa-note">Отказ: отвечаем только по данным вашей компании.</div>}
+              {x.reply.status === "refused" && <div className="qa-note">Отказ</div>}
               {x.reply.status === "degraded" && <div className="qa-note">Ответ неполный: часть данных сейчас недоступна.</div>}
               <p>{x.reply.answer}</p>
               {x.reply.refs.length > 0 && (

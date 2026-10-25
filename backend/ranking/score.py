@@ -32,6 +32,9 @@ from backend.schemas.insight import Surprise
 
 DIRECTION = {"up": 1, "down": -1, "flat": 0}
 _RATE_QUOTE = re.compile(r"ставк|годовых", re.IGNORECASE)  # «ключевую ставку … 14%», «на уровне 14% годовых»
+_KEY_RATE_QUOTE = re.compile(r"ключев", re.IGNORECASE)
+# у заявлений «ставка» — часто ставки по вкладам и кредитам («ставки по депозитам 18%»), а не ключевая
+_KEY_RATE_REQUIRED = {"monetary_signal"}
 
 
 @dataclass(frozen=True)
@@ -75,9 +78,10 @@ def rate_level_driver(
         return None
     if any(d.channel == "key_rate" for d in drivers):
         return None
-    rates = [
-        n.value for n in facts.numbers if n.unit == "%" and 0 < n.value < 40 and _RATE_QUOTE.search(n.quote)
-    ]
+    pct = [n for n in facts.numbers if n.unit == "%" and 0 < n.value < 40]
+    key = [n.value for n in pct if _KEY_RATE_QUOTE.search(f"{n.period or ''} {n.quote}")]
+    other = [n.value for n in pct if _RATE_QUOTE.search(n.quote)]
+    rates = key or ([] if event_type in _KEY_RATE_REQUIRED else other)
     rate = rates[0] if rates else None
     if rate is None:
         return None

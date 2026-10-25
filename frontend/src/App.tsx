@@ -177,7 +177,7 @@ export function App() {
           {error}
         </div>
       )}
-      {view.name === "home" && api && <PasteBox api={api} onCard={onAnalyzed} />}
+      {view.name === "home" && api && <PasteBox api={api} scope={`${companyId}:${role}`} onCard={onAnalyzed} />}
       {view.name === "home" && <Home cards={cards} unseen={unseen} onOpen={open} onFeed={() => go("feed")} />}
       {(view.name === "feed" || view.name === "runs") && (
         <nav className="tabs" aria-label="Разделы">
@@ -189,7 +189,7 @@ export function App() {
           </button>
         </nav>
       )}
-      {view.name === "feed" && api && <PasteBox api={api} onCard={onAnalyzed} />}
+      {view.name === "feed" && api && <PasteBox api={api} scope={`${companyId}:${role}`} onCard={onAnalyzed} />}
       {view.name === "feed" && <Feed cards={cards} unseen={unseen} onOpen={open} />}
       {view.name === "runs" && api && <RunsView api={api} onTrace={openTrace} titles={titles} />}
       {view.name === "trace" && api && <TraceView api={api} traceId={view.id} onBack={() => history.back()} />}

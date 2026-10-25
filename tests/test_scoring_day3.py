@@ -238,7 +238,9 @@ def _flat_hold(rate: float):
     from backend.schemas.common import ChannelImpact, NumberFact
 
     channels = [ChannelImpact(channel="key_rate", direction="flat", strength=0.0)]
-    numbers = [NumberFact(value=rate, unit="%", quote=f"сохранил ключевую ставку на уровне {rate:g}% годовых")]
+    numbers = [
+        NumberFact(value=rate, unit="%", quote=f"сохранил ключевую ставку на уровне {rate:g}% годовых")
+    ]
     return FACTS.model_copy(update={"channels": channels, "numbers": numbers})
 
 
@@ -246,9 +248,12 @@ def test_rate_hold_at_high_level_matters_for_borrower_and_depositor():
     from backend.profile.exposures import with_exposures
 
     now = STORY.last_seen
-    b = score_pair(STORY, with_exposures(BORROWER), now=now, facts=_flat_hold(14.0), sources=SOURCES, role="cfo")
-    d = score_pair(STORY, with_exposures(DEPOSITOR), now=now, facts=_flat_hold(14.0), sources=SOURCES,
-                   role="treasurer")
+    b = score_pair(
+        STORY, with_exposures(BORROWER), now=now, facts=_flat_hold(14.0), sources=SOURCES, role="cfo"
+    )
+    d = score_pair(
+        STORY, with_exposures(DEPOSITOR), now=now, facts=_flat_hold(14.0), sources=SOURCES, role="treasurer"
+    )
     assert b.score > 0.05 and d.score > 0.05
     kr_b = next(c for c in b.contributions if c.factor == "key_rate")
     kr_d = next(c for c in d.contributions if c.factor == "key_rate")
@@ -258,7 +263,9 @@ def test_rate_hold_at_high_level_matters_for_borrower_and_depositor():
 def test_rate_hold_at_neutral_level_adds_nothing():
     from backend.profile.exposures import with_exposures
 
-    r = score_pair(STORY, with_exposures(BORROWER), now=STORY.last_seen, facts=_flat_hold(7.5), sources=SOURCES)
+    r = score_pair(
+        STORY, with_exposures(BORROWER), now=STORY.last_seen, facts=_flat_hold(7.5), sources=SOURCES
+    )
     assert not any(c.factor == "key_rate" for c in r.contributions)
 
 
@@ -310,8 +317,49 @@ def test_surprise_hold_kept_when_superseded_after_story():
 
     oct23 = STORY.model_copy(update={"first_seen": STORY.first_seen.replace(month=10, day=23)})
     hold = B["bank_position"][0].model_copy(
-        update={"id": "cmi#hold", "doc_date": date(2026, 9, 11), "direction": 0.0, "superseded_by": "cmi#nov",
-                "forecast": Forecast(metric="key_rate_eoy_2026", value=14.0, unit="%", horizon="конец 2026")}
+        update={
+            "id": "cmi#hold",
+            "doc_date": date(2026, 9, 11),
+            "direction": 0.0,
+            "superseded_by": "cmi#nov",
+            "forecast": Forecast(metric="key_rate_eoy_2026", value=14.0, unit="%", horizon="конец 2026"),
+        }
     )
-    s = find_surprise(oct23, FACTS, bank_positions=[hold])  # cmi#nov вышел после 23.10 — не в списке «до события»
+    s = find_surprise(
+        oct23, FACTS, bank_positions=[hold]
+    )  # cmi#nov вышел после 23.10 — не в списке «до события»
     assert s is not None and s.bank_expected == 14.0
+
+
+def test_rate_hold_prefers_key_rate_and_weaker_for_statements():
+    from backend.profile.exposures import with_exposures
+    from backend.schemas.common import NumberFact
+
+    borrower = with_exposures(BORROWER)
+    now = STORY.last_seen
+
+    def kr(facts, event_type="rate_decision"):
+        story = STORY.model_copy(update={"event_type": event_type})
+        f = facts.model_copy(update={"event_type": event_type})
+        r = score_pair(story, borrower, now=now, facts=f, sources=SOURCES)
+        return next((c.value for c in r.contributions if c.factor == "key_rate"), 0.0)
+
+    decision = kr(_flat_hold(14.0))
+    statement = kr(_flat_hold(14.0), "monetary_signal")
+    assert decision > 2 * statement > 0  # заявление о ставке слабее самого решения
+
+    # «ставки по вкладам 18%» перед ключевой ставкой: берётся ключевая, а не первое число
+    mixed = _flat_hold(14.0).model_copy(
+        update={
+            "numbers": [
+                NumberFact(value=18.0, unit="%", quote="ставки по вкладам достигли 18%"),
+                NumberFact(value=14.0, unit="%", quote="сохранил ключевую ставку на уровне 14% годовых"),
+            ]
+        }
+    )
+    assert kr(mixed) == pytest.approx(decision)
+    # у заявления только ставки по вкладам — вклада «уровень ставки» нет
+    deposits = _flat_hold(14.0).model_copy(
+        update={"numbers": [NumberFact(value=18.0, unit="%", quote="ставки по вкладам достигли 18%")]}
+    )
+    assert kr(deposits, "monetary_signal") == 0.0

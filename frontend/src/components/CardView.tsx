@@ -323,22 +323,23 @@ function Quote({ e }: { e: Evidence }) {
   );
 }
 
+// Колонку без ожиданий не показываем: «нет данных» выглядит как ошибка
 function SurpriseLine({ s }: { s: Surprise }) {
-  const fmt = (v?: number | null) => (v == null ? "нет данных" : `${v.toLocaleString("ru-RU")}${s.unit ?? ""}`);
+  const fmt = (v: number) => `${v.toLocaleString("ru-RU")}${s.unit ?? ""}`;
+  const cols = [
+    ["Рынок ждал", s.market_expected],
+    ["Банк ждал", s.bank_expected],
+    ["Вышло", s.actual],
+  ].filter((c): c is [string, number] => c[1] != null);
+  if (cols.length < 2) return null;
   return (
-    <div className="surprise">
-      <div>
-        <div className="muted small">Рынок ждал</div>
-        <strong>{fmt(s.market_expected)}</strong>
-      </div>
-      <div>
-        <div className="muted small">Банк ждал</div>
-        <strong>{fmt(s.bank_expected)}</strong>
-      </div>
-      <div>
-        <div className="muted small">Вышло</div>
-        <strong>{fmt(s.actual)}</strong>
-      </div>
+    <div className="surprise" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+      {cols.map(([label, v]) => (
+        <div key={label}>
+          <div className="muted small">{label}</div>
+          <strong>{fmt(v)}</strong>
+        </div>
+      ))}
     </div>
   );
 }

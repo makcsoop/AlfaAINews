@@ -56,7 +56,7 @@ function ImportantWidget({ cards, unseen, onOpen, onFeed }: Props) {
       </div>
       {cards === null && <div className="muted">Загрузка…</div>}
       {cards?.length === 0 && (
-        <div className="muted">Пока нет событий, важных для вашей компании в этой роли.</div>
+        <div className="muted">Новостей для вас пока нет — важное для компании появится здесь.</div>
       )}
       <ul className="widget-list">
         {cards?.slice(0, 3).map((c) => (

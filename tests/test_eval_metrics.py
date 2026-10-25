@@ -91,3 +91,13 @@ def test_labeling_export_format(tmp_path: Path):
     rep = agreement(read_labels(f))
     assert rep.pairs[0].n == 3 and rep.disputed == [("p2", {"ann": 0, "bob": 1})]
     assert rep.pairs[0].exact == pytest.approx(0.667, abs=0.001)
+
+
+def test_coverage_breakdown_and_interpretation():
+    m = evaluate(_pairs())
+    assert set(m.by_coverage) == {True, False}
+    n, nd, nd_b, _, _ = m.by_coverage[True]
+    assert n == 1 and nd > nd_b
+    lines = format_report(m).split("## Интерпретация")[1].strip().splitlines()
+    assert 3 <= len(lines) <= 5
+    assert "лучше бейзлайна" in lines[0] and "непокрытых" in lines[-1]

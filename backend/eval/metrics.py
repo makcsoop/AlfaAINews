@@ -14,7 +14,7 @@ import math
 import sys
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -46,6 +46,9 @@ class Metrics:
     precision_baseline: float
     misses_covered: tuple[int, int]  # пропущено, всего важных
     misses_uncovered: tuple[int, int]
+    # nDCG и precision отдельно по клиентам из покрытых и непокрытых отраслей (У18):
+    # covered → (клиентов, nDCG, nDCG бейзлайна, precision, precision бейзлайна)
+    by_coverage: dict[bool, tuple[int, float, float, float, float]] = field(default_factory=dict)
 
 
 def dcg(gains: Sequence[float]) -> float:
@@ -67,41 +70,83 @@ def _mean(xs: Sequence[float]) -> float:
     return round(sum(xs) / len(xs), 3) if xs else 0.0
 
 
+def _ranked(group: Sequence[PairEval], k: int) -> tuple[float | None, float | None, float, float]:
+    # равные оценки — по свежести и качеству, как в ленте (rank: score, затем freshness)
+    sys_order = sorted(group, key=lambda p: (-p.system, -p.baseline, p.story_id))
+    base_order = sorted(group, key=lambda p: (-p.baseline, p.story_id))
+    gs, gb = [p.gold for p in sys_order], [p.gold for p in base_order]
+    return ndcg_at(gs, k), ndcg_at(gb, k), precision_at(gs, k), precision_at(gb, k)
+
+
 def evaluate(pairs: Sequence[PairEval], *, k: int = K, cfg: ScoringConfig | None = None) -> Metrics:
     min_score = (cfg or load_scoring()).feed.min_score
     by_client: dict[str, list[PairEval]] = defaultdict(list)
     for p in pairs:
         by_client[p.company_id].append(p)
-    nd: list[float] = []
-    nd_b: list[float] = []
-    pr: list[float] = []
-    pr_b: list[float] = []
+    rows: dict[bool, list[tuple[float | None, float | None, float, float]]] = defaultdict(list)
     misses = {True: [0, 0], False: [0, 0]}
     for group in by_client.values():
-        # равные оценки — по свежести и качеству, как в ленте (rank: score, затем freshness)
-        sys_order = sorted(group, key=lambda p: (-p.system, -p.baseline, p.story_id))
-        base_order = sorted(group, key=lambda p: (-p.baseline, p.story_id))
-        for order, nd_list, pr_list in ((sys_order, nd, pr), (base_order, nd_b, pr_b)):
-            gains = [p.gold for p in order]
-            if (v := ndcg_at(gains, k)) is not None:
-                nd_list.append(v)
-            pr_list.append(precision_at(gains, k))
-        top = {p.pair_id for p in sys_order[:k]}
+        covered = group[0].covered  # отрасль у клиента одна — покрытие общее на все его пары
+        rows[covered].append(_ranked(group, k))
+        top = {p.pair_id for p in sorted(group, key=lambda p: (-p.system, -p.baseline, p.story_id))[:k]}
         for p in group:
             if p.gold >= 0.5:
                 misses[p.covered][1] += 1
                 if p.pair_id not in top or p.system < min_score:
                     misses[p.covered][0] += 1
+
+    def summary(rs: Sequence[tuple[float | None, float | None, float, float]]) -> tuple[float, ...]:
+        return (
+            _mean([r[0] for r in rs if r[0] is not None]),
+            _mean([r[1] for r in rs if r[1] is not None]),
+            _mean([r[2] for r in rs]),
+            _mean([r[3] for r in rs]),
+        )
+
+    nd, nd_b, pr, pr_b = summary([r for rs in rows.values() for r in rs])
     return Metrics(
         pairs=len(pairs),
         clients=len(by_client),
-        ndcg=_mean(nd),
-        ndcg_baseline=_mean(nd_b),
-        precision=_mean(pr),
-        precision_baseline=_mean(pr_b),
+        ndcg=nd,
+        ndcg_baseline=nd_b,
+        precision=pr,
+        precision_baseline=pr_b,
         misses_covered=(misses[True][0], misses[True][1]),
         misses_uncovered=(misses[False][0], misses[False][1]),
+        by_coverage={c: (len(rs), *summary(rs)) for c, rs in rows.items()},  # type: ignore[misc]
     )
+
+
+def interpret(m: Metrics) -> list[str]:
+    """3–5 строк: где скоринг лучше бейзлайна, где хуже и почему (для отчёта и слайда)."""
+
+    def cmp(a: float, b: float) -> str:
+        return "лучше" if a > b + 0.02 else "хуже" if a < b - 0.02 else "на уровне"
+
+    out = [
+        f"В целом скоринг {cmp(m.ndcg, m.ndcg_baseline)} бейзлайна по nDCG@{K} "
+        f"({m.ndcg:.2f} против {m.ndcg_baseline:.2f}) и {cmp(m.precision, m.precision_baseline)} "
+        f"по precision@{K} ({m.precision:.2f} против {m.precision_baseline:.2f}): "
+        "бейзлайн не знает клиента — свежая новость "
+        "для всех одна, скоринг поднимает то, что задевает продукты, отрасль и контрагентов компании."
+    ]
+    for covered, name in ((True, "покрытых аналитиками рынка"), (False, "непокрытых")):
+        if covered in m.by_coverage:
+            n, nd, nd_b, _, _ = m.by_coverage[covered]
+            out.append(
+                f"В {name} отраслях ({n} клиентов) — {cmp(nd, nd_b)} бейзлайна: "
+                f"nDCG {nd:.2f} против {nd_b:.2f}."
+            )
+    missed = m.misses_covered[0] + m.misses_uncovered[0]
+    total = m.misses_covered[1] + m.misses_uncovered[1]
+    if total:
+        out.append(
+            f"Пропущено важного: {missed} из {total}, больше — в непокрытых отраслях: приоров аналитиков "
+            "там нет, работает только экспертная матрица (У18)."
+            if m.misses_uncovered[0] > m.misses_covered[0]
+            else f"Пропущено важного: {missed} из {total}."
+        )
+    return out
 
 
 def gold_from_csv(path: Path) -> dict[str, tuple[str, str, float]]:
@@ -144,6 +189,17 @@ def format_report(m: Metrics, *, note: str = "") -> str:
         f"| отрасли, покрытые аналитиками рынка | {miss(m.misses_covered)} |",
         f"| непокрытые отрасли | {miss(m.misses_uncovered)} |",
     ]
+    if m.by_coverage:
+        lines += [
+            "",
+            "| Отрасли клиентов | Клиентов | nDCG@5 | бейзлайн | precision@5 | бейзлайн |",
+            "|---|---|---|---|---|---|",
+        ]
+        for covered, name in ((True, "покрытые аналитиками"), (False, "непокрытые")):
+            if covered in m.by_coverage:
+                n, nd, nd_b, pr, pr_b = m.by_coverage[covered]
+                lines.append(f"| {name} | {n} | {nd:.3f} | {nd_b:.3f} | {pr:.3f} | {pr_b:.3f} |")
+    lines += ["", "## Интерпретация", "", *[f"- {x}" for x in interpret(m)]]
     if note:
         lines += ["", note]
     return "\n".join(lines) + "\n"
