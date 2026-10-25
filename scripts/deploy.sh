@@ -40,8 +40,10 @@ echo "→ сборка и запуск"
 ssh "$HOST" "cd '$DIR' && $COMPOSE up -d --build"
 
 if [ "${BOOTSTRAP:-0}" = "1" ]; then
+  # профили по всем платежам кейса берут > 600 МБ (лимит backend): на время заливки лимит выше, а сборщик
+  # остановлен — он тоже склеивает сюжеты и спорит за память. Шаги, сделанные раньше, заливка пропускает
   echo "→ демо-база с нуля (правила, без вызовов моделей)"
-  ssh "$HOST" "cd '$DIR' && $COMPOSE run --rm backend python -m backend.db.demo"
+  ssh "$HOST" "cd '$DIR' && $COMPOSE stop ingest && BACKEND_MEM_LIMIT=1500m $COMPOSE run --rm backend python -m backend.db.demo; rc=\$?; $COMPOSE start ingest; exit \$rc"
 fi
 
 echo "→ проверка"

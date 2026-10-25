@@ -31,7 +31,9 @@ services:
 
   backend:
     restart: unless-stopped
-    mem_limit: 600m
+    # разовые задачи (`run --rm backend python -m backend.db.demo`) берут этот же лимит: профили по 1,4 млн
+    # платежей не влезают в 600 МБ — deploy.sh на время заливки поднимает его (BACKEND_MEM_LIMIT)
+    mem_limit: ${BACKEND_MEM_LIMIT:-600m}
     environment:
       # true — только при HTTPS (SITE_ADDRESS — домен); на голом HTTP вход перестанет работать
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
