@@ -2,10 +2,11 @@
 
 import re
 from collections.abc import Sequence
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from backend.agents.dossier import Dossier
+from backend.agents.dossier import Dossier, DossierItem
 from backend.cards.features import ROLE_FOCUS, channel_label, company_features
 from backend.llm import data_block
 from backend.schemas import AnalystReport, CompanyProfile, CounterpartyGraph, RelevanceScore, Story
@@ -37,12 +38,30 @@ def prompt_version() -> str:
     return load_prompt()[0]
 
 
+def bank_position_expired(item: DossierItem, story_day: date) -> bool:
+    """Позиция ЦМИ с истёкшим сроком: флаг инструмента или valid_until раньше даты сюжета."""
+    if item.kind != "bank_position":
+        return False
+    if item.data.get("expired"):
+        return True
+    until = item.data.get("valid_until")
+    try:
+        return until is not None and date.fromisoformat(str(until)[:10]) < story_day
+    except ValueError:
+        return False
+
+
 def _safe_dossier(dossier: Dossier) -> Dossier:
+    """Досье для текста карточки: без сырого профиля и графа, без сумм; истёкшие позиции ЦМИ не идут как
+    текущие, ожидание к самому событию помечено «до события» (в тексте — прошедшее время и дата обзора)."""
+    day = dossier.story_published_at.date()
     items = []
     for i in dossier.items:
-        if i.kind in EXCLUDED_KINDS:
+        if i.kind in EXCLUDED_KINDS or bank_position_expired(i, day):
             continue
         clean = {k: v for k, v in i.data.items() if k not in FORBIDDEN_KEYS}
+        if i.kind == "bank_position" and clean.get("before_event_expectation"):
+            clean["timing"] = "до события: ожидание банка к этому событию, оно уже произошло"
         items.append(i.model_copy(update={"data": clean}))
     return dossier.model_copy(update={"items": items})
 

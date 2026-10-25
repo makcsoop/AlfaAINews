@@ -219,3 +219,46 @@ def test_verify_step_reports_failure(bundle, tmp_path):
     ctx.card, ctx.dossier = bad, e["dossier"].model_dump(mode="json")
     ctx = card_verify_step(ctx)
     assert ctx.verify_ok is False and ctx.verify_errors and "number_not_in_source" in ctx.verify_errors[0]
+
+
+def test_bank_view_on_expired_position_fails(bundle, tmp_path):
+    """CRITERIA_CHECK 5А: позиция банка с истёкшим сроком (valid_until раньше сюжета) — не текущая."""
+    e, card = _llm_card(bundle, tmp_path, CASES[0])
+    bid = card.bank_and_market[0]
+    src = next(c for c in card.claims if c.claim_id == bid).evidence[0].source_id
+    items = [
+        i.model_copy(update={"data": {**i.data, "valid_until": "2026-09-01", "expired": True}})
+        if i.id == src
+        else i
+        for i in e["dossier"].items
+    ]
+    stale = {**e, "dossier": e["dossier"].model_copy(update={"items": items})}
+    check = _check(stale, card)
+    assert "bank_view_expired" in _codes(check)
+    assert any(f.claim_id == bid for f in check.failures if f.code == "bank_view_expired")
+
+
+def test_safe_dossier_drops_expired_positions(bundle):
+    from backend.cards.prompt import _safe_dossier
+
+    e = env(bundle, *CASES[0])
+    first = e["dossier"].by_kind("bank_position")[0]
+    items = [
+        i.model_copy(update={"data": {**i.data, "expired": True}}) if i.id == first.id else i
+        for i in e["dossier"].items
+    ]
+    safe = _safe_dossier(e["dossier"].model_copy(update={"items": items}))
+    assert first.id not in safe.ids()
+    assert all(not i.data.get("expired") for i in safe.by_kind("bank_position"))
+
+
+def test_bank_view_with_review_date_in_words_passes(bundle, tmp_path):
+    """Правило 10 промпта: «В обзоре от 11 сентября ЦМИ …» проходит проверку дат по doc_date."""
+    e, card = _llm_card(bundle, tmp_path, CASES[0])
+    bid = card.bank_and_market[0]
+    claim = next(c for c in card.claims if c.claim_id == bid)
+    day = claim.evidence[0].doc_date
+    months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября",
+              "октября", "ноября", "декабря"]  # fmt: skip
+    text = f"В обзоре от {day.day} {months[day.month - 1]} ЦМИ: {claim.text}"
+    assert _check(e, _with_text(card, bid, text)).ok

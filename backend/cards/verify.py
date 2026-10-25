@@ -18,6 +18,7 @@ from backend.agents.dossier import Dossier, DossierItem
 from backend.cards.build import _BANK_VOICE, MARKET_SOURCE_PREFIX
 from backend.cards.features import is_sector_feature
 from backend.cards.offers import find_offer
+from backend.cards.prompt import bank_position_expired
 from backend.schemas import AnalystReport, Claim, CompanyProfile, InsightCard
 from backend.schemas.common import BANK_SOURCE_PREFIX
 
@@ -215,6 +216,7 @@ def verify_card(
 
     by_id = {c.claim_id: c for c in card.claims}
     feats = {f.strip().casefold() for f in profile_features}
+    story_day = dossier.story_published_at.date()
 
     for c in card.claims:
         # (a) метка, обоснование и существование ссылок
@@ -239,6 +241,13 @@ def verify_card(
                 item = dossier.get(ev.source_id)
                 if not ev.source_id.startswith(BANK_SOURCE_PREFIX) or (item and item.kind != "bank_position"):
                     fail("bank_view_source", f"позиция банка ссылается на {ev.source_id!r}", c.claim_id)
+                elif item is not None and bank_position_expired(item, story_day):
+                    until = item.data.get("valid_until")
+                    fail(
+                        "bank_view_expired",
+                        f"позиция {ev.source_id!r} действовала до {until}, сюжет от {story_day.isoformat()}",
+                        c.claim_id,
+                    )
         elif c.type == "market_view":
             if not c.evidence:
                 fail("market_view_source", "мнение рынка без evidence на знание рынка", c.claim_id)
@@ -334,7 +343,9 @@ def verify_card(
 
 _CHECKS: dict[str, tuple[str, ...]] = {
     "refs": ("no_support", "unknown_source", "unknown_feature", "unknown_claim"),
-    "label": ("bank_view_source", "market_view_source", "fact_opinion_source", "bank_voice"),
+    "label": (
+        "bank_view_source", "bank_view_expired", "market_view_source", "fact_opinion_source", "bank_voice",
+    ),
     "numbers": ("number_not_in_source",),
     "dates": ("date_not_in_source",),
 }

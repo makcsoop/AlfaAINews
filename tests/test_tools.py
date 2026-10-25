@@ -260,3 +260,37 @@ def test_foreign_paste_hidden_from_tools():
     assert all(h.source_id != "user_paste" for h in out.hits)
     cases, _ = run_tool(c, "find_similar_cases", {"event_type": "rate_decision"})
     assert all(cs.story_id != "st_paste" for cs in cases.cases)
+
+
+def test_bank_positions_skip_expired_by_default():
+    """CRITERIA_CHECK 5А: позиция «пауза 23.10» (valid_until 23.10) для сюжета 24.10 — не текущая."""
+    late = ToolContext(
+        company_id=COMPANY,
+        role="cfo",
+        story_id="st_defaults",
+        story_published_at=datetime(2026, 10, 24, 9, tzinfo=UTC),
+        trace_id="t",
+        source=FixtureDataSource(),
+    )
+    out, _ = run_tool(late, "get_bank_positions", {"channel": "key_rate"})
+    ids = {p.id for p in out.positions}
+    assert "cmi_keyrate_2026_09#p1#c1" not in ids and "cmi_keyrate_2026_09#p1#c3" not in ids
+    assert all(not p.expired for p in out.positions)
+    full, _ = run_tool(late, "get_bank_positions", {"channel": "key_rate", "include_expired": True})
+    old = {p.id: p for p in full.positions}
+    assert old["cmi_keyrate_2026_09#p1#c1"].expired
+
+
+def test_bank_position_for_event_day_marked_before_event():
+    day = ToolContext(
+        company_id=COMPANY,
+        role="cfo",
+        story_id="st_rate_2310",
+        story_published_at=datetime(2026, 10, 23, 10, 30, tzinfo=UTC),
+        trace_id="t",
+        source=FixtureDataSource(),
+    )
+    out, _ = run_tool(day, "get_bank_positions", {"channel": "key_rate"})
+    by_id = {p.id: p for p in out.positions}
+    assert by_id["cmi_keyrate_2026_09#p1#c1"].before_event_expectation
+    assert not by_id["cmi_keyrate_2026_09#p1#c2"].before_event_expectation

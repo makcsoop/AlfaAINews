@@ -145,12 +145,16 @@ def search_news(ctx: ToolContext, inp: SearchNewsIn) -> SearchNewsOut:
 
 
 def get_bank_positions(ctx: ToolContext, inp: GetBankPositionsIn) -> BankPositionsOut:
+    """Позиции ЦМИ, опубликованные не позже даты сюжета. Истёкшие (valid_until раньше даты сюжета:
+    «пауза на заседании 23.10» для сюжета 24.10) по умолчанию не отдаются — это уже не текущая позиция."""
     boundary = ctx.story_published_at.date()
     rows = []
     for bp in ctx.source.bank_positions():
         if bp.doc_date > boundary:
             continue
         if inp.channel and bp.channel != inp.channel:
+            continue
+        if not inp.include_expired and bp.valid_until is not None and bp.valid_until < boundary:
             continue
         score = 0
         if inp.query:
@@ -175,6 +179,8 @@ def get_bank_positions(ctx: ToolContext, inp: GetBankPositionsIn) -> BankPositio
                 valid_until=bp.valid_until,
                 expired=bp.valid_until is not None and bp.valid_until < boundary,
                 superseded_by=bp.superseded_by,
+                before_event_expectation=(bp.valid_until == boundary and bp.doc_date < boundary)
+                or (bp.superseded_by is not None and bp.superseded_by == ctx.story_id),
             )
             for _, _, bp in rows[:20]
         ]

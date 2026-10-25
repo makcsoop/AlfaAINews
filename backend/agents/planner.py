@@ -254,7 +254,7 @@ def items_from_result(tool: str, out: BaseModel) -> list[DossierItem]:
                     id=p["id"], kind="bank_position", title=p["doc_title"], text=_cut(p["quote"]),
                     data={k: p[k] for k in (
                         "thesis", "channel", "direction", "forecast", "doc_id", "page", "doc_date",
-                        "valid_until", "expired", "superseded_by",
+                        "valid_until", "expired", "superseded_by", "before_event_expectation",
                     )},
                     source_tool=tool,
                 )

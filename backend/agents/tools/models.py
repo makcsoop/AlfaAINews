@@ -100,6 +100,10 @@ class SearchNewsOut(Schema):
 class GetBankPositionsIn(Schema):
     channel: str | None = Field(default=None, max_length=64)
     query: str | None = Field(default=None, max_length=300)
+    include_expired: bool = Field(
+        default=False,
+        description="отдать и позиции с истёкшим сроком (valid_until раньше даты сюжета) — только для сверки",
+    )
 
 
 class BankPositionOut(Schema):
@@ -116,6 +120,11 @@ class BankPositionOut(Schema):
     valid_until: date | None
     expired: bool = Field(description="valid_until раньше даты сюжета")
     superseded_by: str | None = Field(description="id сюжета, который сделал позицию устаревшей")
+    before_event_expectation: bool = Field(
+        default=False,
+        description="ожидание к самому событию сюжета (срок — день события или позицию сменил этот сюжет): "
+        "в тексте — в прошедшем времени, «до события банк ожидал …»",
+    )
 
 
 class BankPositionsOut(Schema):

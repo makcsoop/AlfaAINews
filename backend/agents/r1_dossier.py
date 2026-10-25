@@ -44,6 +44,8 @@ def bank_market_items(report: Any, dossier: Dossier) -> list[DossierItem]:
     for v in report.bank:
         if v.position_id in have or not v.before_event:  # опубликованные не раньше сюжета не берём
             continue
+        if v.stale:  # устаревшая (срок истёк или сменена) — не текущая позиция банка
+            continue
         items.append(
             DossierItem(
                 id=v.position_id, kind="bank_position", title=v.doc_title, text=_cut(v.quote),

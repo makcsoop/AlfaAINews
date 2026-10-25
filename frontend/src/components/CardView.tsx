@@ -425,6 +425,14 @@ export function CheckBadge({ checks }: { checks: ClaimChecks }) {
   );
 }
 
+// Позиция банка привязана ко времени: дата обзора ЦМИ видна рядом с меткой, а не только в сноске
+function ReviewDate({ claim }: { claim: Claim }) {
+  if (claim.type !== "bank_view") return null;
+  const dates = claim.evidence.map((e) => e.doc_date).filter((d): d is string => !!d).sort();
+  if (!dates.length) return null;
+  return <span className="review-date">обзор ЦМИ от {formatDate(dates[dates.length - 1])}</span>;
+}
+
 function Note({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) {
   const { mark, noteNo } = useContext(CardCtx);
   const [wrong, setWrong] = useState(false);
@@ -434,6 +442,7 @@ function Note({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) {
     <li className={`note note-${claim.type}`}>
       <div className="note-label">
         <ClaimTag type={claim.type} />
+        <ReviewDate claim={claim} />
         <CheckBadge checks={claim.verified} />
       </div>
       <div className="note-body">

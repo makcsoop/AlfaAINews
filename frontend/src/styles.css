@@ -249,6 +249,7 @@ a { color: inherit; }
 .tag-fact { color: var(--k-fact); }
 .tag-fact::before { width: 8px; height: 8px; background: var(--k-fact); border-radius: 2px; }
 .tag-bank_view { color: var(--k-bank-ink); }
+.review-date { font-size: 12px; color: var(--k-bank-ink); border: 1px solid var(--k-bank); border-radius: 4px; padding: 0 6px; white-space: nowrap; }
 .tag-bank_view::before { width: 14px; height: 4px; background: var(--k-bank); }
 .tag-market_view { color: var(--k-market-ink); }
 .tag-market_view::before { width: 9px; height: 9px; border-radius: 50%; background: var(--k-market); }

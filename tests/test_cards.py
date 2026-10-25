@@ -156,7 +156,7 @@ def test_card_valid_and_labelled(bundle, tmp_path, company, role):
             assert c.type == "bank_offer" and c.is_advertising
     # метки и обоснование: у каждого утверждения есть либо источник, либо based_on
     assert all(c.evidence or any(c.based_on.values()) for c in card.claims)
-    assert res.cost_rub == 0.0 and res.prompt_version == "card-v2"
+    assert res.cost_rub == 0.0 and res.prompt_version == "card-v3"
 
 
 def test_confidence_and_surprise_set_by_code(bundle, tmp_path):
@@ -404,11 +404,11 @@ def test_role_focus_in_prompt(bundle, role):
 
 def test_prompt_version_in_header_and_journal(bundle, tmp_path):
     version, system, _user = load_prompt()
-    assert version == "card-v2" and "cmi_" in system and "mk_" in system
+    assert version == "card-v3" and "cmi_" in system and "mk_" in system
     client = fixture_client(tmp_path)
     res = write(env(bundle, *CASES[0]), client, sources=bundle["source"])
     entries = client.journal.by_trace(res.card.trace_id)
-    assert entries and all(en["prompt_version"] == "card-v2" and en["step"] == "card" for en in entries)
+    assert entries and all(en["prompt_version"] == "card-v3" and en["step"] == "card" for en in entries)
     assert sum(en["cost_rub"] for en in entries) == 0.0
 
 
