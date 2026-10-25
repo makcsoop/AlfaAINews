@@ -350,13 +350,15 @@ def annotate_card(
     check: CardCheck,
     raw_texts: dict[str, str] | None = None,
     urls: dict[str, str] | None = None,
+    feeds: dict[str, str] | None = None,
 ) -> InsightCard:
     """Копия карточки с итогом проверки кодом: `claim.verified` по группам, `evidence.verified` и url цитат.
 
     Цитата считается проверенной, если дословно (без учёта кавычек, регистра и пробелов) есть в тексте
     элемента досье или исходного материала (`raw_texts`: id материала -> текст).
+    `feeds`: id материала -> лента (`cbr_press`, `prime`): во фронте название вместо «первоисточник».
     """
-    raw_texts, urls = raw_texts or {}, urls or {}
+    raw_texts, urls, feeds = raw_texts or {}, urls or {}, feeds or {}
     failed: dict[str, set[str]] = {}
     for f in check.failures:
         if f.claim_id:
@@ -380,6 +382,7 @@ def annotate_card(
                 update={
                     "verified": quote_found(ev.source_id, ev.quote),
                     "url": ev.url or urls.get(ev.source_id),
+                    "feed_id": ev.feed_id or feeds.get(ev.source_id),
                 }
             )
             for ev in c.evidence

@@ -458,3 +458,68 @@ def test_bank_voice_only_for_the_bank_itself():
     assert _bank_voice("По мнению банка, ставка снизится")
     assert not _bank_voice("Коммерческие банки ожидают роста просрочки")
     assert not _bank_voice("Центробанк прогнозирует инфляцию 4%")
+
+
+# ---------- цитаты: материал вместо сюжета, без дублей, лента, сокращения ----------
+
+STORY = "st_2026-09-11_keyrate"
+
+
+def _wh_evidence(bundle, refs):
+    e = env(bundle, *CASES[0])
+    card = assemble(e, mutate("U_DEMO_BORROWER_cfo", lambda d: d["what_happened"][0].update(refs=refs)))
+    fact = next(c for c in card.claims if c.claim_id == card.what_happened[0])
+    return fact.evidence
+
+
+def test_story_ref_becomes_raw_item_evidence(bundle):
+    """Ссылка модели на сюжет — цитата конкретного материала (от экстрактора), а не id и заголовок сюжета."""
+    ev = _wh_evidence(bundle, [STORY])
+    assert [e.source_id for e in ev] == [CBR]
+    assert not ev[0].source_id.startswith("st_")
+    assert ev[0].quote == bundle["event_facts"][0].summary_evidence[0].quote
+
+
+def test_same_document_not_cited_twice(bundle):
+    for refs in ([STORY, FACT], [FACT, CBR], [STORY, FACT, CBR]):
+        ev = _wh_evidence(bundle, refs)
+        assert [e.source_id for e in ev] == [CBR], refs
+
+
+def test_news_evidence_has_url_and_feed(bundle):
+    ev = _wh_evidence(bundle, [CBR])
+    assert ev[0].url and ev[0].url.startswith("https://www.cbr.ru/") and ev[0].feed_id == "cbr_press"
+
+
+def test_near_duplicate_quotes_of_reprints_dropped(bundle):
+    from backend.cards.build import _Builder
+
+    d = Dossier(story_id="s", sector="", story_published_at=datetime(2026, 10, 23, tzinfo=UTC), trace_id="t")
+    a = DossierItem(id="i1", kind="news", title="Набиуллина",
+                    text="Ни о какой волне дефолтов по облигациям в РФ речи не идет.", data={"source_id": "kommersant"})
+    b = DossierItem(id="i2", kind="news", title="Набиуллина",
+                    text="Ни о какой волне дефолтов по облигациям в России речи не идет.",
+                    data={"source_id": "tg_kommersant"})
+    c = DossierItem(id="i3", kind="news", title="Набиуллина",
+                    text="Доля дефолтных корпоративных бумаг составляет около 1%.", data={"source_id": "rbc"})
+    for it in (a, b, c):
+        d.add(it)
+    ev = _Builder(d, []).evidences([a, b, c], "Волны дефолтов по облигациям нет")
+    assert [e.source_id for e in ev] == ["i1", "i3"]
+
+
+def test_best_sentence_does_not_cut_on_abbreviations():
+    from backend.cards.build import _best_sentence
+
+    text = ("Мы сохраняем прогноз по инфляции. При этом наш прогноз по ставке на конец 2027 г. остается "
+            "на уровне 12,0%, т. е. снижение продолжится. Риски — проинфляционные.")
+    q = _best_sentence(text, "Прогноз ЦМИ по ставке на конец 2027 года остается на уровне 12,0%")
+    assert "12,0" in q and q.startswith("При этом")
+
+
+def test_best_sentence_takes_whole_text_when_numbers_split():
+    from backend.cards.build import _best_sentence
+
+    text = "Прогноз по ставке на конец 2027 года повышен. Он составляет 12,5–13,5%."
+    q = _best_sentence(text, "Прогноз ставки на конец 2027 года — 12,5–13,5%")
+    assert "12,5" in q and "2027" in q

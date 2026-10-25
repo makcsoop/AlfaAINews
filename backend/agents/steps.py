@@ -473,6 +473,7 @@ def card_verify_step(ctx: PipelineContext, source: ToolDataSource | None = None)
         check,
         raw_texts={r.id: " ".join(filter(None, (r.title, r.lead, r.text))) for r in raw},
         urls={r.id: r.url for r in raw if r.url},
+        feeds={r.id: r.source_id for r in raw},
     )
     ctx.artifacts["card_verify"] = {"ok": check.ok, "failures": [f.model_dump() for f in check.failures]}
     return ctx

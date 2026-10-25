@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from pydantic import ValidationError
+from rapidfuzz import fuzz
 
 from backend.agents.dossier import Dossier, DossierItem
 from backend.cards.analysis import build_analysis
@@ -77,6 +78,7 @@ HORIZON_TEXT = {
 }
 
 _TOKEN = re.compile(r"[\w%]+", re.UNICODE)
+NEAR_DUP = 90  # rapidfuzz ratio: «в РФ речи не идёт» и «в России речи не идёт» — одна цитата
 
 
 class CardAssemblyError(ValueError):
@@ -87,17 +89,57 @@ def _stems(text: str) -> set[str]:
     return {w[:5] for w in _TOKEN.findall(text.lower()) if len(w) > 1}
 
 
+_NUM = re.compile(r"\d+(?:[.,]\d+)?")
+# сокращения, после которых точка не конец предложения: «2027 г.», «млн.», «т. е.», «Э. Набиуллина»
+_ABBR_END = re.compile(
+    r"(?:(?<![\w])(?:гг?|т\.\s?[едпк]|т|млн|млрд|трлн|тыс|руб|долл|ст|им|см|др|пр|напр|ок|п|пп|стр|мес|нед"
+    r"|кв|ч|мин|б\.\s?п)|(?<![\w])[А-ЯЁA-Z])\.$",
+    re.IGNORECASE,
+)
+
+
+def _sentences(text: str) -> list[str]:
+    """Предложения без разрыва на сокращениях: следующий кусок со строчной буквы или цифры — продолжение."""
+    out: list[str] = []
+    for piece in (p.strip() for p in re.split(r"(?<=[.!?])\s+", text.strip())):
+        if not piece:
+            continue
+        if out and (piece[0].islower() or piece[0].isdigit() or _ABBR_END.search(out[-1])):
+            out[-1] = f"{out[-1]} {piece}"
+        else:
+            out.append(piece)
+    return out
+
+
 def _best_sentence(text: str, claim_text: str, limit: int = 300) -> str:
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s.strip()]
+    sentences = _sentences(text)
     if not sentences:
         return text[:limit]
     want = _stems(claim_text)
-    nums = set(re.findall(r"\d+(?:[.,]\d+)?", claim_text))
-    best = max(
-        sentences,
-        key=lambda s: len(_stems(s) & want) + 2 * len(nums & set(re.findall(r"\d+(?:[.,]\d+)?", s))),
-    )
-    return best[:limit]
+    nums = set(_NUM.findall(claim_text))
+
+    def found(s: str) -> set[str]:
+        return nums & set(_NUM.findall(s))
+
+    def score(k: int) -> int:
+        return len(_stems(sentences[k]) & want) + 2 * len(found(sentences[k]))
+
+    i = max(range(len(sentences)), key=score)
+    # чисел утверждения в лучшем предложении нет, а в тексте есть — расширяем цитату соседними предложениями
+    lo = hi = i
+    in_text = found(text)
+    while found(" ".join(sentences[lo : hi + 1])) < in_text and (lo > 0 or hi < len(sentences) - 1):
+        nxt = hi + 1 if hi < len(sentences) - 1 else hi
+        prv = lo - 1 if lo > 0 else lo
+        if len(" ".join(sentences[prv : nxt + 1])) > limit:
+            break
+        lo, hi = prv, nxt
+    return " ".join(sentences[lo : hi + 1])[:limit]
+
+
+def _norm_quote(q: str | None) -> str:
+    text = re.sub(r"[«»“”„\"'’.,;:!?…—–-]", " ", (q or "").casefold().replace("ё", "е"))
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _as_datetime(value: Any) -> datetime | None:
@@ -147,19 +189,32 @@ class _Builder:
         return list(dict.fromkeys(out))
 
     def evidence(self, item: DossierItem, claim_text: str) -> Evidence:
+        if item.kind == "story":
+            # сюжет — не документ: цитируем материал, на котором экстрактор построил «суть события»
+            head = self.dossier.get(f"fact:{item.id}:1")
+            if head is not None and head.data.get("source_id"):
+                return self.evidence(head, claim_text)
         d = item.data
         source_id = str(d.get("source_id") or item.id) if item.kind == "fact" else item.id
         quote = d.get("quote") or (item.text and _best_sentence(item.text, claim_text)) or item.title
         doc_date = _as_datetime(d.get("doc_date")) or item.published_at
-        return Evidence(source_id=source_id, quote=str(quote)[:400], url=d.get("url"), doc_date=doc_date)
+        # у новости в data.source_id — лента («prime»); у факта — id материала, ленту допишет проверка
+        feed = d.get("source_id") if item.kind == "news" else None
+        return Evidence(
+            source_id=source_id, quote=str(quote)[:400], url=d.get("url"), doc_date=doc_date, feed_id=feed
+        )
 
     def evidences(self, items: Sequence[DossierItem], claim_text: str) -> list[Evidence]:
-        seen: set[tuple[str, str | None]] = set()
-        res = []
+        """Одна цитата на документ и без почти одинаковых цитат (перепечатки одного текста)."""
+        res: list[Evidence] = []
         for it in items:
             ev = self.evidence(it, claim_text)
-            if (ev.source_id, ev.quote) not in seen:
-                seen.add((ev.source_id, ev.quote))
+            q = _norm_quote(ev.quote)
+            dup = any(
+                ev.source_id == r.source_id or (q and fuzz.ratio(q, _norm_quote(r.quote)) >= NEAR_DUP)
+                for r in res
+            )
+            if not dup:
                 res.append(ev)
         return res
 
