@@ -354,16 +354,19 @@ class PipelineCardStore:
         """Сюжет, который прислал пользователь («вставить ссылку или текст»): быстрая карточка сразу и в ленту
         пары из сессии — даже ниже порога ленты (пользователь сам попросил). Глубокий разбор — как у ленты,
         из `/feed` по очереди значимости. None — сюжета нет в источнике или нет профиля компании."""
+        # чтение источника и оценка — вне общей блокировки: /card, /trace и /feed других компаний не ждут
+        self._ensure(company_id, role, upgrade=False)
+        ctx = self._context(company_id)
+        story = next((s for s in self._src().stories() if s.id == story_id), None)
+        if ctx is None or story is None:
+            return None
+        if not story_visible(story, company_id, ctx.items):
+            return None  # чужая личная вставка
+        rel, card = self._score_story(ctx, role, story)
         with self._lock:
-            self._ensure(company_id, role, upgrade=False)
             feed = self._feeds.get((company_id, role))
-            ctx = self._context(company_id)
-            story = next((s for s in self._src().stories() if s.id == story_id), None)
-            if feed is None or ctx is None or story is None:
+            if feed is None:
                 return None
-            if not story_visible(story, company_id, ctx.items):
-                return None  # чужая личная вставка
-            rel, card = self._score_story(ctx, role, story)
             old = feed.cards.get(story_id)
             if old and story_id in feed.deep:
                 return self._cards.get(old, card)  # глубокая карточка уже есть — её и отдаём

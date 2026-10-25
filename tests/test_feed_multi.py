@@ -458,3 +458,32 @@ def test_new_version_during_background_run_picked_up_later(monkeypatch):
     assert feed.story_version[sid] == 2
     assert store._cards[feed.cards[sid]].event.title == "Новая версия сюжета"
     assert calls.count(sid) == 2  # новая версия разобрана заново
+
+
+def test_add_story_scores_without_global_lock():
+    """B10: /analyze считает ленту и карточку вне общей блокировки — /card и /feed других не ждут."""
+    import threading
+
+    store, _ = make_store(k=0)
+    store.list_cards(BORROWER, "cfo")
+    free: list[bool] = []
+    orig = store._score_story
+
+    def probe(ctx, role, story):
+        got: list[bool] = []
+
+        def other():
+            ok = store._lock.acquire(timeout=1)
+            got.append(ok)
+            if ok:
+                store._lock.release()
+
+        t = threading.Thread(target=other)
+        t.start()
+        t.join()
+        free.append(bool(got and got[0]))
+        return orig(ctx, role, story)
+
+    store._score_story = probe
+    assert store.add_story("s_2", BORROWER, "cfo") is not None
+    assert free and all(free)
