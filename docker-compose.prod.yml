@@ -3,6 +3,8 @@
 # Отличия от локального стенда: всё перезапускается само, наружу открыт только Caddy (80/443, TLS по домену
 # из SITE_ADDRESS), Redis с сохранением на диск, логи контейнеров ограничены по размеру.
 # Нужен Docker Compose ≥ 2.24 (тег !reset).
+# Лимиты памяти — под сервер 1 vCPU / 2 ГБ (+ своп 2 ГБ): при нехватке ядро перезапускает упёршийся контейнер,
+# а не базу. Замер на живой базе 26.10: API ≈ 275 МБ, склейка и факты в ingest ≈ 550 МБ в пике.
 
 x-logging: &logging
   driver: json-file
@@ -11,21 +13,25 @@ x-logging: &logging
 services:
   db:
     restart: unless-stopped
+    mem_limit: 400m
     logging: *logging
 
   redis:
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "96mb", "--maxmemory-policy", "allkeys-lru"]
+    mem_limit: 128m
     ports: !reset []
     volumes:
       - redisdata:/data
     logging: *logging
 
   init:
+    mem_limit: 900m
     logging: *logging
 
   backend:
     restart: unless-stopped
+    mem_limit: 600m
     environment:
       # true — только при HTTPS (SITE_ADDRESS — домен); на голом HTTP вход перестанет работать
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
@@ -38,16 +44,19 @@ services:
     logging: *logging
 
   ingest:
+    mem_limit: 800m
     logging: *logging
 
   frontend:
     restart: unless-stopped
+    mem_limit: 64m
     ports: !reset []
     logging: *logging
 
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
+    mem_limit: 96m
     ports:
       - "80:80"
       - "443:443"
