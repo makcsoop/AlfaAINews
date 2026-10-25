@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from collections.abc import Mapping
@@ -16,6 +17,8 @@ from backend.llm.cache import ResponseCache, cache_key, sha256_json
 from backend.llm.journal import Journal, JournalEntry
 from backend.llm.models import ALLOWED_PROVIDER_NAMES, ModelsConfig, ModelSpec, default_models_config
 from backend.llm.settings import LLMSettings
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -459,7 +462,7 @@ class LLMClient:
             if model_override is not None
             else self.config.model(step_spec.model)
         )
-        self.budget.check(step, priority)
+        self.config.group_of(step)  # неизвестный шаг — KeyError сразу, до кеша
 
         fallback = self.config.model(step_spec.fallback) if step_spec.fallback and allow_fallback else None
         prompt_hash = sha256_json(messages)
@@ -514,8 +517,9 @@ class LLMClient:
         def one_attempt(spec: ModelSpec, msgs: list[dict[str, str]], fb: bool) -> tuple[T | None, str, str]:
             """Один вызов модели. Возвращает (значение | None, сырой текст, причина сбоя)."""
             nonlocal attempts, tot_in, tot_out, tot_cost, last_base, tot_pcost
-            if attempts:  # повтор и запасная модель тоже тратят ₽: лимит проверяется перед каждой попыткой
-                self.budget.check(step, priority)
+            # лимит — перед каждой настоящей попыткой (и повтор, и запасная тратят ₽); попадание в кеш
+            # бесплатно и выше не ограничено бюджетом
+            self.budget.check(step, priority)
             attempts += 1
             req = CompletionRequest(
                 step=step, model=spec, messages=msgs, temperature=temperature,
@@ -542,7 +546,10 @@ class LLMClient:
             last_base = resp.base
             if pcost is not None:
                 tot_pcost = (tot_pcost or 0.0) + pcost
-            self.budget.record(step, dev, resp.tokens_in, resp.tokens_out, cost)
+            try:
+                self.budget.record(step, dev, resp.tokens_in, resp.tokens_out, cost)
+            except Exception as e:  # ответ уже оплачен: сбой учёта не должен его терять
+                logger.error("бюджет LLM: расход %s ₽ шага %s не записан: %r", cost, step, e)
             if not fixture and resp.key_spend_rub is not None:
                 self.budget.observe_key_spend(resp.key_spend_rub)
             tot_in += resp.tokens_in

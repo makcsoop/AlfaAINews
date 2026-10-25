@@ -175,3 +175,41 @@ def test_key_spend_from_provider_drives_modes():
     assert b.spent_rub() == 75.0
     s = b.summary()
     assert s["own_spent_rub"] == 1.0 and s["key_spend_rub"] == 75.0 and s["remaining_rub"] == 25.0
+
+
+class FlakyRedis(FakeRedis):
+    """Redis, который отваливается по флагу."""
+
+    def __init__(self):
+        super().__init__()
+        self.down = False
+
+    def _maybe(self):
+        if self.down:
+            import redis
+
+            raise redis.ConnectionError("redis down")
+
+    def hincrbyfloat(self, k, f, v):
+        self._maybe()
+        super().hincrbyfloat(k, f, v)
+
+    def hgetall(self, k):
+        self._maybe()
+        return super().hgetall(k)
+
+
+def test_redis_store_survives_outage_and_flushes_after():
+    """B8: сбой Redis после старта не роняет учёт; расход за время сбоя доезжает в Redis после восстановления."""
+    r = FlakyRedis()
+    store = RedisBudgetStore("redis://unused", client=r)
+    day = "2026-10-21"
+    store.incr(day, "rub", 1.0)
+    assert store.snapshot(day) == {"rub": 1.0}
+    r.down = True
+    store.incr(day, "rub", 2.0)  # не бросает
+    assert store.snapshot(day)["rub"] == 3.0  # последний известный снимок + расход за время сбоя
+    r.down = False
+    store.incr(day, "rub", 0.5)
+    assert store.snapshot(day) == {"rub": 3.5}
+    assert r.h[f"llm:budget:{day}"]["rub"] == 3.5

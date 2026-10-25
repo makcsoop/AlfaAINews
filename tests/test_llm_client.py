@@ -456,3 +456,28 @@ def test_fixture_mode_default_journal_stays_in_memory(monkeypatch, tmp_path):
     s = LLMSettings(_env_file=None, llm_mode="fixture", llm_journal_dir=str(tmp_path / "journal"))
     client = LLMClient(settings=s)
     assert client.journal._dir is None  # тесты не пишут в журнал расхода ключа
+
+
+def test_budget_store_failure_after_paid_call_keeps_answer(tmp_path):
+    """B8: учёт расхода упал после оплаченного ответа — ответ всё равно возвращается."""
+
+    class BrokenStore(InMemoryBudgetStore):
+        def incr(self, day, key, value):
+            raise ConnectionError("redis down")
+
+    t = StubTransport([GOOD])
+    c = make_client(tmp_path, t)
+    c.budget._store = BrokenStore()
+    assert call(c).value.verdict == "ok"
+
+
+def test_cache_hit_served_even_when_budget_exhausted(tmp_path):
+    """B12: попадание в кеш бесплатно — его отдаём и в save90, и при исчерпанном лимите."""
+    t = StubTransport([GOOD])
+    c = make_client(tmp_path, t, llm_daily_budget_rub=100.0)
+    first = call(c)
+    c.budget.record("card", "r3", 1, 1, 100.0)
+    again = call(c)
+    assert again.cached and again.value == first.value and len(t.requests) == 1
+    with pytest.raises(BudgetExceeded):  # без кеша — лимит работает
+        c.call(step="card", messages=[{"role": "user", "content": "другое"}], schema=Answer, trace_id="t2")

@@ -59,7 +59,11 @@ class InMemoryBudgetStore:
 
 
 class RedisBudgetStore:
-    """Хранилище в Redis: хеш `llm:budget:<день>` на каждые сутки, живёт 3 дня."""
+    """Хранилище в Redis: хеш `llm:budget:<день>` на каждые сутки, живёт 3 дня.
+
+    Redis отвалился после старта — учёт не падает: расход копится в памяти и доезжает в Redis при первой
+    удачной записи, а снимок — последний известный из Redis плюс накопленное (консервативно, не ноль).
+    """
 
     def __init__(self, url: str, prefix: str = "llm:budget", client: object | None = None) -> None:
         if client is None:
@@ -68,18 +72,47 @@ class RedisBudgetStore:
             client = redis.Redis.from_url(url, decode_responses=True)
         self._r = client
         self._prefix = prefix
+        self._pending = InMemoryBudgetStore()  # не записанное в Redis за время сбоя
+        self._last: dict[str, dict[str, float]] = {}  # последний удачный снимок по суткам
+        self._lock = threading.Lock()
 
     def _key(self, day: str) -> str:
         return f"{self._prefix}:{day}"
 
-    def incr(self, day: str, key: str, value: float) -> None:
+    def _write(self, day: str, key: str, value: float) -> None:
         k = self._key(day)
         self._r.hincrbyfloat(k, key, value)  # type: ignore[attr-defined]
         self._r.expire(k, 3 * 24 * 3600)  # type: ignore[attr-defined]
 
+    def _flush(self, day: str) -> None:
+        with self._lock:
+            pending = self._pending.snapshot(day)
+            if not pending:
+                return
+            for key, value in pending.items():
+                self._write(day, key, value)
+            self._pending._data.pop(day, None)
+        log.warning("бюджет LLM: Redis снова доступен, расход за время сбоя записан")
+
+    def incr(self, day: str, key: str, value: float) -> None:
+        try:
+            self._flush(day)
+            self._write(day, key, value)
+        except Exception as e:  # сбой Redis не должен ронять уже оплаченный вызов
+            log.warning("бюджет LLM: Redis недоступен (%s), расход копится в памяти", type(e).__name__)
+            self._pending.incr(day, key, value)
+
     def snapshot(self, day: str) -> dict[str, float]:
-        raw = self._r.hgetall(self._key(day))  # type: ignore[attr-defined]
-        return {str(k): float(v) for k, v in raw.items()}
+        try:
+            raw = self._r.hgetall(self._key(day))  # type: ignore[attr-defined]
+            snap = {str(k): float(v) for k, v in raw.items()}
+            self._last[day] = snap
+        except Exception as e:
+            log.warning("бюджет LLM: Redis недоступен (%s), последний известный снимок", type(e).__name__)
+            snap = dict(self._last.get(day, {}))
+        for key, value in self._pending.snapshot(day).items():
+            snap[key] = snap.get(key, 0.0) + value
+        return snap
 
 
 def shared_store(settings: LLMSettings) -> BudgetStore:
