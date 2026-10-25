@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = "0.2.1"  # 0.2.1: headline, ссылки у действий и условий, id триггера
+SCHEMA_VERSION = "0.2.2"  # 0.2.2: Evidence.feed_id; 0.2.1: headline, ссылки у действий и условий, id триггера
 # 0.2.0: контракты финальной архитектуры, факторы с направлением (У17), analysis
 
 # Метка утверждения в карточке: факт, позиция банка (только ЦМИ), мнение рынка (аналитики, вкл.
@@ -52,6 +52,9 @@ class Evidence(Schema):
     url: str | None = None
     doc_date: datetime | None = None
     verified: bool | None = Field(default=None, description="цитата найдена в тексте (rapidfuzz ≥ 90)")
+    feed_id: str | None = Field(
+        default=None, description="лента материала из config/sources.yaml ('cbr_press', 'prime'); у ЦМИ — нет"
+    )
 
 
 class NumberFact(Schema):

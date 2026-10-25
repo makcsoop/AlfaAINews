@@ -189,7 +189,9 @@ def extract_rules(story: Story, items: list[RawItem]) -> EventFacts:
         event_type=etype,
         status=st,
         summary=summary[:500],
-        summary_evidence=[Evidence(source_id=rep.id, quote=summary[:500], url=rep.url, verified=True)],
+        summary_evidence=[
+            Evidence(source_id=rep.id, quote=summary[:500], url=rep.url, verified=True, feed_id=rep.source_id)
+        ],
         participants=participants,
         entities=names,
         numbers=rules.numbers(text),
@@ -264,7 +266,10 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
     if quote_in_text(ans.get("summary_quote"), text) and ans.get("summary"):
         facts.summary = ans["summary"][:500]
         facts.summary_evidence = [
-            Evidence(source_id=rep.id, quote=ans["summary_quote"], url=rep.url, verified=True)
+            Evidence(
+                source_id=rep.id, quote=ans["summary_quote"], url=rep.url, verified=True,
+                feed_id=rep.source_id,
+            )
         ]
     elif ans.get("summary"):
         failures.append("summary: цитата не найдена в тексте")
@@ -306,7 +311,9 @@ def _apply_llm(facts: EventFacts, ans: dict, rep: RawItem, text: str) -> list[st
                     direction=c["direction"],
                     strength=min(1.0, max(0.0, float(c.get("strength") or 0.3))),
                     rationale=c["quote"][:300],
-                    evidence=[Evidence(source_id=rep.id, quote=c["quote"], verified=True)],
+                    evidence=[
+                        Evidence(source_id=rep.id, quote=c["quote"], verified=True, feed_id=rep.source_id)
+                    ],
                 )
             )
         elif c.get("channel"):

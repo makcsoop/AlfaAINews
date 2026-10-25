@@ -382,6 +382,19 @@
           "default": null,
           "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
           "title": "Verified"
+        },
+        "feed_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "лента материала из config/sources.yaml ('cbr_press', 'prime'); у ЦМИ — нет",
+          "title": "Feed Id"
         }
       },
       "required": [
@@ -832,5 +845,5 @@
   ],
   "title": "InsightCard",
   "type": "object",
-  "$comment": "schema 0.2.1"
+  "$comment": "schema 0.2.2"
 }

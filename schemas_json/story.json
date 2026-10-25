@@ -114,5 +114,5 @@
   ],
   "title": "Story",
   "type": "object",
-  "$comment": "schema 0.2.1"
+  "$comment": "schema 0.2.2"
 }

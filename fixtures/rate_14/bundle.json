@@ -104,6 +104,7 @@
       "summary_evidence": [
         {
           "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+          "feed_id": "cbr_press",
           "quote": "совет директоров Банка России принял решение сохранить ключевую ставку на уровне 14% годовых",
           "span": [
             24,
@@ -544,6 +545,7 @@
       "evidence": [
         {
           "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+          "feed_id": "cbr_press",
           "quote": "сохранить ключевую ставку на уровне 14% годовых",
           "verified": true
         }
@@ -651,6 +653,7 @@
           "evidence": [
             {
               "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+              "feed_id": "cbr_press",
               "quote": "сохранить ключевую ставку на уровне 14% годовых",
               "verified": true
             }
@@ -821,6 +824,7 @@
           "evidence": [
             {
               "source_id": "6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a",
+              "feed_id": "cbr_press",
               "quote": "сохранить ключевую ставку на уровне 14% годовых",
               "verified": true
             }
