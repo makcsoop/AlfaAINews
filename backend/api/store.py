@@ -17,6 +17,7 @@ from backend.agents.pipeline import PipelineContext, State
 from backend.agents.steps import AnalysisCache, get_tool_source, make_handlers, profile_v1, run_for_client
 from backend.agents.tools import FixtureDataSource, ToolDataSource
 from backend.fixtures import load_bundle
+from backend.ingest.private import story_visible
 from backend.llm import get_client
 from backend.ranking.config import FeedCfg, load_scoring
 from backend.ranking.fast_card import fast_card
@@ -314,6 +315,8 @@ class PipelineCardStore:
         for story in self._src().stories():
             if seen.get(story.id) == story.version:
                 continue
+            if not story_visible(story, company_id, ctx.items):
+                continue  # личная вставка другой компании (/analyze)
             try:
                 rel, card = self._score_story(ctx, role, story)
             except Exception as e:  # один плохой сюжет не ломает ленту
@@ -356,6 +359,8 @@ class PipelineCardStore:
             story = next((s for s in self._src().stories() if s.id == story_id), None)
             if feed is None or ctx is None or story is None:
                 return None
+            if not story_visible(story, company_id, ctx.items):
+                return None  # чужая личная вставка
             rel, card = self._score_story(ctx, role, story)
             old = feed.cards.get(story_id)
             if old and story_id in feed.deep:

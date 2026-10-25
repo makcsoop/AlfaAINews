@@ -1,13 +1,15 @@
 """«Вставить ссылку или текст» (блок В): материал пользователя → сюжет → факты. HTTP-обёртку делает Р3.
 
-    story_id = ingest_paste(conn, url="https://…", text=None, title=None)
+    story_id = ingest_paste(conn, url="https://…", text=None, title=None, company_id=session.company_id)
 
 1. Ссылка — скачиваем (только http/https и только публичные адреса: никаких запросов во внутреннюю сеть
    стенда), текст — trafilatura; вставленный текст берём как есть.
-2. Материал источника `user_paste`, уровень 3 (непроверенный), в `raw_items`. Отсев словарём не применяется:
-   пользователь прислал материал сам.
-3. Сюжет: присоединяем к сюжету окна 72 ч по тем же правилам, что склейка (средняя похожесть ≥ порога
-   и общая сущность), иначе — новый сюжет. Подтверждением материал пользователя не считается.
+2. Материал источника `user_paste`, уровень 3 (непроверенный), в `raw_items` с меткой владельца
+   (`owner:<company_id>`, см. `backend.ingest.private`). Отсев словарём не применяется: пользователь прислал
+   материал сам. Вставка личная: другим компаниям она не видна.
+3. Сюжет: ищем общий сюжет окна 72 ч по тем же правилам, что склейка (средняя похожесть ≥ порога и общая
+   сущность) — нашли, отдаём его, не меняя; иначе — новый личный сюжет из одной вставки. Подтверждением
+   материал пользователя не считается, в склейку (`rebuild`) вставки не идут.
 4. Факты — экстрактором; текст уходит в модель только блоком данных (`data_block`), поэтому команды
    внутри вставленного текста («игнорируй инструкции…») модель не выполняет.
 """
@@ -34,11 +36,12 @@ from backend.extract.extractor import extract
 from backend.extract.llm_port import JsonLLM
 from backend.extract.run import save_facts
 from backend.ingest.normalize import clean_text, content_hash, item_id, simhash
+from backend.ingest.private import PASTE_SOURCE_ID, has_paste, owner_tag
 from backend.ingest.store import insert_items
 from backend.schemas import RawItem, Story
 from backend.stories import cluster
 
-SOURCE_ID = "user_paste"
+SOURCE_ID = PASTE_SOURCE_ID
 TIER = 3
 MAX_TEXT = 50_000
 MAX_BYTES = 3_000_000
@@ -119,14 +122,15 @@ def fetch_page(url: str, transport: httpx.BaseTransport | None = None) -> tuple[
     return (meta.title if meta else None), text
 
 
-def make_item(*, url: str | None, text: str, title: str | None, now: datetime) -> RawItem:
+def make_item(*, url: str | None, text: str, title: str | None, now: datetime, owner: str) -> RawItem:
+    """Материал вставки компании `owner`: у каждой компании свой материал (id зависит от владельца)."""
     text = clean_text(text[:MAX_TEXT]) or ""
     if len(text) < 20:
         raise PasteError("слишком короткий текст")
     title = clean_text(title) or text.split("\n", 1)[0]
     if len(title) > TITLE_MAX:
         title = title[: TITLE_MAX - 1].rsplit(" ", 1)[0] + "…"
-    native = hashlib.sha1((url or text).encode()).hexdigest()[:16]
+    native = hashlib.sha1(f"{owner}\n{url or text}".encode()).hexdigest()[:16]
     return RawItem(
         id=item_id(SOURCE_ID, native),
         source_id=SOURCE_ID,
@@ -139,15 +143,24 @@ def make_item(*, url: str | None, text: str, title: str | None, now: datetime) -
         fetched_at=now,
         content_hash=content_hash(title, text),
         simhash=simhash(f"{title}\n{text}"),
+        source_tags=[owner_tag(owner)],
     )
 
 
 def _attach(conn: Connection, item: RawItem, now: datetime) -> Story:
-    """Сюжет окна 72 ч, к которому склейка присоединила бы материал, или новый сюжет."""
+    """Общий сюжет окна 72 ч, к которому склейка присоединила бы материал, или новый личный сюжет.
+
+    Вставка личная: в общий сюжет она не добавляется (его видят все компании), сюжет только находится,
+    чтобы показать клиенту карточку уже известного события. Личные сюжеты вставок в поиске не участвуют.
+    """
     since = now - cluster.WINDOW
     stories = [
-        Story.model_validate(d)
-        for d in conn.execute(select(m.stories.c.data).where(m.stories.c.last_seen >= since)).scalars()
+        st
+        for st in (
+            Story.model_validate(d)
+            for d in conn.execute(select(m.stories.c.data).where(m.stories.c.last_seen >= since)).scalars()
+        )
+        if not has_paste(st)
     ]
     keys = extract_entities(cluster._text(item)).keys()
     names = {k.split(":", 1)[1] for k in keys}
@@ -177,29 +190,16 @@ def _attach(conn: Connection, item: RawItem, now: datetime) -> Story:
             ok = (avg >= cluster.SIM_THRESHOLD and shared) or (unknown and avg >= cluster.SIM_NO_ENTITY)
             if ok and avg > best_sim:
                 best, best_sim = s, avg
-    if best is None:
-        story = cluster.to_story(cluster._Draft(items=[item], idx=[0], keys=set(keys)), {})
-        conn.execute(
-            insert(m.stories).values(
-                id=story.id, title=story.title, event_type=story.event_type, status=story.status,
-                corroboration=story.corroboration, first_seen=story.first_seen, last_seen=story.last_seen,
-                version=story.version, data=story.model_dump(mode="json"),
-            ).on_conflict_do_nothing()
-        )
-    else:
-        # материал пользователя не подтверждение: статус и число независимых источников не меняются
-        story = best.model_copy(
-            update={
-                "item_ids": [*best.item_ids, item.id],
-                "source_ids": sorted({*best.source_ids, SOURCE_ID}),
-                "last_seen": max(best.last_seen, item.published_at),
-            }
-        )
-        conn.execute(
-            update(m.stories)
-            .where(m.stories.c.id == story.id)
-            .values(last_seen=story.last_seen, data=story.model_dump(mode="json"))
-        )
+    if best is not None:
+        return best  # общий сюжет не меняем: ни материалов, ни источников, ни подтверждения
+    story = cluster.to_story(cluster._Draft(items=[item], idx=[0], keys=set(keys)), {})
+    conn.execute(
+        insert(m.stories).values(
+            id=story.id, title=story.title, event_type=story.event_type, status=story.status,
+            corroboration=story.corroboration, first_seen=story.first_seen, last_seen=story.last_seen,
+            version=story.version, data=story.model_dump(mode="json"),
+        ).on_conflict_do_nothing()
+    )
     conn.execute(update(m.raw_items).where(m.raw_items.c.id == item.id).values(story_id=story.id))
     return story
 
@@ -210,11 +210,16 @@ def ingest_paste(
     url: str | None,
     text: str | None,
     title: str | None,
+    company_id: str,
     llm: JsonLLM | None = None,
     fetch: Callable[[str], tuple[str | None, str | None]] = fetch_page,
     now: datetime | None = None,
 ) -> str:
-    """Материал пользователя → story_id. Повторная вставка того же материала даёт тот же сюжет."""
+    """Материал пользователя → story_id. Повторная вставка того же материала даёт тот же сюжет.
+
+    `company_id` — из сессии: вставка видна только этой компании (личный сюжет) или находит общий сюжет
+    того же события, не меняя его.
+    """
     now = now or datetime.now(UTC)
     if url:
         url = check_url(url)
@@ -223,12 +228,18 @@ def ingest_paste(
             title = title or page_title
     if not text:
         raise PasteError("нет ни текста, ни читаемой страницы")
-    item = make_item(url=url, text=text, title=title, now=now)
+    item = make_item(url=url, text=text, title=title, now=now, owner=company_id)
     known = conn.execute(select(m.raw_items.c.story_id).where(m.raw_items.c.id == item.id)).first()
     if known and known.story_id:
         return known.story_id
     insert_items(conn, [item])
     story = _attach(conn, item, now)
+    if item.id not in story.item_ids:  # нашли общий сюжет: факты извлекаем, только если их ещё нет
+        has_facts = conn.execute(
+            select(m.event_facts.c.story_id).where(m.event_facts.c.story_id == story.id)
+        ).first()
+        if has_facts:
+            return story.id
     rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(story.item_ids))).scalars()
     items = [RawItem.model_validate(r) for r in rows]
     save_facts(conn, extract(story, items, llm))

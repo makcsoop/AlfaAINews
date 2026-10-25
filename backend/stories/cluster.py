@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import insert
 from backend.db import models as m
 from backend.extract.entities import extract_entities
 from backend.ingest.normalize import hamming
+from backend.ingest.private import PASTE_SOURCE_ID
 from backend.ingest.registry import load_sources
 from backend.schemas import RawItem, Story
 
@@ -151,7 +152,7 @@ def decision_key(item: RawItem, title_only: bool = False) -> str | None:
     """Ключ решения ЦБ: дата по Москве и ставка из заголовка или лида; анонсы и ожидания — без ключа."""
     from backend.extract.rules import _ANNOUNCE, _DECIDED, _FOREIGN_CB
 
-    if item.source_id == "user_paste":
+    if item.source_id == PASTE_SOURCE_ID:
         return None  # дата вставки — время вставки, а не публикации решения
     for part in (item.title,) if title_only else (item.title, item.lead or ""):
         if not _RATE_DECISION.search(part) or _FOREIGN_CB.search(part) or _SUBORDINATE.search(part):
@@ -216,7 +217,8 @@ def merge_decisions(drafts: list[_Draft]) -> list[_Draft]:
 
 def to_story(d: _Draft, sources: dict) -> Story:
     first = d.items[0]
-    independent = {i.source_id for i in d.items if i.id not in d.copies}
+    # вставка пользователя (/analyze) — не независимый источник: подтверждать сюжет она не может
+    independent = {i.source_id for i in d.items if i.id not in d.copies and i.source_id != PASTE_SOURCE_ID}
     tiers = {s: sources[s].tier if s in sources else 3 for s in independent}
     official = any(sources[s].official for s in independent if s in sources)
     strong = sum(1 for t in tiers.values() if t <= 1)
@@ -225,7 +227,7 @@ def to_story(d: _Draft, sources: dict) -> Story:
         status = "confirmed"
     elif rumor:
         status = "rumor"
-    elif len(independent) == 1:
+    elif len(independent) <= 1:
         status = "single"
     else:
         status = "unconfirmed"
@@ -289,7 +291,8 @@ def rebuild(conn: Connection, hours: float = 72, now: datetime | None = None) ->
             m.raw_items.c.published_at >= since, m.raw_items.c.dropped_reason.is_(None)
         )
     ).scalars()
-    items = [RawItem.model_validate(r) for r in rows]
+    # вставки пользователей личные: в общие сюжеты не склеиваются, их сюжеты пересборка не трогает
+    items = [i for i in (RawItem.model_validate(r) for r in rows) if i.source_id != PASTE_SOURCE_ID]
     in_window = {i.id for i in items}
     sources = {s.id: s for s in load_sources()}
     drafts = cluster_items(items)
@@ -319,7 +322,11 @@ def rebuild(conn: Connection, hours: float = 72, now: datetime | None = None) ->
         iid for r in old_rows.values() for iid in r.data.get("item_ids", []) if iid not in in_window
     }
     outside_rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(outside_ids))).scalars()
-    outside = {it.id: it for it in (RawItem.model_validate(d) for d in outside_rows)}
+    outside = {
+        it.id: it
+        for it in (RawItem.model_validate(d) for d in outside_rows)
+        if it.source_id != PASTE_SOURCE_ID
+    }
 
     def kept_outside(sid: str) -> list[RawItem]:
         r = old_rows.get(sid)
@@ -349,7 +356,9 @@ def rebuild(conn: Connection, hours: float = 72, now: datetime | None = None) ->
             stories.append(s)
             new_ids.add(sid)
 
-    old_ids = set(conn.execute(select(m.stories.c.id).where(m.stories.c.first_seen >= since)).scalars())
+    recent = conn.execute(select(m.stories.c.id, m.stories.c.data).where(m.stories.c.first_seen >= since))
+    # личный сюжет вставки (только user_paste) склейка не ведёт и не удаляет
+    old_ids = {sid for sid, data in recent if (data or {}).get("source_ids") != [PASTE_SOURCE_ID]}
     old_ids |= touched
     # версию ведёт экстрактор (существенное изменение фактов) — пересборка её не сбрасывает
     versions = dict(

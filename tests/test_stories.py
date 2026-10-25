@@ -143,3 +143,15 @@ def test_decision_without_number_and_paste_join_the_decision():
         item(2, "interfax", "ЦБ сохранил ключевую ставку на уровне 14% годовых", minutes=3),
     ]
     assert len(cluster_items(items, entity_keys=[set(), set()])) == 1
+
+
+def test_user_paste_not_independent_source():
+    # B9: вставка пользователя не подтверждает сюжет
+    a = item(1, "interfax", "Северсталь запустила прокатный стан", "в Череповце за 50 млрд рублей")
+    b = item(2, "user_paste", "Северсталь запустила прокатный стан", "в Череповце за 50 млрд рублей", minutes=5)
+    drafts = cluster_items([a, b], entity_keys=[{"org:Северсталь"}] * 2)
+    assert len(drafts) == 1
+    story = to_story(drafts[0], SOURCES)
+    assert story.corroboration == 1 and story.status == "single"
+    only = to_story(cluster_items([b], entity_keys=[{"org:Северсталь"}])[0], SOURCES)
+    assert only.corroboration == 0 and only.status == "single"

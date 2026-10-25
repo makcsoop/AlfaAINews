@@ -350,7 +350,7 @@ def analyze(body: AnalyzeRequest, session: SessionDep, store: StoreDep, paster: 
     url = (body.url or "").strip() or None
     text = (body.text or "").strip() or None
     try:
-        story_id = paster(url, text, body.title)
+        story_id = paster(url, text, body.title, session.company_id)
     except PasteError as e:
         raise HTTPException(status_code=400, detail=str(e)[:200]) from None
     except Exception as e:

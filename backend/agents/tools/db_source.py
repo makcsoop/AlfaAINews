@@ -11,6 +11,7 @@ from typing import Any, TypeVar
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import Engine, text
 
+from backend.ingest.private import PASTE_SOURCE_ID
 from backend.schemas import (
     BankPosition,
     CompanyProfile,
@@ -61,11 +62,15 @@ class DbDataSource:
         return next((g for g in rows if g.company_id == company_id), None)
 
     def raw_items(self) -> list[RawItem]:
-        return self._load(
+        items = self._load(
             RawItem,
             "SELECT data FROM raw_items WHERE dropped_reason IS NULL ORDER BY published_at DESC LIMIT :n",
             n=self._raw_limit,
         )
+        # вставки пользователей — все, а не только свежие: по ним лента определяет владельца личного сюжета
+        seen = {i.id for i in items}
+        pastes = self._load(RawItem, "SELECT data FROM raw_items WHERE source_id = :sid", sid=PASTE_SOURCE_ID)
+        return items + [p for p in pastes if p.id not in seen]
 
     def bank_positions(self) -> list[BankPosition]:
         return self._load(BankPosition, "SELECT data FROM bank_positions")

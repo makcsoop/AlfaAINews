@@ -408,3 +408,31 @@ def test_degraded_story_not_retried_before_cooldown(monkeypatch):
     store.list_cards(BORROWER, "cfo")
     store.list_cards(BORROWER, "cfo")
     assert len(calls) == len(set(calls))
+
+
+# ---------- вставка пользователя личная (B3) ----------
+def _add_private_paste(src, owner: str, story_id: str = "st_paste_secret"):
+    from backend.ingest.paste import make_item
+
+    base = src._b["story"][0]
+    now = base.first_seen
+    item = make_item(url=None, text="КОНФИДЕНЦИАЛЬНО: наш план сделки M&A с Банком России, ставка 14%",
+                     title=None, now=now, owner=owner)
+    src._b["raw_item"].append(item)
+    src._b["story"].append(base.model_copy(update={
+        "id": story_id, "title": item.title, "item_ids": [item.id], "source_ids": ["user_paste"],
+        "corroboration": 0,
+    }))
+    return story_id
+
+
+def test_private_paste_visible_only_to_owner(monkeypatch):
+    monkeypatch.setenv("FEED_REFRESH_S", "0")
+    store, _ = make_store(k=0)
+    sid = _add_private_paste(store._explicit_source, BORROWER)
+    assert store.add_story(sid, BORROWER, "cfo") is not None
+    assert sid in {c.event.story_id for c in store.list_cards(BORROWER, "cfo")}
+    theirs = store.list_cards(DEPOSITOR, "treasurer")
+    assert sid not in {c.event.story_id for c in theirs}
+    assert not any("КОНФИДЕНЦИАЛЬНО" in c.event.title for c in theirs)
+    assert store.add_story(sid, DEPOSITOR, "treasurer") is None  # чужую вставку закрепить нельзя

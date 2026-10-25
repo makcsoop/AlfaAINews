@@ -19,6 +19,7 @@ from backend.agents.dossier import Dossier, DossierItem
 from backend.agents.planner import items_from_result, story_and_fact_items
 from backend.agents.tools import FixtureDataSource, ToolContext, ToolDataSource, ToolError, run_tool
 from backend.cards.verify import _norm_number, _Pool, extract_dates, extract_numbers
+from backend.ingest.private import has_paste
 from backend.llm import BudgetExceeded, LLMClient, LLMUnavailable, data_block
 from backend.schemas.common import BANK_SOURCE_PREFIX
 from backend.schemas.insight import InsightCard
@@ -290,7 +291,9 @@ def build_context(
     """Досье ответа и список вызванных инструментов. company_id — только из сессии."""
     story_id = card.event.story_id if card else None
     stories = source.stories()
-    story = next((s for s in stories if s.id == story_id), None) or (stories[0] if stories else None)
+    # без карточки — первый общий сюжет; личные вставки других компаний (/analyze) сюда не попадают
+    public = [s for s in stories if not has_paste(s)]
+    story = next((s for s in stories if s.id == story_id), None) or (public[0] if public else None)
     if story is None:
         raise ToolError("not_found", "сюжет не найден")
     profile = source.profile(session.company_id)

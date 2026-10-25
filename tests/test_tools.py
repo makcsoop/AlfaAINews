@@ -240,3 +240,23 @@ def test_tool_call_contains_hashes_not_raw_args(ctx):
     _, call3 = run_tool(ctx, "search_news", {"query": "другой"})
     assert call3.args != call.args
     assert out is not None
+
+
+def test_foreign_paste_hidden_from_tools():
+    """B3: вставка другой компании не видна поиску новостей и похожим случаям."""
+    from backend.ingest.paste import make_item
+
+    src = FixtureDataSource()
+    base = src._b["story"][0]
+    item = make_item(url=None, text="КОНФИДЕНЦИАЛЬНО: ключевая ставка 14% и наш план сделки",
+                     title=None, now=base.first_seen - timedelta(days=3), owner="U_DEMO_DEPOSITOR")
+    src._b["raw_item"].append(item)
+    src._b["story"].append(base.model_copy(update={
+        "id": "st_paste", "title": item.title, "item_ids": [item.id], "source_ids": ["user_paste"],
+        "first_seen": item.published_at, "last_seen": item.published_at, "event_type": "rate_decision",
+    }))
+    c = ctx_with(src)
+    out, _ = run_tool(c, "search_news", {"query": "КОНФИДЕНЦИАЛЬНО ключевая ставка 14%", "limit": 10})
+    assert all(h.source_id != "user_paste" for h in out.hits)
+    cases, _ = run_tool(c, "find_similar_cases", {"event_type": "rate_decision"})
+    assert all(cs.story_id != "st_paste" for cs in cases.cases)

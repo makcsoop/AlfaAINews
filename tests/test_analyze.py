@@ -34,7 +34,8 @@ def http(store, pasted, monkeypatch, tmp_path):
     monkeypatch.delenv("DEMO_COMPANIES", raising=False)
     monkeypatch.setenv("SESSION_SECRET", "test-secret")
 
-    def paster(url, text, title):
+    def paster(url, text, title, company_id):
+        assert company_id in (BORROWER, DEPOSITOR)  # владелец вставки — компания из сессии
         pasted.append((url, text, title))
         if url == "http://10.0.0.1/":
             raise PasteError("ссылка ведёт во внутреннюю сеть")

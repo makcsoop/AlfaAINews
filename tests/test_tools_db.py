@@ -32,14 +32,17 @@ def engine():
     b = load_bundle("rate_14")
     with eng.begin() as c:
         for table, (key, bkey) in TABLES.items():
-            extra = ", published_at TEXT, dropped_reason TEXT" if table == "raw_items" else ""
+            extra = ", source_id TEXT, published_at TEXT, dropped_reason TEXT" if table == "raw_items" else ""
             c.execute(text(f"CREATE TABLE {table} ({key} TEXT PRIMARY KEY{extra}, data TEXT)"))
             for obj in b[bkey]:
                 d = obj.model_dump(mode="json")
                 params = {"k": d[key], "d": json.dumps(d)}
                 if table == "raw_items":
-                    params.update(pa=d["published_at"], dr=d.get("dropped_reason"))
-                    sql = "INSERT INTO raw_items (id, published_at, dropped_reason, data) VALUES (:k, :pa, :dr, :d)"
+                    params.update(sid=d["source_id"], pa=d["published_at"], dr=d.get("dropped_reason"))
+                    sql = (
+                        "INSERT INTO raw_items (id, source_id, published_at, dropped_reason, data)"
+                        " VALUES (:k, :sid, :pa, :dr, :d)"
+                    )
                 else:
                     sql = f"INSERT INTO {table} ({key}, data) VALUES (:k, :d)"
                 c.execute(text(sql), params)
@@ -102,3 +105,22 @@ def test_factory_db_unavailable_falls_back(monkeypatch, caplog):
     finally:
         set_tool_source(None)
     assert "TOOL_SOURCE=db" in caplog.text
+
+
+def test_raw_items_limit_keeps_all_pastes(engine):
+    """Вставки пользователей отдаются и вне окна свежих: по ним лента находит владельца личного сюжета (B3)."""
+    from datetime import UTC, datetime
+
+    from backend.ingest.paste import make_item
+
+    old = make_item(url=None, text="Старая вставка про ключевую ставку 14% и кредиты", title=None,
+                    now=datetime(2020, 1, 1, tzinfo=UTC), owner=BORROWER)
+    d = old.model_dump(mode="json")
+    with engine.begin() as c:
+        c.execute(
+            text("INSERT INTO raw_items (id, source_id, published_at, dropped_reason, data)"
+                 " VALUES (:k, :sid, :pa, NULL, :d)"),
+            {"k": old.id, "sid": old.source_id, "pa": d["published_at"], "d": json.dumps(d)},
+        )
+    ids = [i.id for i in DbDataSource(engine, raw_items_limit=1).raw_items()]
+    assert old.id in ids and len(ids) == len(set(ids)) == 2

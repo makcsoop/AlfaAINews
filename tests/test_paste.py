@@ -31,16 +31,27 @@ def test_public_ip_url_allowed():
 
 
 def test_item_is_unverified_user_source():
-    it = make_item(url=None, text="Минфин разместил ОФЗ на 50 млрд рублей.\nСпрос превысил предложение.", title=None, now=NOW)
+    it = make_item(url=None, text="Минфин разместил ОФЗ на 50 млрд рублей.\nСпрос превысил предложение.", title=None, now=NOW, owner="U_A")
     assert it.source_id == "user_paste" and it.tier == 3 and it.dropped_reason is None
     assert it.title == "Минфин разместил ОФЗ на 50 млрд рублей."
-    same = make_item(url=None, text="Минфин разместил ОФЗ на 50 млрд рублей.\nСпрос превысил предложение.", title="x", now=NOW)
+    same = make_item(url=None, text="Минфин разместил ОФЗ на 50 млрд рублей.\nСпрос превысил предложение.", title="x", now=NOW, owner="U_A")
     assert same.id == it.id  # повторная вставка того же текста — тот же материал
+
+
+def test_paste_is_private_to_owner():
+    # B3: вставка личная — у каждой компании свой материал с меткой владельца
+    from backend.ingest.private import item_owner
+
+    text = "Минфин разместил ОФЗ на 50 млрд рублей.\nСпрос превысил предложение."
+    a = make_item(url=None, text=text, title=None, now=NOW, owner="U_A")
+    b = make_item(url=None, text=text, title=None, now=NOW, owner="U_B")
+    assert a.id != b.id
+    assert item_owner(a) == "U_A" and item_owner(b) == "U_B"
 
 
 def test_too_short_text_rejected():
     with pytest.raises(PasteError):
-        make_item(url=None, text="коротко", title=None, now=NOW)
+        make_item(url=None, text="коротко", title=None, now=NOW, owner="U_A")
 
 
 @pytest.fixture

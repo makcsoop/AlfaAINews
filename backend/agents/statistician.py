@@ -17,6 +17,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sqlalchemy import Connection, or_, select, text, true
 
 from backend.db import models as m
+from backend.ingest.private import PASTE_SOURCE_ID
 from backend.ingest.registry import analyst_sources
 from backend.schemas import Story
 
@@ -129,6 +130,7 @@ def similar_cases(conn: Connection, story: Story, event_type: str | None, k: int
             m.raw_items.c.published_at >= story.first_seen - timedelta(days=ARCHIVE_DAYS),
             m.raw_items.c.dropped_reason.is_(None),
             m.raw_items.c.source_id.not_in(analysts),
+            m.raw_items.c.source_id != PASTE_SOURCE_ID,  # вставки пользователей личные
         )
     ).all()
     if not rows:

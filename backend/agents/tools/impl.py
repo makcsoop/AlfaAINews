@@ -26,6 +26,7 @@ from backend.agents.tools.models import (
     SimilarCase,
     SimilarCasesOut,
 )
+from backend.ingest.private import has_paste, item_visible
 
 SNIPPET_LEN = 300
 _WORD = re.compile(r"[\w%]+", re.UNICODE)
@@ -120,6 +121,8 @@ def search_news(ctx: ToolContext, inp: SearchNewsIn) -> SearchNewsOut:
     for it in ctx.source.raw_items():
         if it.dropped_reason or (it.id not in story_items and it.published_at > news_until):
             continue
+        if it.id not in story_items and not item_visible(it, ctx.company_id):
+            continue  # личная вставка другой компании (/analyze)
         in_story = it.id in story_items
         score = _overlap(inp.query, f"{it.title} {it.lead or ''} {it.text or ''}")
         if score == 0 and not in_story:
@@ -225,6 +228,8 @@ def find_similar_cases(ctx: ToolContext, inp: FindSimilarCasesIn) -> SimilarCase
     for st in ctx.source.stories():
         if st.id == ctx.story_id or st.event_type != inp.event_type:
             continue
+        if has_paste(st):
+            continue  # сюжеты вставок личные: похожими случаями для других не служат
         if st.first_seen >= ctx.story_published_at:
             continue
         f = facts.get(st.id)
