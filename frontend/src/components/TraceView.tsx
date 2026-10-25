@@ -4,6 +4,8 @@ import type { Api } from "../api";
 import { errorText } from "../api";
 import type { RunTrace, TraceCost } from "../types";
 import { TOOL_NAMES } from "./AskPanel";
+import { SkeletonRows } from "./bits";
+import { IconAlert, IconBack, IconCheck, IconCross, IconShield } from "./icons";
 
 // Состояния автомата Р3 (backend/agents/pipeline.py) в порядке конвейера
 const STATES: Record<string, string> = {
@@ -74,134 +76,185 @@ export function TraceView({ api, traceId, onBack }: { api: Api; traceId: string;
     api.traceCost(traceId).then(setCost, () => setCost(null));
   }, [api, traceId]);
 
+  const back = (
+    <div className="crumbs">
+      <button className="btn btn-ghost" onClick={onBack}>
+        <IconBack size={18} />
+        Назад
+      </button>
+    </div>
+  );
   if (error) {
     return (
-      <div className="card">
-        <button className="link back" onClick={onBack}>← Назад</button>
-        <div className="error">{error}</div>
+      <div className="view">
+        {back}
+        <div className="error" role="alert">
+          <IconAlert size={18} />
+          {error}
+        </div>
       </div>
     );
   }
-  if (!trace) return <div className="muted">Загрузка журнала…</div>;
+  if (!trace)
+    return (
+      <div className="view">
+        {back}
+        <div className="block">
+          <SkeletonRows />
+        </div>
+      </div>
+    );
   const { phases: ph, notes } = phases(trace.steps);
   const seconds = trace.finished_at
     ? Math.round((Date.parse(trace.finished_at) - Date.parse(trace.started_at)) / 1000)
     : null;
+  const hasCost = !!cost && Object.keys(cost.cost_by_step).length > 0;
 
   return (
-    <article className="card">
-      <button className="link back" onClick={onBack}>← Назад</button>
-      <header className="card-head">
-        <h1>Как получена карточка</h1>
-        <div className="stats">
-          <Stat label="Стоимость разбора" value={rub(cost?.cost_rub ?? trace.cost_rub)} />
-          <Stat label="Кругов проверки" value={String(trace.verify_rounds)} />
-          <Stat label="Вызовов моделей" value={String(trace.llm_calls.length)} />
-          {seconds !== null && <Stat label="Время" value={`${seconds} с`} />}
+    <div className="view">
+      {back}
+      <header className="trace-head">
+        <div>
+          <span className="eyebrow">
+            <b>Прозрачность</b> / как работали агенты
+          </span>
+          <h1>Как получена карточка</h1>
+          <div className="stats">
+            <Stat label="Стоимость разбора" value={rub(cost?.cost_rub ?? trace.cost_rub)} />
+            <Stat label="Кругов проверки" value={String(trace.verify_rounds)} />
+            <Stat label="Вызовов моделей" value={String(trace.llm_calls.length)} />
+            {seconds !== null && <Stat label="Время" value={`${seconds} с`} />}
+          </div>
         </div>
       </header>
 
-      <section className="sec">
-        <h2>Шаги</h2>
-        <ol className="steps">
-          {ph.map((p, i) => (
-            <li key={`${p.state}-${i}`} className={p.ok ? "" : "step-bad"}>
-              <span>{STATES[p.state] ?? p.state}</span>
-              {!p.ok && <span className="check check-no"> · не прошёл</span>}
-            </li>
-          ))}
-        </ol>
-        {notes.length > 0 && (
-          <details>
-            <summary className="muted small">Служебные пометки ({notes.length})</summary>
-            <ul className="mono small">{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
-          </details>
-        )}
-      </section>
-
-      <section className="sec">
-        <h2>Что вернул критик</h2>
-        {trace.verify_failures.length === 0 ? (
-          <p className="muted">
-            {trace.verify_rounds > 1
-              ? `Замечания исправлены за ${trace.verify_rounds} круга, итоговая проверка пройдена.`
-              : "Проверка пройдена с первого раза: числа, даты, ссылки и метки совпали с источниками."}
-          </p>
-        ) : (
-          <ul className="reasons">{trace.verify_failures.map((f, i) => <li key={i}>{f}</li>)}</ul>
-        )}
-      </section>
-
-      {cost && Object.keys(cost.cost_by_step).length > 0 && (
-        <section className="sec">
-          <h2>Модели и расходы по шагам</h2>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Шаг</th><th>Вызовов</th><th>Токены (вход / выход)</th><th>₽</th></tr></thead>
-              <tbody>
-                {Object.entries(cost.cost_by_step).map(([step, c]) => (
-                  <tr key={step}>
-                    <td>{PURPOSES[step] ?? step}</td>
-                    <td className="num">{c.calls}</td>
-                    <td className="num">{c.tokens_in.toLocaleString("ru-RU")} / {c.tokens_out.toLocaleString("ru-RU")}</td>
-                    <td className="num">{rub(c.cost_rub)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="trace-body">
+        <section className="art-sec">
+          <div className="sec-head">
+            <h2>Шаги</h2>
           </div>
-          {cost.budget?.daily_limit_rub != null && (
-            <p className="muted small">
-              Бюджет дня: потрачено {rub(cost.budget.spent_rub ?? 0)} из {rub(cost.budget.daily_limit_rub)}
-              {cost.budget.mode && cost.budget.mode !== "normal" ? ` · режим: ${cost.budget.mode}` : ""}
-            </p>
-          )}
-        </section>
-      )}
-
-      {trace.llm_calls.length > 0 && (
-        <section className="sec">
-          <h2>Вызовы моделей</h2>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Время</th><th>Шаг</th><th>Модель</th><th>Токены</th><th>₽</th></tr></thead>
-              <tbody>
-                {trace.llm_calls.map((c, i) => (
-                  <tr key={i}>
-                    <td>{time(c.at)}</td>
-                    <td>{PURPOSES[c.purpose] ?? c.purpose}{c.cached ? " (кеш)" : ""}</td>
-                    <td className="mono small">{c.model}</td>
-                    <td className="num">{(c.tokens_in + c.tokens_out).toLocaleString("ru-RU")}</td>
-                    <td className="num">{rub(c.cost_rub)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {trace.tool_calls.length > 0 && (
-        <section className="sec">
-          <h2>Инструменты (только чтение)</h2>
-          <ul className="tools">
-            {trace.tool_calls.map((t, i) => (
-              <li key={i}>
-                <span className={t.ok ? "check check-ok" : "check check-no"}>{t.ok ? "✓" : "✗"}</span>{" "}
-                {TOOL_NAMES[t.tool] ?? t.tool} <span className="muted small">· {time(t.at)}</span>
+          {ph.length === 0 && <p className="muted">Переходы автомата в трассе не записаны — ниже служебные пометки.</p>}
+          <ol className="timeline">
+            {ph.map((p, i) => (
+              <li key={`${p.state}-${i}`} className={p.ok ? "" : "step-bad"}>
+                <span className="step-dot">{p.ok ? <IconCheck /> : <IconCross />}</span>
+                <span className="step-name">
+                  {STATES[p.state] ?? p.state}
+                  {!p.ok && <span className="check check-no"> · не прошёл</span>}
+                </span>
               </li>
             ))}
-          </ul>
+          </ol>
+          {notes.length > 0 && (
+            <details>
+              <summary className="muted small">Служебные пометки ({notes.length})</summary>
+              <ul className="mono small">{notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+            </details>
+          )}
         </section>
-      )}
-    </article>
+
+        <section className="art-sec">
+          <div className="sec-head">
+            <h2>Что вернул критик</h2>
+          </div>
+          {trace.verify_failures.length === 0 ? (
+            <div className="callout">
+              <IconShield size={20} />
+              <span>
+                {trace.verify_rounds > 1
+                  ? `Замечания исправлены за ${trace.verify_rounds} круга, итоговая проверка пройдена.`
+                  : "Проверка пройдена с первого раза: числа, даты, ссылки и метки совпали с источниками."}
+              </span>
+            </div>
+          ) : (
+            <ul className="reasons">
+              {trace.verify_failures.map((f, i) => (
+                <li key={i} className="tone-neutral">
+                  <IconAlert size={18} />
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {hasCost && cost && (
+          <section className="art-sec">
+            <div className="sec-head">
+              <h2>Модели и расходы по шагам</h2>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Шаг</th><th className="num">Вызовов</th><th className="num">Токены (вход / выход)</th><th className="num">₽</th></tr></thead>
+                <tbody>
+                  {Object.entries(cost.cost_by_step).map(([step, c]) => (
+                    <tr key={step}>
+                      <td>{PURPOSES[step] ?? step}</td>
+                      <td className="num">{c.calls}</td>
+                      <td className="num">{c.tokens_in.toLocaleString("ru-RU")} / {c.tokens_out.toLocaleString("ru-RU")}</td>
+                      <td className="num">{rub(c.cost_rub)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {cost.budget?.daily_limit_rub != null && (
+              <p className="muted small">
+                Бюджет дня: потрачено {rub(cost.budget.spent_rub ?? 0)} из {rub(cost.budget.daily_limit_rub)}
+                {cost.budget.mode && cost.budget.mode !== "normal" ? ` · режим: ${cost.budget.mode}` : ""}
+              </p>
+            )}
+          </section>
+        )}
+
+        {trace.llm_calls.length > 0 && (
+          <section className="art-sec">
+            <div className="sec-head">
+              <h2>Вызовы моделей</h2>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Время</th><th>Шаг</th><th>Модель</th><th className="num">Токены</th><th className="num">₽</th></tr></thead>
+                <tbody>
+                  {trace.llm_calls.map((c, i) => (
+                    <tr key={i}>
+                      <td className="muted nowrap">{time(c.at)}</td>
+                      <td>{PURPOSES[c.purpose] ?? c.purpose}{c.cached ? " (кеш)" : ""}</td>
+                      <td className="mono">{c.model}</td>
+                      <td className="num">{(c.tokens_in + c.tokens_out).toLocaleString("ru-RU")}</td>
+                      <td className="num">{rub(c.cost_rub)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {trace.tool_calls.length > 0 && (
+          <section className="art-sec">
+            <div className="sec-head">
+              <h2>Инструменты (только чтение)</h2>
+            </div>
+            <ul className="tools">
+              {trace.tool_calls.map((t, i) => (
+                <li key={i}>
+                  <span className={t.ok ? "check check-ok" : "check check-no"}>{t.ok ? <IconCheck /> : <IconCross />}</span>
+                  {TOOL_NAMES[t.tool] ?? t.tool} <span className="muted small">· {time(t.at)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </div>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="stat">
-      <div className="muted small">{label}</div>
+      <span className="muted small">{label}</span>
       <strong>{value}</strong>
     </div>
   );

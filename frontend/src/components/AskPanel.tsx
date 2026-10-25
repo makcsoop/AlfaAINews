@@ -3,7 +3,9 @@ import { useState } from "react";
 import type { Api } from "../api";
 import { errorText } from "../api";
 import { CLAIM_LABELS, sourceLabel } from "../labels";
+import { completeStep } from "../onboarding";
 import type { AskResponse, InsightCard } from "../types";
+import { IconAlert, IconSend, IconSpark } from "./icons";
 
 const SUGGESTED = ["Что по нашим контрагентам-логистам?", "Как это скажется на нашем долге?", "Что делать казначейству?"];
 
@@ -35,6 +37,7 @@ export function AskPanel({ api, card }: { api: Api; card: InsightCard }) {
     if (!text || busy) return;
     setBusy(true);
     setQuestion("");
+    completeStep("ask");
     setHistory((h) => [...h, { question: text }]);
     try {
       const reply = await api.ask(text, card.card_id);
@@ -55,33 +58,65 @@ export function AskPanel({ api, card }: { api: Api; card: InsightCard }) {
   };
 
   return (
-    <section className="ask" aria-label="Вопрос по карточке">
-      <h2>Спросить о событии</h2>
-      {history.map((x, i) => (
-        <div key={i} className="qa">
-          <div className="qa-q">{x.question}</div>
-          {!x.reply && !x.error && <div className="muted small">Ищем ответ в материалах разбора…</div>}
-          {x.error && <div className="error">{x.error}</div>}
-          {x.reply && (
-            <div className={`qa-a qa-${x.reply.status}`}>
-              {x.reply.status === "refused" && <div className="qa-note">Отказ: отвечаем только по данным вашей компании.</div>}
-              {x.reply.status === "degraded" && <div className="qa-note">Ответ неполный: часть данных сейчас недоступна.</div>}
-              <p>{x.reply.answer}</p>
-              {x.reply.refs.length > 0 && (
-                <div className="muted small">Основано на: {[...new Set(x.reply.refs.map(refLabel))].join(" · ")}</div>
+    <section className="ask" id="sec-ask" aria-labelledby="ask-title">
+      <div className="ask-head">
+        <span className="ai-badge">
+          <IconSpark size={22} />
+        </span>
+        <div>
+          <h2 id="ask-title">Спросить о событии</h2>
+          <p>AI отвечает только по материалам разбора и данным вашей компании и показывает, на что опирался.</p>
+        </div>
+      </div>
+      {history.length > 0 && (
+        <div className="thread" aria-live="polite">
+          {history.map((x, i) => (
+            <div key={i} className="qa">
+              <div className="qa-q">{x.question}</div>
+              {!x.reply && !x.error && (
+                <div className="typing">
+                  <i />
+                  <i />
+                  <i />
+                  <span>Ищем ответ в материалах разбора…</span>
+                </div>
               )}
-              {x.reply.tools_used.length > 0 && (
-                <div className="muted small">
-                  Смотрели: {x.reply.tools_used.map((t) => TOOL_NAMES[t] ?? t).join(", ")}
+              {x.error && (
+                <div className="error" role="alert">
+                  <IconAlert size={18} />
+                  {x.error}
+                </div>
+              )}
+              {x.reply && (
+                <div className={`qa-a qa-${x.reply.status}`}>
+                  {x.reply.status === "refused" && (
+                    <div className="qa-note">
+                      <IconAlert size={16} />
+                      Отказ: отвечаем только по данным вашей компании.
+                    </div>
+                  )}
+                  {x.reply.status === "degraded" && (
+                    <div className="qa-note">
+                      <IconAlert size={16} />
+                      Ответ неполный: часть данных сейчас недоступна.
+                    </div>
+                  )}
+                  <p>{x.reply.answer}</p>
+                  {x.reply.refs.length > 0 && (
+                    <div className="qa-meta">Основано на: {[...new Set(x.reply.refs.map(refLabel))].join(" · ")}</div>
+                  )}
+                  {x.reply.tools_used.length > 0 && (
+                    <div className="qa-meta">Смотрели: {x.reply.tools_used.map((t) => TOOL_NAMES[t] ?? t).join(", ")}</div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          ))}
         </div>
-      ))}
+      )}
       <div className="suggest">
         {SUGGESTED.map((s) => (
-          <button key={s} className="chip chip-btn" onClick={() => ask(s)} disabled={busy}>
+          <button key={s} className="chip-btn" onClick={() => ask(s)} disabled={busy}>
             {s}
           </button>
         ))}
@@ -100,8 +135,8 @@ export function AskPanel({ api, card }: { api: Api; card: InsightCard }) {
           maxLength={2000}
           aria-label="Вопрос"
         />
-        <button className="btn btn-primary" disabled={busy || !question.trim()}>
-          Спросить
+        <button className="btn send" disabled={busy || !question.trim()} aria-label="Спросить" title="Спросить">
+          <IconSend />
         </button>
       </form>
     </section>

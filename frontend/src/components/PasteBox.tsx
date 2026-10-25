@@ -2,7 +2,9 @@
 import { useState } from "react";
 import type { Api } from "../api";
 import { HttpError, errorText } from "../api";
+import { completeStep } from "../onboarding";
 import type { InsightCard } from "../types";
+import { IconAlert, IconLink } from "./icons";
 
 export function PasteBox({ api, onCard }: { api: Api; onCard: (c: InsightCard) => void }) {
   const [value, setValue] = useState("");
@@ -14,6 +16,7 @@ export function PasteBox({ api, onCard }: { api: Api; onCard: (c: InsightCard) =
     if (!v || busy) return;
     setBusy(true);
     setError(null);
+    completeStep("paste");
     const isUrl = /^https?:\/\/\S+$/i.test(v);
     try {
       onCard(await api.analyze(isUrl ? { url: v } : { text: v }));
@@ -31,24 +34,34 @@ export function PasteBox({ api, onCard }: { api: Api; onCard: (c: InsightCard) =
   };
 
   return (
-    <form
-      className="paste"
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-    >
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="Вставьте ссылку на новость или её текст — разберём для вашей компании"
-        aria-label="Ссылка или текст новости"
-        disabled={busy}
-      />
-      <button className="btn btn-primary" disabled={busy || !value.trim()}>
-        {busy ? "Разбираем…" : "Разобрать"}
-      </button>
-      {error && <div className="error small">{error}</div>}
-    </form>
+    <section className="paste-block" id="paste" aria-labelledby="paste-title">
+      <h2 id="paste-title">Проверить свою новость</h2>
+      <p>Вставьте ссылку или текст — покажем, что событие значит для вашей компании и что с ним делать.</p>
+      <form
+        className="paste"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <IconLink />
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="https://… или текст новости"
+          aria-label="Ссылка или текст новости"
+          disabled={busy}
+        />
+        <button className="btn btn-primary" disabled={busy || !value.trim()}>
+          {busy ? "Разбираем…" : "Разобрать"}
+        </button>
+      </form>
+      {error && (
+        <div className="error small" role="alert">
+          <IconAlert size={18} />
+          {error}
+        </div>
+      )}
+    </section>
   );
 }

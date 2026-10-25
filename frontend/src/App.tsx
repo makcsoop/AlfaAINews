@@ -2,39 +2,57 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Api } from "./api";
 import { errorText, getApi } from "./api";
 import { DEMO_CLIENTS } from "./clients";
+import { Brief } from "./components/Brief";
 import { CardView } from "./components/CardView";
+import { FaqPage } from "./components/Faq";
 import { Feed } from "./components/Feed";
+import type { FeedFilter } from "./components/Feed";
 import { Home } from "./components/Home";
+import { HowItWorks } from "./components/HowItWorks";
+import { SkeletonRows, whyFeatures } from "./components/bits";
+import { IconAlert } from "./components/icons";
 import { Layout } from "./components/Layout";
+import type { Place } from "./components/Layout";
 import { PasteBox } from "./components/PasteBox";
+import { ProductHeader } from "./components/ProductNav";
+import type { Tab } from "./components/ProductNav";
 import { RunsView } from "./components/RunsView";
+import { ToastProvider, useToast } from "./components/Toast";
+import { Tour } from "./components/Tour";
 import { TraceView } from "./components/TraceView";
-import { DEMO_ROLES } from "./labels";
+import { DEMO_ROLES, ROLE_LABELS } from "./labels";
+import { go } from "./nav";
+import { completeStep, setToured, useOnboarding } from "./onboarding";
+import type { Theme } from "./theme";
+import { applyTheme, savedTheme, systemTheme } from "./theme";
 import type { InsightCard, UserRole } from "./types";
 
 // Догрузка глубоких разборов: перечитывать ленту раз в 10 с, не больше 6 раз за открытие ленты
 const FEED_REFRESH_MS = 10000;
 const FEED_REFRESH_TRIES = 6;
+// «Не про нас» из ленты уходит в отклик не сразу: пока висит уведомление, событие можно вернуть
+const HIDE_UNDO_MS = 5000;
 
 type View =
   | { name: "home" }
-  | { name: "feed" }
+  | { name: "brief" }
+  | { name: "feed"; filter?: FeedFilter; channel?: string }
   | { name: "runs" }
+  | { name: "how" }
+  | { name: "faq" }
   | { name: "card"; id: string }
   | { name: "trace"; id: string };
 
 function parseHash(): View {
   const h = location.hash.replace(/^#\/?/, "");
+  if (h === "brief" || h === "runs" || h === "how" || h === "faq") return { name: h };
   if (h === "feed") return { name: "feed" };
-  if (h === "runs") return { name: "runs" };
+  if (h.startsWith("feed/p/")) return { name: "feed", filter: h.slice(7) as FeedFilter };
+  if (h.startsWith("feed/ch/")) return { name: "feed", channel: decodeURIComponent(h.slice(8)) };
   if (h.startsWith("card/")) return { name: "card", id: decodeURIComponent(h.slice(5)) };
   if (h.startsWith("trace/")) return { name: "trace", id: decodeURIComponent(h.slice(6)) };
   return { name: "home" };
 }
-
-const go = (path: string) => {
-  location.hash = `#/${path}`;
-};
 
 // Просмотренные карточки — удобство одного браузера, хранилище может быть недоступно
 function readSeen(key: string): Set<string> {
@@ -66,6 +84,14 @@ function readChoice(): { companyId: string; role: UserRole } {
 }
 
 export function App() {
+  return (
+    <ToastProvider>
+      <Shell />
+    </ToastProvider>
+  );
+}
+
+function Shell() {
   const [api, setApi] = useState<Api | null>(null);
   const [companyId, setCompanyId] = useState(() => readChoice().companyId);
   const [role, setRole] = useState<UserRole>(() => readChoice().role);
@@ -75,14 +101,44 @@ export function App() {
   const seenKey = `seen:${companyId}:${role}`;
   const [seen, setSeen] = useState<Set<string>>(() => readSeen(seenKey));
   const [opened, setOpened] = useState<InsightCard | null>(null);
+  // скрытые «не про нас» — до смены компании или роли
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
   // входы идут строго по очереди: при быстром переключении последней ставится cookie выбранной пары
   const loginChain = useRef<Promise<unknown>>(Promise.resolve());
+  // пара «компания:роль», под которой уже выполнен вход: журнал и трасса до входа получили бы 401
+  const [signedIn, setSignedIn] = useState<string | null>(null);
+  const [theme, setTheme] = useState<Theme>(() => savedTheme() ?? systemTheme());
+  const [tour, setTour] = useState(false);
+  const onboarding = useOnboarding();
+  const toast = useToast();
 
   useEffect(() => {
     getApi().then(setApi);
-    const onHash = () => setView(parseHash());
+    const onHash = () => {
+      setView(parseHash());
+      window.scrollTo(0, 0);
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Тема без явного выбора следует за системой
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!media) return;
+    const follow = () => {
+      if (!savedTheme()) setTheme(systemTheme());
+    };
+    media.addEventListener("change", follow);
+    return () => media.removeEventListener("change", follow);
+  }, []);
+  useEffect(() => applyTheme(theme, false), [theme]);
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => {
+      const next = t === "dark" ? "light" : "dark";
+      applyTheme(next, true);
+      return next;
+    });
   }, []);
 
   // Смена компании или роли — новая сессия и новая лента
@@ -96,10 +152,18 @@ export function App() {
     }
     setCards(null);
     setError(null);
+    setSignedIn(null);
+    setHidden(new Set());
     setSeen(readSeen(seenKey));
     // устаревший выбор (уже переключили дальше) не входит и не читает ленту
     const run = loginChain.current.then(() =>
-      alive ? api.login(companyId, role).then(() => (alive ? api.feed() : null)) : null,
+      alive
+        ? api.login(companyId, role).then(() => {
+            if (!alive) return null;
+            setSignedIn(`${companyId}:${role}`);
+            return api.feed();
+          })
+        : null,
     );
     loginChain.current = run.catch(() => undefined);
     run
@@ -154,9 +218,10 @@ export function App() {
     };
   }, [api, hasFast, companyId, role]);
 
+  const visible = useMemo(() => cards && cards.filter((c) => !hidden.has(c.card_id)), [cards, hidden]);
   const unseen = useMemo(
-    () => new Set((cards ?? []).map((c) => c.card_id).filter((id) => !seen.has(id))),
-    [cards, seen],
+    () => new Set((visible ?? []).map((c) => c.card_id).filter((id) => !seen.has(id))),
+    [visible, seen],
   );
 
   const onCompany = useCallback((id: string) => {
@@ -178,37 +243,133 @@ export function App() {
     },
     [open],
   );
+  // «Не про нас» из ленты: событие пропадает сразу, отклик уходит, если его не вернули за HIDE_UNDO_MS
+  const hide = useCallback(
+    (c: InsightCard) => {
+      if (!api) return;
+      setHidden((h) => new Set(h).add(c.card_id));
+      const timer = setTimeout(() => {
+        api.feedback(c.card_id, "not_relevant").catch(() => {});
+        completeStep("rate");
+      }, HIDE_UNDO_MS);
+      toast(
+        "Скрыли событие — похожие будем показывать реже",
+        {
+          label: "Вернуть",
+          onClick: () => {
+            clearTimeout(timer);
+            setHidden((h) => {
+              const next = new Set(h);
+              next.delete(c.card_id);
+              return next;
+            });
+          },
+        },
+        HIDE_UNDO_MS,
+      );
+    },
+    [api, toast],
+  );
   const titles = useMemo(() => new Map((cards ?? []).map((c) => [c.event.story_id, c.event.title])), [cards]);
 
+  // Знакомство показываем при первом входе в сервис
+  const inProduct = view.name !== "home";
+  useEffect(() => {
+    if (inProduct && !onboarding.toured) setTour(true);
+  }, [inProduct, onboarding.toured]);
+  const closeTour = useCallback(() => {
+    setTour(false);
+    setToured();
+  }, []);
+
+  const client = DEMO_CLIENTS.find((c) => c.companyId === companyId);
+  const tab: Tab | null =
+    view.name === "brief" || view.name === "feed" || view.name === "runs" || view.name === "how" || view.name === "faq"
+      ? view.name
+      : null;
+  const place: Place | null = view.name === "home" ? "" : view.name === "brief" || view.name === "feed" || view.name === "faq" ? view.name : null;
+  const paste = api && <PasteBox api={api} onCard={onAnalyzed} />;
+
   return (
-    <Layout companyId={companyId} role={role} onCompany={onCompany} onRole={onRole} onHome={() => go("")}>
+    <Layout
+      companyId={companyId}
+      role={role}
+      section={view.name === "home" ? "home" : "insights"}
+      place={place}
+      unseen={unseen.size}
+      theme={theme}
+      onCompany={onCompany}
+      onRole={onRole}
+      onGo={(p: Place) => go(p)}
+      onTheme={toggleTheme}
+    >
       {error && (
         <div className="error" role="alert">
+          <IconAlert size={18} />
           {error}
         </div>
       )}
-      {view.name === "home" && api && <PasteBox api={api} onCard={onAnalyzed} />}
-      {view.name === "home" && <Home cards={cards} unseen={unseen} onOpen={open} onFeed={() => go("feed")} />}
-      {(view.name === "feed" || view.name === "runs") && (
-        <nav className="tabs" aria-label="Разделы">
-          <button className={view.name === "feed" ? "tab on" : "tab"} onClick={() => go("feed")}>
-            Лента
-          </button>
-          <button className={view.name === "runs" ? "tab on" : "tab"} onClick={() => go("runs")}>
-            Журнал разборов
-          </button>
-        </nav>
+      {view.name === "home" && <Home cards={visible} unseen={unseen} onOpen={open} onTour={() => setTour(true)} />}
+      {tab && (
+        <div className="view" key={tab}>
+          <ProductHeader
+            tab={tab}
+            company={client?.title ?? companyId}
+            role={ROLE_LABELS[role] ?? role}
+            count={visible?.length ?? null}
+            fresh={unseen.size}
+          />
+          {view.name === "brief" && <Brief cards={visible} unseen={unseen} onOpen={open} onHide={hide} paste={paste} />}
+          {view.name === "feed" && (
+            <Feed
+              key={`${view.filter ?? ""}:${view.channel ?? ""}`}
+              cards={visible}
+              unseen={unseen}
+              onOpen={open}
+              onHide={hide}
+              initial={view.filter}
+              channel={view.channel}
+            />
+          )}
+          {view.name === "runs" &&
+            api &&
+            (signedIn ? (
+              <RunsView key={signedIn} api={api} onTrace={openTrace} titles={titles} />
+            ) : (
+              <div className="block">
+                <SkeletonRows />
+              </div>
+            ))}
+          {view.name === "how" && <HowItWorks onTour={() => setTour(true)} />}
+          {view.name === "faq" && <FaqPage />}
+        </div>
       )}
-      {view.name === "feed" && api && <PasteBox api={api} onCard={onAnalyzed} />}
-      {view.name === "feed" && <Feed cards={cards} unseen={unseen} onOpen={open} />}
-      {view.name === "runs" && api && <RunsView api={api} onTrace={openTrace} titles={titles} />}
-      {view.name === "trace" && api && <TraceView api={api} traceId={view.id} onBack={() => history.back()} />}
+      {view.name === "trace" &&
+        api &&
+        (signedIn ? (
+          <TraceView key={signedIn} api={api} traceId={view.id} onBack={() => history.back()} />
+        ) : (
+          <div className="block">
+            <SkeletonRows />
+          </div>
+        ))}
       {view.name === "card" &&
         (opened?.card_id === view.id && api ? (
-          <CardView card={opened} api={api} onBack={() => go("feed")} onTrace={openTrace} />
+          <CardView key={opened.card_id} card={opened} api={api} onBack={() => go("feed")} onTrace={openTrace} />
         ) : (
-          !error && <div className="muted">Загрузка…</div>
+          !error && (
+            <div className="block">
+              <SkeletonRows rows={4} />
+            </div>
+          )
         ))}
+      {tour && (
+        <Tour
+          company={client?.title ?? "ваша компания"}
+          features={visible?.[0] ? whyFeatures(visible[0]) : []}
+          onClose={closeTour}
+        />
+      )}
     </Layout>
   );
 }
