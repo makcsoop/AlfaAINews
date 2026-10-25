@@ -120,13 +120,16 @@ def evaluate(pairs: Sequence[PairEval], *, k: int = K, cfg: ScoringConfig | None
 def interpret(m: Metrics) -> list[str]:
     """3–5 строк: где скоринг лучше бейзлайна, где хуже и почему (для отчёта и слайда)."""
 
+    def f(x: float) -> str:  # 0,81 — запятая, как в остальном тексте
+        return f"{x:.2f}".replace(".", ",")
+
     def cmp(a: float, b: float) -> str:
         return "лучше" if a > b + 0.02 else "хуже" if a < b - 0.02 else "на уровне"
 
     out = [
         f"В целом скоринг {cmp(m.ndcg, m.ndcg_baseline)} бейзлайна по nDCG@{K} "
-        f"({m.ndcg:.2f} против {m.ndcg_baseline:.2f}) и {cmp(m.precision, m.precision_baseline)} "
-        f"по precision@{K} ({m.precision:.2f} против {m.precision_baseline:.2f}): "
+        f"({f(m.ndcg)} против {f(m.ndcg_baseline)}) и {cmp(m.precision, m.precision_baseline)} "
+        f"по precision@{K} ({f(m.precision)} против {f(m.precision_baseline)}): "
         "бейзлайн не знает клиента — свежая новость "
         "для всех одна, скоринг поднимает то, что задевает продукты, отрасль и контрагентов компании."
     ]
@@ -134,8 +137,8 @@ def interpret(m: Metrics) -> list[str]:
         if covered in m.by_coverage:
             n, nd, nd_b, _, _ = m.by_coverage[covered]
             out.append(
-                f"В {name} отраслях ({n} клиентов) — {cmp(nd, nd_b)} бейзлайна: "
-                f"nDCG {nd:.2f} против {nd_b:.2f}."
+                f"В {name} отраслях (клиентов: {n}) — {cmp(nd, nd_b)} бейзлайна: "
+                f"nDCG {f(nd)} против {f(nd_b)}."
             )
     missed = m.misses_covered[0] + m.misses_uncovered[0]
     total = m.misses_covered[1] + m.misses_uncovered[1]

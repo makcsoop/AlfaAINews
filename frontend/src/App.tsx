@@ -6,6 +6,7 @@ import { CardView } from "./components/CardView";
 import { Feed } from "./components/Feed";
 import { Home } from "./components/Home";
 import { Layout } from "./components/Layout";
+import { MetricsView } from "./components/MetricsView";
 import { PasteBox } from "./components/PasteBox";
 import { RunsView } from "./components/RunsView";
 import { TraceView } from "./components/TraceView";
@@ -20,6 +21,7 @@ type View =
   | { name: "home" }
   | { name: "feed" }
   | { name: "runs" }
+  | { name: "metrics" }
   | { name: "card"; id: string }
   | { name: "trace"; id: string };
 
@@ -27,6 +29,7 @@ function parseHash(): View {
   const h = location.hash.replace(/^#\/?/, "");
   if (h === "feed") return { name: "feed" };
   if (h === "runs") return { name: "runs" };
+  if (h === "metrics") return { name: "metrics" };
   if (h.startsWith("card/")) return { name: "card", id: decodeURIComponent(h.slice(5)) };
   if (h.startsWith("trace/")) return { name: "trace", id: decodeURIComponent(h.slice(6)) };
   return { name: "home" };
@@ -179,7 +182,7 @@ export function App() {
       )}
       {view.name === "home" && api && <PasteBox api={api} scope={`${companyId}:${role}`} onCard={onAnalyzed} />}
       {view.name === "home" && <Home cards={cards} unseen={unseen} onOpen={open} onFeed={() => go("feed")} />}
-      {(view.name === "feed" || view.name === "runs") && (
+      {(view.name === "feed" || view.name === "runs" || view.name === "metrics") && (
         <nav className="tabs" aria-label="Разделы">
           <button className={view.name === "feed" ? "tab on" : "tab"} onClick={() => go("feed")}>
             Лента
@@ -187,10 +190,14 @@ export function App() {
           <button className={view.name === "runs" ? "tab on" : "tab"} onClick={() => go("runs")}>
             Журнал разборов
           </button>
+          <button className={view.name === "metrics" ? "tab on" : "tab"} onClick={() => go("metrics")}>
+            Метрики
+          </button>
         </nav>
       )}
       {view.name === "feed" && api && <PasteBox api={api} scope={`${companyId}:${role}`} onCard={onAnalyzed} />}
       {view.name === "feed" && <Feed cards={cards} unseen={unseen} onOpen={open} />}
+      {view.name === "metrics" && api && <MetricsView api={api} />}
       {view.name === "runs" && api && <RunsView api={api} onTrace={openTrace} titles={titles} />}
       {view.name === "trace" && api && <TraceView api={api} traceId={view.id} onBack={() => history.back()} />}
       {view.name === "card" &&
