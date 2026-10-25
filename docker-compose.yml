@@ -39,10 +39,11 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
 
-  # Однократно: таблицы, расширение vector, CSV кейса и фикстура «ставка 14%»
+  # Однократно: таблицы, расширение vector, CSV кейса и демо-компании из фикстуры «ставка 14%».
+  # Сам сюжет фикстуры (11.09) в живую базу не заливается; стенд на фикстуре: --load-fixtures
   init:
     <<: *app
-    command: ["python", "-m", "backend.db.init", "--load-case", "--load-fixtures"]
+    command: ["python", "-m", "backend.db.init", "--load-case", "--load-demo-profiles"]
     restart: "no"
 
   backend:

@@ -4,7 +4,8 @@
     python -m backend.db.demo                 # на любой машине: база для ленты по шагам ниже
     python -m backend.db.demo --llm           # то же, но факты подтверждённых сюжетов типирует модель
 
-Шаги: таблицы → CSV кейса (или синтетика) → граф платежей → профили (Р2) → снимок знаний
+Шаги: таблицы → демо-компании фикстуры (сам сюжет фикстуры — только `--with-fixture`) → CSV кейса
+(или синтетика) → граф платежей → профили (Р2) → снимок знаний
 (страницы ЦМИ, реестр позиций, консенсус, архив материалов) → один проход сбора → склейка за 72 ч → факты.
 Реестр ЦМИ и консенсус берутся из снимка — без повторного OCR и без вызовов Kimi; если снимка нет,
 консенсус строится заново по архиву каналов (`--llm`), а реестр — `python -m backend.bank.positions`.
@@ -89,7 +90,9 @@ def _step(name: str, fn):
     return res
 
 
-def _case() -> dict:
+def _case(with_fixture: bool = False) -> dict:
+    """Таблицы, демо-компании из фикстуры и CSV кейса. Сюжет фикстуры (11.09) — только с `with_fixture`:
+    в живой ленте синтетическому сюжету не место."""
     from backend.config import get_settings
     from backend.db.case_loader import load_case_dir
     from backend.db.init import SYNTHETIC_DIR
@@ -100,7 +103,7 @@ def _case() -> dict:
         case_dir = SYNTHETIC_DIR
     with get_engine().begin() as conn:
         create_schema(conn)
-        load_fixtures(conn)
+        load_fixtures(conn, profiles_only=not with_fixture)
         return load_case_dir(conn, case_dir)
 
 
@@ -165,6 +168,10 @@ def main() -> None:
     ap.add_argument("--days", type=int, default=ARCHIVE_DAYS, help="глубина архива материалов в снимке")
     ap.add_argument("--llm", action="store_true", help="факты и консенсус моделью (LLM_MODE=live)")
     ap.add_argument("--skip-ingest", action="store_true", help="без свежего сбора — только снимок")
+    ap.add_argument(
+        "--with-fixture", action="store_true",
+        help="залить и сюжет фикстуры «ставка 14%%» (11.09); по умолчанию — только демо-компании",
+    )
     args = ap.parse_args()
 
     if args.export:
@@ -172,7 +179,7 @@ def main() -> None:
             log.info("снимок в %s: %s", SNAPSHOT, export(conn, args.days))
         return
 
-    _step("таблицы, фикстура, CSV кейса", _case)
+    _step("таблицы, демо-компании, CSV кейса", lambda: _case(args.with_fixture))
     _step("граф платежей", refresh_graph_if_stale)
     _step("профили клиентов (Р2)", _profiles)
 

@@ -435,3 +435,77 @@ def test_service_endpoints_hide_foreign_pastes(engine, monkeypatch, tmp_path):
     ids = {s["id"] for s in stories}
     assert mine in ids and theirs not in ids
     assert own.status_code == 200 and foreign.status_code == 404 and foreign_bm.status_code == 404
+
+
+FIXTURE_STORY = "st_2026-09-11_keyrate"
+
+
+def _fixture_rows(conn) -> dict[str, int]:
+    q = {
+        "stories": "SELECT count(*) FROM stories WHERE id = :s",
+        "event_facts": "SELECT count(*) FROM event_facts WHERE story_id = :s",
+        "raw_items": "SELECT count(*) FROM raw_items WHERE id IN "
+        "('6d3f1b2a9c0e4f7a8b1c2d3e4f5a6b7c8d9e0f1a', '0f9e8d7c6b5a49382716a5b4c3d2e1f0a9b8c7d6')",
+        "insight_cards": "SELECT count(*) FROM insight_cards WHERE story_id = :s",
+        "profiles": "SELECT count(*) FROM company_profiles WHERE company_id LIKE 'U_DEMO_%'",
+    }
+    return {k: conn.execute(text(v), {"s": FIXTURE_STORY}).scalar() for k, v in q.items()}
+
+
+def test_drop_fixtures_removes_story_keeps_demo_profiles(engine, tmp_path):
+    from backend.db.init import drop_fixtures
+
+    with engine.begin() as conn:
+        load_fixtures(conn)
+        assert _fixture_rows(conn)["stories"] == 1
+        out = drop_fixtures(conn, snapshot_dir=tmp_path)  # снимка нет — позиции фикстуры тоже уходят
+        rows = _fixture_rows(conn)
+        positions = conn.execute(text("SELECT count(*) FROM bank_positions WHERE id LIKE '%#c%'")).scalar()
+    assert rows == {"stories": 0, "event_facts": 0, "raw_items": 0, "insight_cards": 0, "profiles": 2}
+    assert out["stories"] == 1 and positions == 0
+
+
+def test_drop_fixtures_keeps_positions_from_snapshot(engine, tmp_path):
+    import gzip
+    import json
+
+    from backend.db.init import drop_fixtures
+
+    with gzip.open(tmp_path / "bank_positions.json.gz", "wt", encoding="utf-8") as f:
+        json.dump([{"id": "cmi_keyrate_2026_09#p1#c1"}], f)
+    with engine.begin() as conn:
+        load_fixtures(conn)
+        drop_fixtures(conn, snapshot_dir=tmp_path)
+        ids = conn.execute(text("SELECT id FROM bank_positions WHERE id LIKE '%#c%'")).scalars().all()
+    assert ids == ["cmi_keyrate_2026_09#p1#c1"]
+
+
+def test_profiles_only_fixture_load(engine, tmp_path):
+    from backend.db.init import drop_fixtures
+
+    with engine.begin() as conn:
+        drop_fixtures(conn, snapshot_dir=tmp_path)
+        conn.execute(text("DELETE FROM company_profiles WHERE company_id LIKE 'U_DEMO_%'"))
+        load_fixtures(conn, profiles_only=True)
+        rows = _fixture_rows(conn)
+    assert rows["stories"] == 0 and rows["raw_items"] == 0 and rows["profiles"] == 2
+
+
+def test_demo_does_not_load_fixture_story(engine, case_dir, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import backend.config
+    from backend.db import demo
+    from backend.db.init import drop_fixtures
+
+    with engine.begin() as conn:
+        drop_fixtures(conn, snapshot_dir=tmp_path)
+    monkeypatch.setattr(demo, "get_engine", lambda: engine)
+    monkeypatch.setattr(backend.config, "get_settings", lambda: SimpleNamespace(case_data_dir=str(case_dir)))
+    demo._case()
+    with engine.connect() as conn:
+        rows = _fixture_rows(conn)
+    assert rows["stories"] == 0 and rows["profiles"] == 2  # демо-компании для входа есть, сюжета фикстуры нет
+    demo._case(with_fixture=True)
+    with engine.connect() as conn:
+        assert _fixture_rows(conn)["stories"] == 1
