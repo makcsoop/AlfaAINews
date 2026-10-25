@@ -3,6 +3,7 @@
 import bundle from "@fixtures/rate_14/bundle.json";
 import type { Api } from "../api";
 import { HttpError } from "../api";
+import { DEMO_CLIENTS } from "../clients";
 import type { Claim, DeepRun, InsightCard, RunTrace, SessionInfo, TraceCost } from "../types";
 
 // В фикстуре поля со значением по умолчанию опущены, а API (Pydantic) отдаёт их всегда — дополняем
@@ -67,6 +68,23 @@ function requireSession(): SessionInfo {
 }
 
 export const mockApi: Api = {
+  async demoCompanies() {
+    return delay(
+      DEMO_CLIENTS.map((c) => ({
+        company_id: c.companyId,
+        kind: "demo" as const,
+        title: c.title,
+        description: c.subtitle,
+        archetype: null,
+        default_role: c.defaultRole,
+        okved_code: "",
+        okved_name: "",
+        region: "",
+        fea_countries: [],
+        products: { loans: false, leasing: false, deposits: false, guarantees: false, factoring: false, fea: false },
+      })),
+    );
+  },
   async login(companyId, role) {
     if (!demoCompanies.has(companyId)) throw new HttpError(403, "Эта компания недоступна для демо-входа");
     session = { company_id: companyId, role, user_id: `demo_${companyId}_${role}` };

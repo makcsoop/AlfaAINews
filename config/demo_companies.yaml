@@ -1,0 +1,122 @@
+# Витрина демо-входа: компании, которые можно выбрать в интерфейсе (GET /demo/companies, POST /session).
+# Вход в любую другую компанию — 403 и запись в журнал безопасности. DEMO_COMPANIES в окружении
+# полностью заменяет этот список (для стенда и тестов).
+#
+# Здесь только витринные поля: id, понятное название, ОКВЭД с расшифровкой, регион, флаги продуктов.
+# Сумм платежей, контрагентов, связей через физлиц, точной выручки и отметок о негативе здесь нет и быть
+# не должно — это проверяет tests/test_demo_companies.py.
+#
+# kind: case — реальная компания из CSV кейса (профиль строится из данных, лента — из базы новостей,
+#       TOOL_SOURCE=db); demo — архетип фикстуры rate_14 (работает и без базы).
+# Подбор: 6 компаний разметки eval (data/labeling/labels-oct-60.csv) — разные отрасли и продукты,
+# полнота профиля 1.0 — и U_57706 (крупный топливный оптовик с депозитами).
+# archetype — ближайший архетип из config/archetypes.yaml (для подписи и роли по умолчанию).
+
+companies:
+  - company_id: U_DEMO_BORROWER
+    kind: demo
+    title: Оптовик с кредитами и ВЭД
+    description: демо-архетип · ставка и курс юаня
+    archetype: wholesale_borrower
+    default_role: cfo
+    okved_code: "46.69"
+    okved_name: Торговля оптовая прочими машинами и оборудованием
+    region: Москва
+    fea_countries: [Китай]
+    products: {loans: true, leasing: true, deposits: false, guarantees: false, factoring: false, fea: true}
+
+  - company_id: U_DEMO_DEPOSITOR
+    kind: demo
+    title: Экспортёр с депозитами
+    description: демо-архетип · ставка и крепкий рубль
+    archetype: exporter_depositor
+    default_role: treasurer
+    okved_code: "24.10"
+    okved_name: Производство чугуна, стали и ферросплавов
+    region: Свердловская область
+    fea_countries: [Турция]
+    products: {loans: false, leasing: false, deposits: true, guarantees: true, factoring: false, fea: true}
+
+  - company_id: U_26030
+    kind: case
+    title: Топливный оптовик, Уфа
+    description: опт моторным топливом · кредиты и лизинг · ВЭД
+    archetype: wholesale_borrower
+    default_role: cfo
+    okved_code: "46.71.2"
+    okved_name: Торговля оптовая моторным топливом, включая авиационный бензин
+    region: Республика Башкортостан
+    fea_countries: [Грузия, Латвия, Польша]
+    products: {loans: true, leasing: true, deposits: false, guarantees: false, factoring: false, fea: true}
+
+  - company_id: U_57706
+    kind: case
+    title: Топливный оптовик, Москва
+    description: опт топливом · депозиты, лизинг, гарантии · ВЭД
+    archetype: wholesale_borrower
+    default_role: treasurer
+    okved_code: "46.71"
+    okved_name: Торговля оптовая твердым, жидким и газообразным топливом и подобными продуктами
+    region: Москва
+    fea_countries: [Киргизия, Казахстан]
+    products: {loans: false, leasing: true, deposits: true, guarantees: true, factoring: false, fea: true}
+
+  - company_id: U_37491
+    kind: case
+    title: Химическое производство-экспортёр
+    description: неорганическая химия · депозиты и гарантии · ВЭД
+    archetype: exporter_depositor
+    default_role: treasurer
+    okved_code: "20.13"
+    okved_name: Производство прочих основных неорганических химических веществ
+    region: Москва
+    fea_countries: [Китай, Грузия, Узбекистан]
+    products: {loans: false, leasing: false, deposits: true, guarantees: true, factoring: false, fea: true}
+
+  - company_id: U_27638
+    kind: case
+    title: Нефтесервис, Самара
+    description: услуги нефтедобычи · кредиты и лизинг
+    archetype: oilfield_services
+    default_role: cfo
+    okved_code: "09.10.9"
+    okved_name: Предоставление прочих услуг в области добычи нефти и природного газа
+    region: Самарская область
+    fea_countries: []
+    products: {loans: true, leasing: true, deposits: false, guarantees: false, factoring: false, fea: false}
+
+  - company_id: U_9250
+    kind: case
+    title: Инженерное строительство, Иркутск
+    description: инфраструктурная стройка · кредиты, лизинг, гарантии
+    archetype: construction
+    default_role: cfo
+    okved_code: "42.99"
+    okved_name: Строительство прочих инженерных сооружений, не включенных в другие группировки
+    region: Иркутская область
+    fea_countries: [Китай]
+    products: {loans: true, leasing: true, deposits: false, guarantees: true, factoring: false, fea: true}
+
+  - company_id: U_3263
+    kind: case
+    title: Грузовые автоперевозки, Татарстан
+    description: автоперевозки грузов · лизинг · ВЭД
+    archetype: logistics
+    default_role: chief_accountant
+    okved_code: "49.41.2"
+    okved_name: Перевозка грузов неспециализированными автотранспортными средствами
+    region: Республика Татарстан
+    fea_countries: [Азербайджан]
+    products: {loans: false, leasing: true, deposits: false, guarantees: false, factoring: false, fea: true}
+
+  - company_id: U_1595
+    kind: case
+    title: Розничная сеть одежды
+    description: розница одежды · кредиты и лизинг · импорт
+    archetype: null
+    default_role: cfo
+    okved_code: "47.71"
+    okved_name: Торговля розничная одеждой в специализированных магазинах
+    region: Москва
+    fea_countries: [Турция, Нидерланды]
+    products: {loans: true, leasing: true, deposits: false, guarantees: false, factoring: false, fea: true}

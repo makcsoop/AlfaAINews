@@ -133,13 +133,19 @@ def current_session(
 
 
 def demo_companies() -> list[str]:
-    """Компании, в которые разрешён демо-вход: env DEMO_COMPANIES или компании из фикстуры rate_14."""
+    """Компании, в которые разрешён демо-вход.
+
+    env DEMO_COMPANIES — полностью заменяет список (стенд, тесты). Иначе — компании фикстуры rate_14
+    и витрина config/demo_companies.yaml (реальные компании кейса и демо-архетипы). Любая другая — 403."""
     env = os.environ.get("DEMO_COMPANIES")
     if env:
         return [c.strip() for c in env.split(",") if c.strip()]
+    from backend.api.showcase import showcase
     from backend.fixtures import load_bundle
 
     seen: dict[str, None] = {}
     for card in load_bundle("rate_14")["insight_card"]:
         seen[card.company_id] = None  # type: ignore[attr-defined]
+    for c in showcase():
+        seen[c.company_id] = None
     return list(seen)

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Api } from "./api";
 import { errorText, getApi } from "./api";
-import { DEMO_CLIENTS } from "./clients";
+import { DEMO_CLIENTS, fromShowcase } from "./clients";
+import type { DemoClient } from "./clients";
 import { Brief } from "./components/Brief";
 import { CardView } from "./components/CardView";
 import { FaqPage } from "./components/Faq";
@@ -76,7 +77,8 @@ function readChoice(): { companyId: string; role: UserRole } {
   const fallback = { companyId: DEMO_CLIENTS[0].companyId, role: DEMO_CLIENTS[0].defaultRole };
   try {
     const saved = JSON.parse(localStorage.getItem("demo:choice") ?? "null");
-    const known = DEMO_CLIENTS.some((c) => c.companyId === saved?.companyId);
+    // список витрины приходит с API позже: здесь принимаем любой сохранённый id, неизвестный сбросится после загрузки
+    const known = typeof saved?.companyId === "string" && saved.companyId.length > 0;
     return known && DEMO_ROLES.includes(saved.role) ? saved : fallback;
   } catch {
     return fallback;
@@ -93,6 +95,7 @@ export function App() {
 
 function Shell() {
   const [api, setApi] = useState<Api | null>(null);
+  const [clients, setClients] = useState<DemoClient[]>(DEMO_CLIENTS);
   const [companyId, setCompanyId] = useState(() => readChoice().companyId);
   const [role, setRole] = useState<UserRole>(() => readChoice().role);
   const [cards, setCards] = useState<InsightCard[] | null>(null);
@@ -140,6 +143,28 @@ function Shell() {
       return next;
     });
   }, []);
+
+  // Список клиентов — из витрины API; не загрузился — запасной список
+  useEffect(() => {
+    if (!api) return;
+    let alive = true;
+    api.demoCompanies().then(
+      (list) => {
+        if (!alive || !list.length) return;
+        const next = fromShowcase(list);
+        setClients(next);
+        setCompanyId((cur) => {
+          if (next.some((c) => c.companyId === cur)) return cur;
+          setRole(next[0].defaultRole);
+          return next[0].companyId;
+        });
+      },
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [api]);
 
   // Смена компании или роли — новая сессия и новая лента
   useEffect(() => {
@@ -224,11 +249,14 @@ function Shell() {
     [visible, seen],
   );
 
-  const onCompany = useCallback((id: string) => {
-    setCompanyId(id);
-    setRole(DEMO_CLIENTS.find((c) => c.companyId === id)?.defaultRole ?? "cfo");
-    go("");
-  }, []);
+  const onCompany = useCallback(
+    (id: string) => {
+      setCompanyId(id);
+      setRole(clients.find((c) => c.companyId === id)?.defaultRole ?? "cfo");
+      go("");
+    },
+    [clients],
+  );
   const onRole = useCallback((r: UserRole) => {
     setRole(r);
     if (parseHash().name === "card") go("feed");
@@ -282,7 +310,7 @@ function Shell() {
     setToured();
   }, []);
 
-  const client = DEMO_CLIENTS.find((c) => c.companyId === companyId);
+  const client = clients.find((c) => c.companyId === companyId);
   const tab: Tab | null =
     view.name === "brief" || view.name === "feed" || view.name === "runs" || view.name === "how" || view.name === "faq"
       ? view.name
@@ -292,6 +320,7 @@ function Shell() {
 
   return (
     <Layout
+      clients={clients}
       companyId={companyId}
       role={role}
       section={view.name === "home" ? "home" : "insights"}

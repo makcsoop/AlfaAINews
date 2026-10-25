@@ -18,6 +18,7 @@ from backend.api.feedback import (
     get_feedback_store,
     rank_with_feedback,
 )
+from backend.api.showcase import ShowcaseCompany, showcase
 from backend.api.store import CardStore, DeepRun, get_store
 from backend.llm import get_client
 from backend.schemas import Feedback
@@ -115,6 +116,20 @@ def login(body: LoginRequest, request: Request, response: Response, audit: Audit
     return LoginResponse(
         **session.model_dump(include={"company_id", "role", "user_id"}), token=token, expires_in=ttl_seconds()
     )
+
+
+@router.get(
+    "/demo/companies",
+    response_model=list[ShowcaseCompany],
+    tags=["session"],
+    summary="Компании для демо-входа (витрина)",
+)
+def demo_company_list() -> list[ShowcaseCompany]:
+    """Список для переключателя клиента, без сессии. Только витринные поля: id, название, ОКВЭД, регион,
+    флаги продуктов. Сумм платежей, контрагентов, физлиц и точной выручки нет. При DEMO_COMPANIES в
+    окружении — только компании из этого списка."""
+    allowed = set(demo_companies())
+    return [c for c in showcase() if c.company_id in allowed]
 
 
 @router.get(

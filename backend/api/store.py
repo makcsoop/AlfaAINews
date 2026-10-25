@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, get_args
 
 from pydantic import BaseModel
 
@@ -690,6 +690,14 @@ class PipelineCardStore:
         self._ensure_demo()
         with self._lock:
             card = self._cards.get(card_id)
+        if card is None:
+            # карточка своей компании, чья лента ещё не строилась (перезапуск, прямая ссылка):
+            # быстрая лента пары из id карточки, без глубокого разбора
+            role = next((r for r in get_args(UserRole) if card_id.endswith(f"_{company_id}_{r}")), None)
+            if role is not None and (company_id, role) not in self._feeds:
+                self._ensure(company_id, role, upgrade=False)
+                with self._lock:
+                    card = self._cards.get(card_id)
         return card if card and card.company_id == company_id else None
 
     def card_owner(self, card_id: str) -> str | None:

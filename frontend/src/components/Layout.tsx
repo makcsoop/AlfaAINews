@@ -1,7 +1,7 @@
 // Каркас интернет-банка: чёрное боковое меню со знаком банка, верхняя панель с выбором компании и роли (для демо),
 // на телефоне — нижняя навигация.
 import type { ReactNode } from "react";
-import { DEMO_CLIENTS } from "../clients";
+import type { DemoClient } from "../clients";
 import { DEMO_ROLES, ROLE_LABELS } from "../labels";
 import type { Theme } from "../theme";
 import type { UserRole } from "../types";
@@ -36,6 +36,7 @@ const MOCK_NAV = [
 ];
 
 interface Props {
+  clients: DemoClient[];
   companyId: string;
   role: UserRole;
   section: Section;
@@ -54,8 +55,8 @@ function initials(title: string): string {
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? "")).toUpperCase();
 }
 
-export function Layout({ companyId, role, section, place, unseen, theme, onCompany, onRole, onGo, onTheme, children }: Props) {
-  const client = DEMO_CLIENTS.find((c) => c.companyId === companyId);
+export function Layout({ clients, companyId, role, section, place, unseen, theme, onCompany, onRole, onGo, onTheme, children }: Props) {
+  const client = clients.find((c) => c.companyId === companyId);
   const items: { place: Place; section: Section; name: string; icon: typeof IconHome; count?: number }[] = [
     { place: "", section: "home", name: "Главная", icon: IconHome },
     { place: "brief", section: "insights", name: "Важно для бизнеса", icon: IconInsights, count: unseen },
@@ -114,7 +115,7 @@ export function Layout({ companyId, role, section, place, unseen, theme, onCompa
             </span>
             <span className="org-text">
               <strong>{client?.title ?? companyId}</strong>
-              {client && <span>{client.subtitle}</span>}
+              {client && <span title={client.okvedName}>{client.subtitle}</span>}
             </span>
             <span className="org-chevron">
               <IconChevronDown size={18} />
@@ -123,8 +124,8 @@ export function Layout({ companyId, role, section, place, unseen, theme, onCompa
               Компания
             </label>
             <select id="client" value={companyId} onChange={(e) => onCompany(e.target.value)}>
-              {DEMO_CLIENTS.map((c) => (
-                <option key={c.companyId} value={c.companyId}>
+              {clients.map((c) => (
+                <option key={c.companyId} value={c.companyId} title={c.okvedName}>
                   {c.title}
                 </option>
               ))}

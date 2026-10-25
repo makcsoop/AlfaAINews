@@ -119,6 +119,21 @@ export interface InsightCard {
   trace_id?: string | null;
 }
 
+// Компания витрины демо-входа (GET /demo/companies): только витринные поля
+export interface ShowcaseCompany {
+  company_id: string;
+  kind: "case" | "demo";
+  title: string;
+  description: string;
+  archetype: string | null;
+  default_role: UserRole;
+  okved_code: string;
+  okved_name: string;
+  region: string;
+  fea_countries: string[];
+  products: { loans: boolean; leasing: boolean; deposits: boolean; guarantees: boolean; factoring: boolean; fea: boolean };
+}
+
 export interface SessionInfo {
   company_id: string;
   role: UserRole;

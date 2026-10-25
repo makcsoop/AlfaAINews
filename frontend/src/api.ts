@@ -8,11 +8,13 @@ import type {
   InsightCard,
   RunTrace,
   SessionInfo,
+  ShowcaseCompany,
   TraceCost,
   UserRole,
 } from "./types";
 
 export interface Api {
+  demoCompanies(): Promise<ShowcaseCompany[]>;
   login(companyId: string, role: UserRole): Promise<SessionInfo>;
   feed(): Promise<InsightCard[]>;
   card(cardId: string): Promise<InsightCard>;
@@ -86,6 +88,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 
 const httpApi: Api = {
+  demoCompanies: () => raw("/demo/companies"),
   async login(companyId, role) {
     lastLogin = { companyId, role };
     return raw("/session", post({ company_id: companyId, role }));
