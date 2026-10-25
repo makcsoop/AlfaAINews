@@ -12,6 +12,7 @@ export interface Evidence {
   url?: string | null;
   doc_date?: string | null;
   verified?: boolean | null; // цитата найдена в тексте источника
+  feed_id?: string | null; // лента материала из config/sources.yaml: «prime», «cbr_press»
 }
 
 // Итог проверки утверждения кодом: refs, label, numbers, dates — true, если прошло

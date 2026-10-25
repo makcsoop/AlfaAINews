@@ -1,5 +1,5 @@
 // Подписи для интерфейса: метки утверждений, роли, каналы влияния, признаки компании.
-import type { ClaimType, Confidence, Polarity, UserRole } from "./types";
+import type { ClaimType, Confidence, Evidence, Polarity, UserRole } from "./types";
 
 export const CLAIM_LABELS: Record<ClaimType, string> = {
   fact: "Факт",
@@ -120,6 +120,27 @@ export function sourceLabel(sourceId: string): string {
   if (sourceId.startsWith("mk_")) return "консенсус аналитиков";
   if (sourceId === "user_paste") return "ваш материал";
   return "первоисточник";
+}
+
+// Подпись цитаты: ЦМИ, консенсус и вставка — по id; материал ленты — по feed_id («ПРАЙМ», «Банк России»),
+// без ленты — по адресу ссылки; «первоисточник» — только если не известно ничего
+export function evidenceLabel(e: Evidence): string {
+  const byId = sourceLabel(e.source_id);
+  if (byId !== "первоисточник") return byId;
+  if (e.feed_id) return sourceName(e.feed_id);
+  if (e.url) {
+    try {
+      return new URL(e.url).hostname.replace(/^www\./, "");
+    } catch {
+      /* битый адрес — ниже запасная подпись */
+    }
+  }
+  return byId;
+}
+
+// Документ цитаты для сносок: позиции одного обзора ЦМИ («cmi_doc#p1#r1», «cmi_doc#p1#r5») — один документ
+export function evidenceDoc(e: Evidence): string {
+  return e.source_id.startsWith("cmi_") ? e.source_id.split("#")[0] : e.source_id;
 }
 
 // Названия лент из config/sources.yaml (пока в StorySource не приходит title)

@@ -3,7 +3,16 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { Api } from "../api";
-import { CLAIM_LABELS, CONFIDENCE_LABELS, STORY_STATUS_LABELS, featureLabel, sourceLabel, sourceName } from "../labels";
+import {
+  CLAIM_LABELS,
+  CONFIDENCE_LABELS,
+  STORY_STATUS_LABELS,
+  evidenceDoc,
+  evidenceLabel,
+  featureLabel,
+  sourceLabel,
+  sourceName,
+} from "../labels";
 import { completeStep } from "../onboarding";
 import type { Claim, ClaimChecks, Condition, Confidence, Evidence, FeedbackKind, InsightCard, Surprise } from "../types";
 import { AskPanel } from "./AskPanel";
@@ -65,15 +74,23 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
     api.feedback(card.card_id, kind, claimId).catch(() => {});
   };
 
-  // Сноски: номер у каждой цитаты в порядке появления в тексте
-  const notes: Evidence[] = [];
+  // Сноски: один номер на документ в порядке появления в тексте; цитаты одного документа — в одной сноске
+  const notes: Evidence[][] = [];
   const noteNo = new Map<Evidence, number>();
+  const docNo = new Map<string, number>();
   for (const c of [...what, ...why, ...consequences, ...bankMarket]) {
     for (const e of c.evidence) {
-      if (!noteNo.has(e)) {
-        notes.push(e);
-        noteNo.set(e, notes.length);
+      if (noteNo.has(e)) continue;
+      const doc = evidenceDoc(e);
+      let n = docNo.get(doc);
+      if (n === undefined) {
+        notes.push([]);
+        n = notes.length;
+        docNo.set(doc, n);
       }
+      const group = notes[n - 1];
+      if (!group.some((x) => x.quote === e.quote)) group.push(e);
+      noteNo.set(e, n);
     }
   }
 
@@ -422,16 +439,18 @@ function Note({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) {
       <div className="note-body">
         <p className="note-text">
           {claim.text}
-          {claim.evidence.map((e, i) => (
-            <FootRef key={`${e.source_id}-${i}`} e={e} />
-          ))}
+          {claim.evidence
+            .filter((e, i, all) => all.findIndex((x) => noteNo.get(x) === noteNo.get(e)) === i)
+            .map((e, i) => (
+              <FootRef key={`${e.source_id}-${i}`} e={e} />
+            ))}
         </p>
         {(facts.length > 0 || features.length > 0) && (
           <p className="basis">
             На основе:{" "}
             {facts.map((id, i) => {
               const c = byId.get(id);
-              const nums = c?.evidence.map((e) => noteNo.get(e)).filter(Boolean) ?? [];
+              const nums = [...new Set(c?.evidence.map((e) => noteNo.get(e)).filter(Boolean) ?? [])];
               return (
                 <span key={id}>
                   {i > 0 && " · "}
@@ -476,7 +495,7 @@ function FootRef({ e }: { e: Evidence }) {
       <button
         className={isOpen ? "fn-btn on" : "fn-btn"}
         aria-expanded={isOpen}
-        aria-label={`Источник ${n}: ${sourceLabel(e.source_id)}`}
+        aria-label={`Источник ${n}: ${evidenceLabel(e)}`}
         onClick={(ev) => {
           ev.stopPropagation();
           setOpen(isOpen ? null : n);
@@ -490,11 +509,11 @@ function FootRef({ e }: { e: Evidence }) {
           <span className="fn-src">
             {href ? (
               <a href={href} target="_blank" rel="noopener noreferrer" onClick={() => mark("click_source")}>
-                {sourceLabel(e.source_id)}
+                {evidenceLabel(e)}
                 <IconExternal size={14} />
               </a>
             ) : (
-              <b>{sourceLabel(e.source_id)}</b>
+              <b>{evidenceLabel(e)}</b>
             )}
             {e.doc_date && <span>{formatDate(e.doc_date)}</span>}
           </span>
@@ -517,25 +536,26 @@ function EvidenceCheck({ e }: { e: Evidence }) {
   return null;
 }
 
-function SourceList({ notes }: { notes: Evidence[] }) {
+function SourceList({ notes }: { notes: Evidence[][] }) {
   const { mark } = useContext(CardCtx);
   return (
     <ol className="refs">
-      {notes.map((e, i) => {
-        const href = safeUrl(e.url);
+      {notes.map((group, i) => {
+        const e = group[0];
+        const href = safeUrl(group.find((x) => x.url)?.url);
         return (
-          <li key={`${e.source_id}-${i}`}>
+          <li key={`${evidenceDoc(e)}-${i}`}>
             <span className="refs-n">{i + 1}</span>
             <div>
-              {e.quote && <p>«{e.quote}»</p>}
+              {group.map((x, k) => x.quote && <p key={k}>«{x.quote}»</p>)}
               <span className="refs-src">
                 {href ? (
                   <a href={href} target="_blank" rel="noopener noreferrer" onClick={() => mark("click_source")}>
-                    {sourceLabel(e.source_id)}
+                    {evidenceLabel(e)}
                     <IconExternal size={14} />
                   </a>
                 ) : (
-                  <b>{sourceLabel(e.source_id)}</b>
+                  <b>{evidenceLabel(e)}</b>
                 )}
                 {e.doc_date && <span>{formatDate(e.doc_date)}</span>}
                 <EvidenceCheck e={e} />
