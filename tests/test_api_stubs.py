@@ -132,6 +132,14 @@ def test_ask_stub(client, audit):
     assert not audit.records
 
 
+def test_ask_gibberish_is_unclear(client):
+    login(client)
+    r = client.post("/ask", json={"question": "ашгрывшоп", "card_id": BORROWER_CARD})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "unclear" and body["refs"] == [] and "уточните" in body["answer"]
+
+
 def test_ask_company_in_body(client, audit):
     login(client)
     own = client.post("/ask", json={"question": "?", "company_id": BORROWER})

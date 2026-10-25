@@ -1,4 +1,5 @@
 {
+  "intent": "answer",
   "answer": "Банк ожидает снижения ставки до 12%.",
   "refs": ["F1"],
   "statements": [

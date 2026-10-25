@@ -46,6 +46,14 @@ INJECTION_TEXT = (
 )
 NO_DATA_TEXT = "В данных по вашей компании и в материалах сюжета ответа на этот вопрос нет."
 DEGRADED_TEXT = "Сейчас ответить не получилось: сервис разбора временно недоступен. Попробуйте позже."
+CLARIFY_TEXT = (
+    "Не понял вопрос — уточните, что именно вас интересует по этому событию или по вашей компании. "
+    "Например: «как это повлияет на наши кредиты?» или «что это значит для наших поставщиков?»"
+)
+OFF_TOPIC_TEXT = (
+    "Я отвечаю только на вопросы о событии и о вашей компании. Уточните, что именно вас интересует "
+    "по этому событию: например, «как это повлияет на наши кредиты?»"
+)
 
 
 # --- схемы ---------------------------------------------------------------------------------------
@@ -60,10 +68,16 @@ class QAStatement(BaseModel):
 
 
 class QAAnswer(BaseModel):
-    """Ответ модели: текст, ссылки и утверждения с метками."""
+    """Ответ модели: намерение, текст, ссылки и утверждения с метками.
+
+    `intent`: "answer" — вопрос понятен и по теме; "unclear" — набор символов, обрывок, реплика без вопроса;
+    "off_topic" — вопрос не про событие и не про компанию. В двух последних случаях код отвечает просьбой
+    уточнить и утверждения модели не показывает.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
+    intent: Literal["answer", "unclear", "off_topic"] = "answer"
     answer: str = Field(min_length=1)
     refs: list[str] = Field(default_factory=list)
     statements: list[QAStatement] = Field(default_factory=list)
@@ -73,7 +87,7 @@ class QAResult(BaseModel):
     answer: str
     refs: list[str] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
-    status: Literal["ok", "refused", "degraded"]
+    status: Literal["ok", "refused", "degraded", "unclear"]
     trace_id: str
 
 
@@ -177,6 +191,58 @@ def asks_about_other_company(question: str, own_company_id: str) -> tuple[bool, 
     if named and _DATA_OR_SWITCH.search(question):
         return True, None
     return False, None
+
+
+# --- явная бессмыслица до вызова модели ---------------------------------------------------------
+
+_RU_WORD = re.compile(r"[А-Яа-яЁё]{2,}")
+_ABBR = re.compile(r"^[А-ЯЁ]{2,6}$")  # ОФЗ, ЦМИ, НДС: аббревиатуры словарь не знает
+
+
+@lru_cache(maxsize=1)
+def _morph() -> Any:
+    # pymorphy2 напрямую не стартует на Python 3.12; обёртка Natasha работает (как в backend/bank/search.py)
+    from natasha import MorphVocab
+
+    return MorphVocab()
+
+
+@lru_cache(maxsize=20_000)
+def _in_dictionary(word: str) -> bool:
+    try:
+        parses = _morph().parse(word)
+    except Exception:  # без словаря фильтр не должен мешать вопросу
+        return True
+    return any(type(p.methods_stack[0][0]).__name__ == "DictionaryAnalyzer" for p in parses)
+
+
+def _stem(word: str) -> str:
+    return word.lower().replace("ё", "е")[:5]
+
+
+def is_gibberish(question: str, known_text: str = "") -> bool:
+    """Явная бессмыслица: нет ни одной буквы или меньше половины русских слов есть в словаре.
+
+    Словом считаются ≥ 2 букв кириллицы. Аббревиатуры (ОФЗ) и слова из карточки (`known_text`: фамилии,
+    названия) считаются известными. Вопрос латиницей и пограничные случаи («ну и?», «ок») решает модель
+    по полю `intent`.
+    """
+    if not re.search(r"[^\W\d_]", question):
+        return True
+    words = _RU_WORD.findall(question)
+    if not words:
+        return False
+    known_stems = {_stem(w) for w in _RU_WORD.findall(known_text)}
+    known = sum(
+        1 for w in words if _ABBR.match(w) or _stem(w) in known_stems or _in_dictionary(w.lower())
+    )
+    return known / len(words) < 0.5
+
+
+def _card_text(card: InsightCard | None) -> str:
+    if card is None:
+        return ""
+    return " ".join([card.event.title, card.headline or "", *(c.text for c in card.claims)])
 
 
 # --- выбор инструментов по намерению -------------------------------------------------------------
@@ -450,6 +516,8 @@ def answer_question(
         return QAResult(answer=INJECTION_TEXT, status="refused", trace_id=trace_id)
 
     card = store.get_card(card_id, session.company_id) if card_id else None  # чужая карточка -> None
+    if is_gibberish(question, _card_text(card)):  # бесплатно, без вызова модели
+        return QAResult(answer=CLARIFY_TEXT, status="unclear", trace_id=trace_id)
     try:
         dossier, used = build_context(
             question, session=session, card=card, trace_id=trace_id, source=source or _source()
@@ -469,6 +537,9 @@ def answer_question(
         return QAResult(answer=DEGRADED_TEXT, tools_used=used, status="degraded", trace_id=trace_id)
 
     value = res.value
+    if value.intent != "answer":  # вопрос не понят или не по теме: досье не пересказываем
+        text = CLARIFY_TEXT if value.intent == "unclear" else OFF_TOPIC_TEXT
+        return QAResult(answer=text, tools_used=used, status="unclear", trace_id=trace_id)
     kept = verify_statements(value.statements, dossier, session)
     if not kept:
         return QAResult(answer=NO_DATA_TEXT, tools_used=used, status="ok", trace_id=trace_id)

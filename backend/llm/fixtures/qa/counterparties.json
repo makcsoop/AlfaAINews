@@ -1,4 +1,5 @@
 {
+  "intent": "answer",
   "answer": "Основной поставщик занимает 35% закупок, второй 12%; зависимость от одного поставщика высокая.",
   "refs": ["cp:supplier:1", "cp:supplier:2", "cp:summary"],
   "statements": [

@@ -4,7 +4,16 @@ import json
 
 import pytest
 
-from backend.agents.qa import QAAnswer, answer_question, build_messages, load_prompt, plan_tools
+from backend.agents.qa import (
+    CLARIFY_TEXT,
+    OFF_TOPIC_TEXT,
+    QAAnswer,
+    answer_question,
+    build_messages,
+    is_gibberish,
+    load_prompt,
+    plan_tools,
+)
 from backend.api.store import FixtureCardStore
 from backend.llm import BudgetExceeded, LLMClient, LLMUnavailable
 from backend.llm.budget import BudgetManager, InMemoryBudgetStore
@@ -55,7 +64,7 @@ def ask(question, *, session, client, audit, card_id=CARD, **kw):
 
 def test_prompt_has_version_and_data_blocks(client):
     version, system, user = load_prompt()
-    assert version == "qa-v1"
+    assert version == "qa-v2"
     assert "<data>" in system and "{{question}}" in user and "{{dossier}}" in user
 
 
@@ -162,3 +171,61 @@ def test_invalid_model_json_goes_to_fallback_then_degraded(client, audit, sessio
 def test_schema_ignores_unknown_kind_fields():
     a = QAAnswer.model_validate({"answer": "x", "statements": [], "extra": 1})
     assert a.statements == []
+
+
+# --- непонятный и посторонний вопрос -------------------------------------------------------------
+
+
+@pytest.mark.parametrize("q", ["ашгрывшоп", "???", "123 456", "фывапролдж ашгрывшоп"])
+def test_gibberish_question_skips_model(client, audit, session, q):
+    r = ask(q, session=session, client=client, audit=audit)
+    assert r.status == "unclear" and r.answer == CLARIFY_TEXT and r.refs == []
+    assert client.journal.to_llm_calls("t_qa") == []  # модель не вызывалась
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        "Как сохранение ставки 14% отразится на стоимости наших кредитов?",
+        "ОФЗ?",
+        "Что по ЦМИ?",
+        "ставка",
+        "what about rates?",
+        "ну и?",
+        "ывапролджэ хцук",  # половина слов из словаря — решает модель
+    ],
+)
+def test_normal_or_borderline_question_is_not_gibberish(q):
+    assert not is_gibberish(q)
+
+
+def test_words_from_card_count_as_known():
+    assert is_gibberish("Набиуллина?")
+    assert not is_gibberish("Набиуллина?", known_text="Председатель Банка России Эльвира Набиуллина")
+
+
+def test_unclear_intent_ignores_statements(client, audit, session):
+    r = ask("ну и?", session=session, client=client, audit=audit, fixture_key="unclear")
+    assert r.status == "unclear" and r.answer == CLARIFY_TEXT and r.refs == []
+    assert len(client.journal.to_llm_calls("t_qa")) == 1
+
+
+def test_off_topic_intent(client, audit, session):
+    r = ask("какая погода?", session=session, client=client, audit=audit, fixture_key="off_topic")
+    assert r.status == "unclear" and r.answer == OFF_TOPIC_TEXT and r.refs == []
+
+
+def test_answer_intent_default_keeps_normal_answer(client, audit, session):
+    r = ask("Кто наши основные поставщики и насколько мы от них зависим?", session=session, client=client,
+            audit=audit)
+    assert r.status == "ok" and "get_counterparties" in r.tools_used
+    assert "35%" in r.answer
+
+
+def test_prompt_has_unclear_rule():
+    _, system, _ = load_prompt()
+    assert '"unclear"' in system and '"off_topic"' in system and '"intent"' in system
+
+
+def test_schema_intent_defaults_to_answer():
+    assert QAAnswer.model_validate({"answer": "x"}).intent == "answer"

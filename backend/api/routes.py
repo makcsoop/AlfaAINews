@@ -85,7 +85,9 @@ class AskResponse(BaseModel):
     refs: list[str] = Field(default_factory=list)
     tools_used: list[str] = Field(default_factory=list)
     trace_id: str
-    status: Literal["ok", "refused", "degraded"] = "ok"
+    status: Literal["ok", "refused", "degraded", "unclear"] = Field(
+        default="ok", description="unclear — вопрос не понят или не по теме: в answer просьба уточнить"
+    )
 
 
 @router.post("/session", response_model=LoginResponse, tags=["session"], summary="Демо-вход")
