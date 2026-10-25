@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import numpy as np
 import pytest
 
 from backend.ingest.normalize import content_hash, simhash
@@ -305,3 +306,48 @@ def test_cbr_forecast_same_day_merges_into_decision():
     drafts = cluster_items(items, entity_keys=keys)
     decision = next(d for d in drafts if "id1" in {i.id for i in d.items})
     assert {i.id for i in decision.items} == {"id1", "id2", "id3", "id4", "id5"}
+
+
+ALCOHOL = [  # живое окно 25.10: «Ъ» на сайте и в Telegram и перепечатка — три сюжета вместо одного
+    ("kommersant", "Пошлину на иностранный крепкий алкоголь могут повысить уже в ноябре",
+     "Федеральные власти намерены повысить пошлины на импорт крепкого алкоголя из недружественных стран "
+     "с текущих €3 до €5 за литр, рассказали два источника “Ъ” на алкогольном рынке."),
+    ("tg_kommersant", "Федеральные власти намерены повысить пошлины на импорт крепкого алкоголя из "
+     "недружественных стран с текущих €3 до €5 за литр, стало известно «Ъ». Рост средней стоимости одной "
+     "бутылки в таком случае…",
+     "Российские производители ожидают, что такая мера позволит им вернуть часть потребителей."),
+    ("tg_agroinvestor", "Федеральные власти намерены повысить пошлины на импорт крепкого алкоголя из "
+     "недружественных стран с текущих 3 евро до 5 евро за литр, рассказали два источника «Коммерсанта» на "
+     "алкогольном рынке.…",
+     "Соответствующее постановление должно быть издано в ноябре 2026 года."),
+]
+
+
+def test_rewrites_without_number_or_entity_merge_by_title_words():
+    """Без общего числа («3 евро» — малое целое) и без общей сущности: склеивают общие редкие слова заголовков."""
+    items = _items(*ALCOHOL, step=0)
+    items[1].published_at += timedelta(minutes=8)
+    items[2].published_at += timedelta(hours=13)
+    assert _groups(cluster_items(items)) == [["id1", "id2", "id3"]]
+
+
+@pytest.mark.parametrize(
+    ("numbers", "similarity", "merged"),
+    [
+        (({"64.3"}, {"64.3"}), 0.5, True),
+        (({"64.3"}, set()), 0.5, True),  # у одной стороны чисел нет — не противоречие
+        (({"64.3"}, {"66.8"}), 0.5, False),  # сводки одного рынка за разные дни
+        (({"64.3"}, {"64.3"}), 0.3, False),  # похожесть ниже SIM_WORDS
+    ],
+)
+def test_title_words_merge_conditions(numbers, similarity, merged):
+    """Второй проход по словам заголовков: числа не противоречат и похожесть ≥ SIM_WORDS."""
+    from backend.stories.cluster import _Draft, merge_related
+
+    a = item(1, "prime", "Нефть марки Urals подорожала на торгах в Лондоне", minutes=0)
+    b = item(2, "rbc", "Urals на торгах в Лондоне: нефть подорожала", minutes=60)
+    drafts = [_Draft(items=[a], idx=[0]), _Draft(items=[b], idx=[1])]
+    sim = np.array([[1.0, similarity], [similarity, 1.0]])
+    words = [{"нефть", "марка", "urals", "подорожать", "торги", "лондон"}] * 2
+    out = merge_related(drafts, sim, [set(), set()], list(numbers), words)
+    assert (len(out) == 1) is merged

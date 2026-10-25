@@ -11,6 +11,9 @@
    Одно решение ЦБ — один сюжет; прогнозы и заявления ЦБ того же дня вливаются в сюжет решения.
    Второй проход: пересказы одного события разными словами (похожесть ≥ 0,20, ниже порога) сливаются,
    если у них общая отличительная сущность (не регулятор) и общее число из заголовка или лида («200%»).
+   Без общего числа — если похожесть ≥ 0,35, в заголовках не меньше WORDS_MIN общих редких слов (лемм)
+   и числа сюжетов не противоречат друг другу: «пошлины на импорт крепкого алкоголя… с 3 до 5 евро»
+   в «Ъ» и в перепечатке.
 4. Статус: официальный источник или два независимых источника уровня 0–1 → confirmed;
    маркеры слуха без подтверждения → rumor; один источник → single; иначе unconfirmed.
 """
@@ -45,6 +48,21 @@ SIM_NO_ENTITY = 0.55  # без сущностей у одной из сторо�
 SIM_RELATED = 0.20
 RELATED_WINDOW = timedelta(hours=36)
 SIMHASH_COPY = 3
+# второй проход без общего числа: общие редкие слова заголовков (леммы); доля — от меньшего набора.
+# Пороги подобраны на живом окне 72 ч (25.10): ниже 0,35 склеивались «ограничения введены» и «сняты» в разных
+# аэропортах, ночная и дневная сводки ПВО, разные законопроекты о бюджете
+WORDS_MIN = 4
+WORDS_SHARE = 0.5
+SIM_WORDS = 0.35
+WORDS_RARE_DF = 40  # слово в стольких сюжетах окна и больше — не отличает событие («Россия», «рынок»)
+# служебные слова новостей: есть в любом заголовке и событие не отличают
+_NEWS_GENERIC = frozenset(
+    [
+        "заявить", "сообщить", "рассказать", "стать", "известно", "мочь", "против", "после", "через",
+        "около", "более", "менее", "также", "который", "этот", "такой", "пишет", "источник", "издание",
+        "данные", "время", "сегодня", "вчера", "завтра", "уже", "свой", "весь", "один", "быть", "год",
+    ]
+)
 
 
 @dataclass
@@ -126,7 +144,8 @@ def cluster_items(items: list[RawItem], *, entity_keys: list[set[str]] | None = 
             d.keys |= keys[i]
             story_of[i] = best
     drafts = merge_decisions(drafts)
-    return merge_related(drafts, sim, keys, [_numbers(t) for t in texts])
+    words = [_title_words(i.title) for i in items]
+    return merge_related(drafts, sim, keys, [_numbers(t) for t in texts], words)
 
 
 # решение Банка России по ставке: «ЦБ сохранил ключевую ставку на уровне 14%», «ставка осталась 14%»
@@ -271,6 +290,15 @@ def _numbers(text: str) -> set[str]:
     return out | {n.rstrip("%") for n in out}
 
 
+def _title_words(title: str) -> set[str]:
+    """Содержательные леммы заголовка: без чисел, коротких и служебных слов."""
+    from backend.bank.search import tokens
+
+    return {
+        t for t in tokens(title) if len(t) >= 4 and not t[0].isdigit() and t not in _NEWS_GENERIC
+    }
+
+
 def _distinctive(keys: set[str]) -> set[str]:
     """Сущности, которые различают события: регуляторы (Банк России, Минфин) есть почти везде."""
     from backend.extract.entities import regulators
@@ -280,13 +308,22 @@ def _distinctive(keys: set[str]) -> set[str]:
 
 
 def merge_related(
-    drafts: list[_Draft], sim: np.ndarray, keys: list[set[str]], numbers: list[set[str]]
+    drafts: list[_Draft],
+    sim: np.ndarray,
+    keys: list[set[str]],
+    numbers: list[set[str]],
+    words: list[set[str]] | None = None,
 ) -> list[_Draft]:
     """Второй проход: сливает пересказы одного события, которые жадная склейка развела по порогу 0,30.
 
     Условия для пары сюжетов: окно 36 ч, общая отличительная сущность, общее число из заголовка или лида
     и средняя похожесть всех пар материалов ≥ SIM_RELATED. Пары перебираются от самой похожей; условия
     перепроверяются на уже слитых группах, чтобы слабая цепочка не склеила разные события.
+
+    Вместо общего числа годятся общие редкие слова заголовков (words): не меньше WORDS_MIN и не меньше
+    WORDS_SHARE от меньшего набора при похожести ≥ SIM_WORDS. Тогда сущности не должны различаться (общая
+    есть или у одной стороны их нет), а числа — противоречить (у обеих есть, но ни одного общего:
+    «нефть по $65» и «нефть по $64»).
     """
     if len(drafts) < 2:
         return drafts
@@ -298,6 +335,25 @@ def merge_related(
     def feats(d: _Draft) -> tuple[set[str], set[str]]:
         return _distinctive(set().union(*(keys[i] for i in d.idx))), heads[id(d)]
 
+    def lemmas(d: _Draft) -> set[str]:
+        return set().union(*(words[i] for i in d.idx)) - common_words if words else set()
+
+    def related(a: _Draft, b: _Draft) -> bool:
+        if not (close(a, b) and avg(a, b) >= SIM_RELATED):
+            return False
+        (ka, na), (kb, nb) = feats(a), feats(b)
+        if ka & kb and na & nb:
+            return True
+        wa, wb = lemmas(a), lemmas(b)
+        shared = len(wa & wb)
+        if avg(a, b) < SIM_WORDS:
+            return False
+        if shared < WORDS_MIN or shared < WORDS_SHARE * min(len(wa), len(wb)):
+            return False
+        same_entities = bool(ka & kb) or not ka or not kb
+        numbers_agree = not (na and nb) or bool(na & nb)
+        return same_entities and numbers_agree
+
     def close(a: _Draft, b: _Draft) -> bool:
         first = max(a.items[0].published_at, b.items[0].published_at)
         last = min(a.items[-1].published_at, b.items[-1].published_at)
@@ -306,10 +362,17 @@ def merge_related(
     def avg(a: _Draft, b: _Draft) -> float:
         return float(np.mean(sim[np.ix_(a.idx, b.idx)]))
 
+    # частые в окне слова событие не отличают: «Россия», «рынок», «цена»
+    df: dict[str, int] = {}
+    for d in drafts:
+        for w in set().union(*(words[i] for i in d.idx)) if words else ():
+            df[w] = df.get(w, 0) + 1
+    common_words = {w for w, n in df.items() if n >= WORDS_RARE_DF}
+
+    # кандидаты — пары с общей отличительной сущностью или общим редким словом заголовка
     by_key: dict[str, list[int]] = {}
-    fs = [feats(d) for d in drafts]
-    for n, (ks, _) in enumerate(fs):
-        for k in ks:
+    for n, d in enumerate(drafts):
+        for k in feats(d)[0] | {f"w:{w}" for w in lemmas(d)}:
             by_key.setdefault(k, []).append(n)
     candidates: list[tuple[float, int, int]] = []
     seen: set[tuple[int, int]] = set()
@@ -319,9 +382,8 @@ def merge_related(
                 if (a, b) in seen:
                     continue
                 seen.add((a, b))
-                da, db = drafts[a], drafts[b]
-                if fs[a][1] & fs[b][1] and close(da, db) and (s := avg(da, db)) >= SIM_RELATED:
-                    candidates.append((s, a, b))
+                if related(drafts[a], drafts[b]):
+                    candidates.append((avg(drafts[a], drafts[b]), a, b))
     if not candidates:
         return drafts
 
@@ -338,8 +400,7 @@ def merge_related(
         if ra == rb:
             continue
         da, db = drafts[ra], drafts[rb]
-        (ka, na), (kb, nb) = feats(da), feats(db)
-        if ka & kb and na & nb and close(da, db) and avg(da, db) >= SIM_RELATED:
+        if related(da, db):
             main, other = (ra, rb) if (-len(da.items), da.items[0].published_at) <= (
                 -len(db.items), db.items[0].published_at) else (rb, ra)
             _absorb(drafts[main], drafts[other])
