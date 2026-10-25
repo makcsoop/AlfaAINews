@@ -13,7 +13,8 @@
    если у них общая отличительная сущность (не регулятор) и общее число из заголовка или лида («200%»).
    Без общего числа — если похожесть ≥ 0,35, в заголовках не меньше WORDS_MIN общих редких слов (лемм)
    и числа сюжетов не противоречат друг другу: «пошлины на импорт крепкого алкоголя… с 3 до 5 евро»
-   в «Ъ» и в перепечатке.
+   в «Ъ» и в перепечатке. Или если похожи заголовки первых материалов (≥ 0,38, три общих нечастых слова):
+   заметка рядом с большим сюжетом, у которого средняя похожесть размыта.
 4. Статус: официальный источник или два независимых источника уровня 0–1 → confirmed;
    маркеры слуха без подтверждения → rumor; один источник → single; иначе unconfirmed.
 """
@@ -54,6 +55,10 @@ SIMHASH_COPY = 3
 WORDS_MIN = 4
 WORDS_SHARE = 0.5
 SIM_WORDS = 0.35
+# заголовки первых материалов: похожесть и число общих нечастых слов (живое окно 25.10: 8 склеек, все верные;
+# пересказ «Трамп мог бы применить пошлины» без «200%» так не ловится — общих нечастых слов одно, «пошлина»)
+SIM_HEAD = 0.38
+HEAD_MIN = 3
 WORDS_RARE_DF = 40  # слово в стольких сюжетах окна и больше — не отличает событие («Россия», «рынок»)
 # служебные слова новостей: есть в любом заголовке и событие не отличают
 _NEWS_GENERIC = frozenset(
@@ -339,20 +344,26 @@ def merge_related(
         return set().union(*(words[i] for i in d.idx)) - common_words if words else set()
 
     def related(a: _Draft, b: _Draft) -> bool:
-        if not (close(a, b) and avg(a, b) >= SIM_RELATED):
+        if not (close(a, b) and (sim_ab := avg(a, b)) >= SIM_RELATED):
             return False
         (ka, na), (kb, nb) = feats(a), feats(b)
         if ka & kb and na & nb:
             return True
+        if na and nb and not na & nb:  # числа противоречат: сводки за разные дни, разные суммы
+            return False
         wa, wb = lemmas(a), lemmas(b)
-        shared = len(wa & wb)
-        if avg(a, b) < SIM_WORDS:
-            return False
-        if shared < WORDS_MIN or shared < WORDS_SHARE * min(len(wa), len(wb)):
-            return False
+        shared = wa & wb
+        share = len(shared) / max(1, min(len(wa), len(wb)))
         same_entities = bool(ka & kb) or not ka or not kb
-        numbers_agree = not (na and nb) or bool(na & nb)
-        return same_entities and numbers_agree
+        # 1. общие слова при похожем тексте
+        if same_entities and sim_ab >= SIM_WORDS and len(shared) >= WORDS_MIN and share >= WORDS_SHARE:
+            return True
+        # 2. заголовки первых материалов похожи и делят нечастые слова: заметка рядом с большим сюжетом
+        #    («Россия завоевала право провести чемпионат…» и «Москва примет чемпионат…»). Объединение слов
+        #    большого сюжета для этого не годится — у 19 материалов общие слова найдутся с чем угодно
+        ha, hb = a.idx[0], b.idx[0]
+        heads_shared = (words[ha] & words[hb]) - common_words if words else set()
+        return same_entities and float(sim[ha, hb]) >= SIM_HEAD and len(heads_shared) >= HEAD_MIN
 
     def close(a: _Draft, b: _Draft) -> bool:
         first = max(a.items[0].published_at, b.items[0].published_at)

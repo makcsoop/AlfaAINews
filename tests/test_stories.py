@@ -337,7 +337,7 @@ def test_rewrites_without_number_or_entity_merge_by_title_words():
         (({"64.3"}, {"64.3"}), 0.5, True),
         (({"64.3"}, set()), 0.5, True),  # у одной стороны чисел нет — не противоречие
         (({"64.3"}, {"66.8"}), 0.5, False),  # сводки одного рынка за разные дни
-        (({"64.3"}, {"64.3"}), 0.3, False),  # похожесть ниже SIM_WORDS
+        (({"64.3"}, {"64.3"}), 0.25, False),  # похожесть ниже SIM_WORDS и SIM_RARE
     ],
 )
 def test_title_words_merge_conditions(numbers, similarity, merged):
@@ -351,3 +351,42 @@ def test_title_words_merge_conditions(numbers, similarity, merged):
     words = [{"нефть", "марка", "urals", "подорожать", "торги", "лондон"}] * 2
     out = merge_related(drafts, sim, [set(), set()], list(numbers), words)
     assert (len(out) == 1) is merged
+
+
+def _pair(sim_ab, keys, words):
+    from backend.stories.cluster import _Draft, merge_related
+
+    a = item(1, "prime", "a", minutes=0)
+    b = item(2, "rbc", "b", minutes=60)
+    drafts = [_Draft(items=[a], idx=[0]), _Draft(items=[b], idx=[1])]
+    sim = np.array([[1.0, sim_ab], [sim_ab, 1.0]])
+    return len(merge_related(drafts, sim, keys, [set(), set()], words))
+
+
+def test_note_next_to_big_story_merges_by_head_titles():
+    """«Россия завоевала право провести чемпионат мира по тяжёлой атлетике»: заголовки похожи (0,40), три общих
+    нечастых слова; по объединению слов большого сюжета и средней похожести (0,34) второй проход её не брал."""
+    big = {"москва", "принять", "чемпионат", "тяжёлый", "атлетика", "iwf", "пресс-служба"}
+    small = {"завоевать", "право", "провести", "чемпионат", "тяжёлый", "атлетика"}
+    assert _pair(0.40, [{"org:IWF"}, set()], [big, small]) == 1
+    assert _pair(0.36, [{"org:IWF"}, set()], [big, small]) == 2  # заголовки не так похожи
+    assert _pair(0.40, [{"org:IWF"}, {"org:FIFA"}], [big, small]) == 2  # разные организации
+    assert _pair(0.40, [{"org:IWF"}, set()], [big, {"завоевать", "право", "чемпионат", "атлетика"}]) == 2
+
+
+def test_trump_retelling_without_number_stays_apart():
+    """Ограничение: пересказ без «200%» делит с сюжетом одно нечастое слово («пошлина»). Правило, которое его
+    ловит (общая персона, три общие страны, похожесть ≥ 0,25), на живом окне склеивало и разные события."""
+    keys = [{"per:Трамп"}, {"per:Трамп"}]
+    told = {"трамп", "введение", "пошлина", "россия", "украина", "возможный", "президент"}
+    retold = {"трамп", "введение", "пошлина", "россия", "украина", "применить", "принуждение", "торговля"}
+    assert _pair(0.27, keys, [told, retold]) == 2
+
+
+def test_entity_noise_cleaned():
+    """Хвост поста и площадки — не сущности; МИД под разными именами — одна."""
+    from backend.extract.entities import extract_entities
+
+    assert not extract_entities("Австрия объявила дипломатов персонами нон-грата, сообщает Reuters.. ⚡️Австрия").keys()
+    assert extract_entities("Решение приняло Министерство иностранных дел Австрии").keys() == {"org:МИД"}
+    assert extract_entities("Пишут Profil и Heute со ссылкой на МИД. Подписывайтесь на канал в MAX").keys() == {"org:МИД"}

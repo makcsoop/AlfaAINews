@@ -59,6 +59,14 @@ def _dicts():
     return alias, cur, com, set(cfg["regulators"]), skip, per
 
 
+# хвост после «..» или эмодзи — склейка NER с текстом поста: «Reuters.. ⚡️Австрия» → «Reuters»
+_NAME_TAIL = re.compile(r"\.\..*$|[^\w\s\-«»\"'.,&+()].*$", re.DOTALL)
+
+
+def _clean_name(name: str) -> str:
+    return _NAME_TAIL.sub("", name).strip()
+
+
 def _key(name: str) -> str:
     return re.sub(r"\s+", " ", name.lower().replace("ё", "е").strip(" «»\"'.,"))
 
@@ -112,7 +120,8 @@ def extract_entities(text: str, *, ner: bool = True) -> Entities:
     for span in doc.spans:
         span.normalize(morph_vocab)
         # сначала исходный текст: Natasha иногда портит устойчивые имена («Банк России» → «Банк Россия»)
-        name = alias.get(_key(span.text)) or canonical(span.normal or span.text)
+        raw = _clean_name(span.text)
+        name = alias.get(_key(raw)) or canonical(_clean_name(span.normal or "") or raw)
         if len(name) < 2 or _is_noise(name, span.type):
             continue
         {"ORG": ents.orgs, "LOC": ents.locations, "PER": ents.persons}[span.type].add(name)
