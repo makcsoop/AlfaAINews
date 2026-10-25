@@ -16,7 +16,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from backend.llm.budget import BudgetExceeded, BudgetManager, RedisBudgetStore
+from backend.llm.budget import BudgetExceeded, BudgetManager, shared_store
 from backend.llm.client import LLMClient, LLMUnavailable
 from backend.llm.settings import LLMSettings
 
@@ -46,14 +46,7 @@ def _select(client: LLMClient, models: str) -> list[str]:
 
 def _budget_for(settings: LLMSettings) -> BudgetManager:
     """Бюджет из Redis (общий с остальными процессами), если он доступен; иначе локальный."""
-    try:
-        import redis
-
-        r = redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=1)
-        r.ping()
-        return BudgetManager(settings=settings, store=RedisBudgetStore(settings.redis_url, client=r))
-    except Exception:
-        return BudgetManager(settings=settings)
+    return BudgetManager(settings=settings, store=shared_store(settings))
 
 
 def probe_one(client: LLMClient, model_id: str) -> dict:

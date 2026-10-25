@@ -211,6 +211,8 @@ def test_ratelimit_key_ignores_expiry_and_queues_are_cleaned():
     a = Session(company_id="C", role="cfo", user_id="u", expires_at=1)
     b = Session(company_id="C", role="cfo", user_id="u", expires_at=2)
     assert RateLimiter.key_of(a) == RateLimiter.key_of(b)
+    # лимит — на компанию: новый user_id при входе не даёт новой квоты
+    assert RateLimiter.key_of(a) == RateLimiter.key_of(a.model_copy(update={"user_id": "other"}))
     rl = RateLimiter(limit=2, window_s=10)
     assert rl.allow("k1", now=0) and rl.allow("k1", now=1) and not rl.allow("k1", now=2)
     rl.allow("k2", now=3)

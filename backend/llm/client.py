@@ -11,7 +11,7 @@ from typing import Generic, Literal, Protocol, TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from backend.llm.budget import BudgetExceeded, BudgetManager
+from backend.llm.budget import BudgetExceeded, BudgetManager, shared_store
 from backend.llm.cache import ResponseCache, cache_key, sha256_json
 from backend.llm.journal import Journal, JournalEntry
 from backend.llm.models import ALLOWED_PROVIDER_NAMES, ModelsConfig, ModelSpec, default_models_config
@@ -324,7 +324,12 @@ class LLMClient:
     ) -> None:
         self.settings = settings or LLMSettings()
         self.config = config or default_models_config()
-        self.budget = budget or BudgetManager(config=self.config, settings=self.settings)
+        # живые вызовы — общий учёт в Redis: backend и ingest тратят один ключ, перезапуск не обнуляет счёт
+        self.budget = budget or BudgetManager(
+            config=self.config,
+            settings=self.settings,
+            store=shared_store(self.settings) if self.settings.llm_mode == "live" else None,
+        )
         # в режиме фикстур журнал только в памяти: тесты не засоряют журнал расхода ключа
         self.journal = journal or Journal(
             self.settings.llm_journal_dir if self.settings.llm_mode == "live" else None
@@ -436,6 +441,8 @@ class LLMClient:
         def one_attempt(spec: ModelSpec, msgs: list[dict[str, str]], fb: bool) -> tuple[T | None, str, str]:
             """Один вызов модели. Возвращает (значение | None, сырой текст, причина сбоя)."""
             nonlocal attempts, tot_in, tot_out, tot_cost, last_base, tot_pcost
+            if attempts:  # повтор и запасная модель тоже тратят ₽: лимит проверяется перед каждой попыткой
+                self.budget.check(step, priority)
             attempts += 1
             req = CompletionRequest(
                 step=step, model=spec, messages=msgs, temperature=temperature,

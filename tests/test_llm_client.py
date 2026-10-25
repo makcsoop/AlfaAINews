@@ -172,6 +172,22 @@ def test_budget_blocks_before_transport(tmp_path):
     assert t.requests == []
 
 
+def test_budget_checked_before_retry_and_fallback(tmp_path):
+    # повтор и запасная модель тоже тратят ₽: исчерпали лимит на первой попытке — дальше не идём
+    t = StubTransport(["не json", GOOD, GOOD])
+    c = make_client(tmp_path, t, llm_daily_budget_rub=100.0)
+    complete = t.complete
+
+    def spend_all(req):
+        c.budget.record("card", "r3", 1, 1, 100.0)  # параллельные вызовы выбрали остаток
+        return complete(req)
+
+    t.complete = spend_all
+    with pytest.raises(BudgetExceeded):
+        call(c)
+    assert len(t.requests) == 1
+
+
 def test_cache_hit_skips_transport(tmp_path):
     t = StubTransport([GOOD])
     c = make_client(tmp_path, t)

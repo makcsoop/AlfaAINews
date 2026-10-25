@@ -16,7 +16,8 @@ class RateLimiter:
 
     @staticmethod
     def key_of(session: Session) -> str:
-        return f"{session.company_id}|{session.user_id}"
+        # по компании: user_id клиент задаёт сам при входе, лимит по нему обходится сменой имени
+        return session.company_id
 
     def allow(self, key: str, now: float | None = None) -> bool:
         t = time.monotonic() if now is None else now

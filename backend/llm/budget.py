@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
@@ -9,6 +10,8 @@ from typing import Literal, Protocol
 
 from backend.llm.models import ModelsConfig, default_models_config
 from backend.llm.settings import LLMSettings
+
+log = logging.getLogger(__name__)
 
 MSK = timezone(timedelta(hours=3))
 RESET_HOUR_MSK = 3
@@ -77,6 +80,19 @@ class RedisBudgetStore:
     def snapshot(self, day: str) -> dict[str, float]:
         raw = self._r.hgetall(self._key(day))  # type: ignore[attr-defined]
         return {str(k): float(v) for k, v in raw.items()}
+
+
+def shared_store(settings: LLMSettings) -> BudgetStore:
+    """Redis — общий учёт всех процессов (backend, ingest, скрипты), переживает перезапуск; иначе память."""
+    try:
+        import redis
+
+        r = redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=1)
+        r.ping()
+        return RedisBudgetStore(settings.redis_url, client=r)
+    except Exception:
+        log.warning("бюджет LLM: Redis недоступен, учёт только в памяти процесса")
+        return InMemoryBudgetStore()
 
 
 def budget_day(now: datetime) -> str:

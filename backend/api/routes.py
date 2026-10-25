@@ -55,7 +55,9 @@ class LoginRequest(BaseModel):
 
     company_id: str = Field(description="Компания из списка демо-компаний")
     role: UserRole = Field(description="Роль пользователя")
-    user_id: str | None = Field(default=None, description="Необязательно; по умолчанию демо-пользователь")
+    user_id: str | None = Field(
+        default=None, max_length=64, description="Необязательно; по умолчанию демо-пользователь"
+    )
 
 
 class SessionInfo(BaseModel):
