@@ -79,8 +79,8 @@ docker compose run --rm -e LLM_MODE=live backend python -m backend.db.demo --llm
 
 Стенд по умолчанию (`docker-compose.yml`, переопределяется в `.env`): `backend` — `LLM_MODE=live`, `TOOL_SOURCE=db`,
 `CARD_STORE=pipeline`, `CACHE_BACKEND=redis`, `CRITIC_LLM_ENABLED=true`, `LABELING_ENABLED=false` (порог ленты и число
-глубоких разборов — `feed` в `config/scoring.yaml`); `ingest` — `EXTRACT_LLM=false` (для демо: `EXTRACT_LLM=true docker compose up -d ingest`,
-до 60 вызовов Gemma за проход раз в 5 минут, ≈1 ₽). Ключ `LLM_API_KEY` — только в `.env`.
+глубоких разборов — `feed` в `config/scoring.yaml`); `ingest` — `EXTRACT_LLM=true` (тип подтверждённых сюжетов ставит Gemma, до 60 вызовов за проход раз в 5 минут:
+первый проход после простоя ≈1 ₽, дальше ≈0,02 ₽ — модель зовётся только для новых сюжетов; `false` — только правила). Ключ `LLM_API_KEY` — только в `.env`.
 
 Перед показом — прогрев демо-кеша (глубокие карточки топ-сюжетов, ≈0,4 ₽ за карточку, кеш в Redis):
 
@@ -105,6 +105,17 @@ uv run python scripts/warm_demo_cache.py --stories 30 --max-rub 40
 (`backend/bank/vision.py`, Qwen3-VL, шаг `vision`): картинка уходит составным сообщением через `call_text`.
 
 ## Разработка без Docker
+
+Весь проект одной командой — API (:8000), сборщик новостей и интерфейс (:5173); нужна только база
+(`docker compose up -d db`). Ctrl+C останавливает всё:
+
+```bash
+uv run python scripts/dev.py                    # живые модели, сбор с типизацией сюжетов моделью
+EXTRACT_LLM=false uv run python scripts/dev.py  # сбор только правилами, без ₽
+LLM_MODE=fixture uv run python scripts/dev.py   # без ключа и без ₽
+```
+
+Отдельные команды:
 
 ```bash
 uv sync
@@ -147,7 +158,7 @@ cd frontend && npm run dev                                          # http://loc
 | `FEEDBACK_STORE` | `db` / `memory` (по умолчанию `db` при `TOOL_SOURCE=db`) | куда пишет `POST /feedback`: таблица `feedback` или память |
 | `CACHE_BACKEND`, `CACHE_TTL_S` | `memory` / `redis`, секунды (24 ч) | кеш разбора, карточек и трасс |
 | `CRITIC_LLM_ENABLED` | `true` / `false` | LLM-критик DeepSeek по сомнительным утверждениям |
-| `EXTRACT_LLM` | `false` (по умолчанию) / `true` | воркер `ingest`: тип и факторы подтверждённых сюжетов ставит модель (шаг `extract`) |
+| `EXTRACT_LLM` | `true` (по умолчанию) / `false` | воркер `ingest`: тип и факторы подтверждённых сюжетов ставит модель (шаг `extract`) |
 | `LABELING_ENABLED` | `false` (по умолчанию) / `true` | открыть `/labeling` (профили компаний без сессии — только для разметки) |
 
 Отчёты: `uv run python -m backend.llm.report` (бюджет по шагам и моделям), `uv run python -m backend.cards.quality` (качество карточек).

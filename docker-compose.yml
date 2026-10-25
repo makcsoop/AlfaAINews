@@ -77,8 +77,10 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-newsai}:${POSTGRES_PASSWORD:-newsai}@db:5432/${POSTGRES_DB:-newsai}
       REDIS_URL: redis://redis:6379/0
       # true — подтверждённые сюжеты типирует модель (шаг extract общего клиента, до 60 вызовов за проход);
-      # нужен ключ LLM_API_KEY в .env; модель воркер зовёт только при EXTRACT_LLM=true
-      EXTRACT_LLM: ${EXTRACT_LLM:-false}
+      # без неё ~95% сюжетов остаются без типа и не доходят до ленты. Модель зовётся только для новых и
+      # изменившихся сюжетов: живой прогон 26.10 — 1,19 ₽ первый проход после простоя, дальше ≈ 0,02 ₽ за проход.
+      # Нужен ключ LLM_API_KEY в .env; false — только правила, без ₽
+      EXTRACT_LLM: ${EXTRACT_LLM:-true}
       # офлайн-проверка без ключа: LLM_MODE=fixture в .env (модель воркер зовёт только при EXTRACT_LLM=true)
       LLM_MODE: ${LLM_MODE:-live}
     depends_on:
