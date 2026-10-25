@@ -1,12 +1,13 @@
 """Быстрая карточка без LLM: появляется сразу после скоринга, глубокий разбор потом догружается в неё же.
 
 Только то, что уже проверено кодом: факт с цитатой, статус сюжета, вклады скоринга словами и ближайшая
-позиция ЦМИ по главному фактору. Выводы — шаблоны из вкладов, без генерации.
+позиция ЦМИ по главному фактору и теме сюжета. Выводы — шаблоны из вкладов, без генерации.
 """
 
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 
+from backend.bank.search import topic_overlap
 from backend.profile.taxonomy import load_matrix
 from backend.ranking.confidence import confidence
 from backend.ranking.select import factor_label, top_contributions
@@ -109,13 +110,17 @@ def _inference(n: int, c: Contribution, sensitivity: float | None) -> Claim:
     )
 
 
-def _bank_view(positions: Sequence[BankPosition], channel: str | None, story_day: date) -> Claim | None:
+def _bank_view(
+    positions: Sequence[BankPosition], channel: str | None, story_day: date, story_text: str
+) -> Claim | None:
+    # канал общий ещё не значит «про это»: позиция должна совпадать с сюжетом по теме (topic_overlap)
     fresh = [
         p
         for p in positions
         if p.channel == channel
         and p.doc_date <= story_day
         and (p.valid_until is None or p.valid_until >= story_day)
+        and topic_overlap(p.thesis, story_text) > 0
     ]
     if not fresh:
         return None
@@ -146,7 +151,10 @@ def fast_card(
         why.append(f"I{n}")
 
     main_channel = next((c.factor for c in relevance.contributions if c.factor in matrix.channels), None)
-    bank = _bank_view(bank_positions, main_channel, story.first_seen.date())
+    story_text = " ".join(
+        [story.title, facts.summary if facts else "", *(items[i].title for i in story.item_ids if i in items)]
+    )
+    bank = _bank_view(bank_positions, main_channel, story.first_seen.date(), story_text)
     if bank:
         claims.append(bank)
 
