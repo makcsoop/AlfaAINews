@@ -27,6 +27,7 @@ from backend.agents.pipeline import Handlers, PipelineContext, State, run_pipeli
 from backend.agents.planner import build_dossier, replan
 from backend.agents.stub_steps import make_stub_handlers
 from backend.agents.tools import FixtureDataSource, ToolContext, ToolDataSource
+from backend.agents.trace_details import call_cost, fill_trace_details
 from backend.cards import CardResult, assemble_card, template_draft, verify_card, write_card
 from backend.cards.analysis import build_analysis
 from backend.cards.card import retry_feedback
@@ -545,6 +546,8 @@ def make_handlers(
         if ctx.artifacts.get("analysis_cached"):
             return ctx
         ctx = analysts_step(ctx, src)
+        if ctx.trace is not None:  # сколько стоил разбор отрасли: при попадании в кеш — экономия
+            ctx.artifacts["analysis_cost_rub"] = call_cost(ctx.trace)
         if cache is not None:
             cache.put(
                 ctx.analysis_key,
@@ -553,7 +556,7 @@ def make_handlers(
                     "reports": ctx.reports,
                     "artifacts": {
                         k: ctx.artifacts[k]
-                        for k in ("analysts", "analyst_check_failures", "analyst_notes")
+                        for k in ("analysts", "analyst_check_failures", "analyst_notes", "analysis_cost_rub")
                         if k in ctx.artifacts
                     },
                 },
@@ -664,6 +667,7 @@ async def arun_for_client(
     reg = handlers if handlers is not None else make_handlers(bundle, cache=cache)
     ctx, trace = await run_pipeline(ctx, reg)
     trace.cost_rub = round(sum(c.cost_rub for c in trace.llm_calls), 6)
+    fill_trace_details(trace, ctx)
     if ctx.card is None:
         detail = "; ".join(f"{e['state']}: {e['error']}" for e in ctx.errors) or str(ctx.state)
         raise PipelineFailed(f"прогон завершился без карточки ({detail})", trace)

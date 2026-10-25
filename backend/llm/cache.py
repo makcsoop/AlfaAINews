@@ -50,12 +50,17 @@ class ResponseCache:
         except (OSError, ValueError):
             return None
 
-    def put(self, key: str, text: str, tokens_in: int, tokens_out: int) -> None:
+    def put(
+        self, key: str, text: str, tokens_in: int, tokens_out: int, cost_rub: float | None = None
+    ) -> None:
+        """cost_rub — сколько стоил исходный вызов: в трассе ответа из кеша видна экономия."""
         if not self.enabled:
             return
         try:
             self._dir.mkdir(parents=True, exist_ok=True)
-            payload = {"text": text, "tokens_in": tokens_in, "tokens_out": tokens_out}
+            payload: dict = {"text": text, "tokens_in": tokens_in, "tokens_out": tokens_out}
+            if cost_rub is not None:
+                payload["cost_rub"] = cost_rub
             self._path(key).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass

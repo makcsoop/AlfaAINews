@@ -250,10 +250,47 @@ class LlmCall(Schema):
     cost_rub: float
     at: datetime
     cached: bool = False
+    original_cost_rub: float | None = Field(
+        default=None, description="для ответа из кеша — сколько стоил исходный вызов (экономия)"
+    )
+
+
+class TracePlanStep(Schema):
+    """Шаг плана досье: инструмент, открытые аргументы (тема, канал, дата; company_id в них не бывает)."""
+
+    tool: str
+    args: dict = Field(default_factory=dict)
+    why: str = ""
+    origin: str = "template"
+
+
+class TraceToolResult(Schema):
+    """Что нашёл инструмент: число элементов и их id/заголовки. Без сырых данных, платежей и физлиц."""
+
+    tool: str
+    found: int = 0
+    items: list[dict[str, str]] = Field(default_factory=list, description="[{id, kind, title}]")
+
+
+class TraceArbiter(Schema):
+    """Итог арбитра: согласие аналитиков по каналам, споры, сверка знака с ЦМИ."""
+
+    agreement: dict[str, Literal["agree", "disagree", "single"]] = Field(default_factory=dict)
+    disputes: list[str] = Field(default_factory=list)
+    bank_check: list[str] = Field(default_factory=list)
+    on_review: bool = False
+
+
+class TraceCriticRound(Schema):
+    round: int
+    ok: bool = True
+    failures: list[str] = Field(default_factory=list)
+    planner_task: str | None = None
 
 
 class RunTrace(Schema):
-    """12. Журнал разбора: шаги, инструменты, вызовы моделей, итог проверки и стоимость."""
+    """12. Журнал разбора: шаги, инструменты, вызовы моделей, итог проверки и стоимость.
+    С 0.2.3 — и промежуточные результаты: план, сводка инструментов, отчёты аналитиков, арбитр, критик."""
 
     run_id: str
     story_id: str
@@ -266,6 +303,16 @@ class RunTrace(Schema):
     cost_rub: float = 0.0
     started_at: datetime
     finished_at: datetime | None = None
+    # промежуточные результаты (0.2.3, необязательные — старые трассы валидны)
+    plan: list[TracePlanStep] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list, description="чего не хватило досье")
+    tool_results: list[TraceToolResult] = Field(default_factory=list)
+    analyst_reports: list[AnalystReport] = Field(default_factory=list)
+    arbiter: TraceArbiter | None = None
+    critic_rounds: list[TraceCriticRound] = Field(default_factory=list)
+    card_source: Literal["llm", "template", "fixture"] | None = None
+    analysis_cached: bool = Field(default=False, description="разбор отрасли взят из кеша")
+    saved_rub: float = Field(default=0.0, description="сколько ₽ сэкономил кеш на этом прогоне")
 
 
 class Feedback(Schema):

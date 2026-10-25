@@ -6,6 +6,7 @@ import { rub } from "../format";
 import type { RunTrace, TraceCost } from "../types";
 import { TOOL_NAMES } from "./AskPanel";
 import { SkeletonRows } from "./bits";
+import { TraceDetails } from "./TraceDetails";
 import { IconAlert, IconBack, IconCheck, IconCross, IconShield } from "./icons";
 
 // Состояния автомата Р3 (backend/agents/pipeline.py) в порядке конвейера
@@ -111,7 +112,9 @@ export function TraceView({ api, traceId, onBack }: { api: Api; traceId: string;
   const hasCost = !!cost && Object.keys(cost.cost_by_step).length > 0;
   // все вызовы взяты из кеша — «0 ₽» объясняем пометкой, а не выдаём за бесплатный разбор
   const allCached = trace.llm_calls.length > 0 && trace.llm_calls.every((c) => c.cached);
-  const costLabel = `${rub(cost?.cost_rub ?? trace.cost_rub)}${allCached ? " — из кеша" : ""}`;
+  const saved = trace.saved_rub ?? trace.llm_calls.reduce((a, c) => a + (c.cached ? (c.original_cost_rub ?? 0) : 0), 0);
+  const cacheNote = allCached || trace.analysis_cached ? ` — из кеша${saved > 0 ? `, экономия ≈ ${rub(saved)}` : ""}` : "";
+  const costLabel = `${rub(cost?.cost_rub ?? trace.cost_rub)}${cacheNote}`;
 
   return (
     <div className="view">
@@ -155,6 +158,8 @@ export function TraceView({ api, traceId, onBack }: { api: Api; traceId: string;
             </details>
           )}
         </section>
+
+        <TraceDetails trace={trace} />
 
         <section className="art-sec">
           <div className="sec-head">
@@ -225,7 +230,10 @@ export function TraceView({ api, traceId, onBack }: { api: Api; traceId: string;
                       <td>{PURPOSES[c.purpose] ?? c.purpose}{c.cached ? " (кеш)" : ""}</td>
                       <td className="mono">{c.model}</td>
                       <td className="num">{(c.tokens_in + c.tokens_out).toLocaleString("ru-RU")}</td>
-                      <td className="num">{rub(c.cost_rub)}</td>
+                      <td className="num">
+                        {rub(c.cost_rub)}
+                        {c.cached && c.original_cost_rub ? <span className="muted small"> (было {rub(c.original_cost_rub)})</span> : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

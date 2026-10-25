@@ -182,3 +182,29 @@ def test_both_analysts_down_degrades_to_quick_card(client, monkeypatch):
 
 def steps_end(trace) -> str:
     return trace.steps[-1]
+
+
+def test_trace_shows_intermediate_results(client):
+    """CRITERIA_CHECK 4: план, сводка инструментов, отчёты аналитиков, арбитр, критик — без платежей."""
+    card = feed_card(client, BORROWER, "cfo")
+    r = client.get(f"/trace/{card['trace_id']}")
+    assert r.status_code == 200
+    trace = r.json()
+    assert trace["plan"] and all(s["tool"] for s in trace["plan"])
+    assert all("company_id" not in s["args"] for s in trace["plan"])
+    assert trace["tool_results"] and any(t["found"] > 0 and t["items"] for t in trace["tool_results"])
+    assert len(trace["analyst_reports"]) == 2 and all(a["channels"] for a in trace["analyst_reports"])
+    assert {a["analyst"] for a in trace["analyst_reports"]} == {"business", "finance"}
+    assert "key_rate" in trace["arbiter"]["agreement"]
+    assert trace["critic_rounds"] and trace["card_source"] in ("llm", "template", "fixture")
+    text = r.text
+    assert "pay_amt" not in text and "pay_cnt" not in text
+
+
+def test_cached_analysis_trace_reports_savings(client):
+    feed_card(client, BORROWER, "cfo")
+    other = feed_card(client, BORROWER, "ceo")
+    trace = client.get(f"/trace/{other['trace_id']}").json()
+    assert trace["analysis_cached"] is True
+    assert trace["analyst_reports"] and trace["plan"]  # промежуточные результаты есть и у кеша
+    assert trace["saved_rub"] >= 0.0

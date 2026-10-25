@@ -472,14 +472,14 @@ class LLMClient:
 
         def log(spec: ModelSpec, *, attempt: int, fb: bool, tin: int, tout: int, cost: float,
                 cached: bool, validation: str, error: str | None, base: str | None = None,
-                pcost: float | None = None, praw: float | None = None) -> None:
+                pcost: float | None = None, praw: float | None = None, orig: float | None = None) -> None:
             self.journal.record(
                 JournalEntry(
                     trace_id=trace_id, step=step, dev=dev, model=spec.provider_name,
                     fallback_used=fb, attempt=attempt, tokens_in=tin, tokens_out=tout,
                     cost_rub=cost, base=base,  # type: ignore[arg-type]
                     provider_cost=pcost, provider_cost_raw=praw,
-                    cached=cached, prompt_version=prompt_version,
+                    cached=cached, original_cost_rub=orig, prompt_version=prompt_version,
                     prompt_hash=prompt_hash, args_hash=args_hash,
                     validation=validation,  # type: ignore[arg-type]
                     error=error, mode=self.settings.llm_mode,  # type: ignore[arg-type]
@@ -500,8 +500,13 @@ class LLMClient:
                 except (ValidationError, ValueError):
                     value = None
                 if value is not None:
+                    orig = hit.get("cost_rub")
+                    if orig is None and (hit.get("tokens_in") or hit.get("tokens_out")):
+                        # старые записи кеша без стоимости — оценка по ценам models.yaml
+                        tin0, tout0 = int(hit.get("tokens_in") or 0), int(hit.get("tokens_out") or 0)
+                        orig = primary.cost_rub(tin0, tout0)
                     log(primary, attempt=0, fb=False, tin=0, tout=0, cost=0.0, cached=True,
-                        validation="ok", error=None)
+                        validation="ok", error=None, orig=round(float(orig), 6) if orig is not None else None)
                     return LlmResult[T](
                         value=value, step=step, model=primary.provider_name, fallback_used=False,
                         attempts=0, tokens_in=0, tokens_out=0, cost_rub=0.0, cached=True, trace_id=trace_id,
@@ -570,7 +575,7 @@ class LLMClient:
 
         def done(value: T, spec: ModelSpec, fb: bool, text: str) -> LlmResult[T]:
             if use_cache:
-                self.cache.put(ckey, text, tot_in, tot_out)
+                self.cache.put(ckey, text, tot_in, tot_out, round(tot_cost, 6))
             return LlmResult[T](
                 value=value, step=step, model=spec.provider_name, fallback_used=fb, attempts=attempts,
                 tokens_in=tot_in, tokens_out=tot_out, cost_rub=tot_cost, cached=False, trace_id=trace_id,

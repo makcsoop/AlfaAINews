@@ -160,6 +160,51 @@ export interface LlmCall {
   cost_rub: number;
   at: string;
   cached: boolean;
+  original_cost_rub?: number | null;
+}
+
+// Промежуточные результаты прогона (схема 0.2.3): план, что нашли инструменты, аналитики, арбитр, критик
+export interface TracePlanStep {
+  tool: string;
+  args: Record<string, unknown>;
+  why: string;
+  origin: string;
+}
+
+export interface TraceToolResult {
+  tool: string;
+  found: number;
+  items: { id: string; kind: string; title: string }[];
+}
+
+export interface TraceChannel {
+  channel: string;
+  direction: "up" | "down" | "flat";
+  strength: number;
+  horizon?: string | null;
+  rationale?: string | null;
+}
+
+export interface TraceAnalystReport {
+  analyst: "business" | "finance";
+  model: string;
+  channels: TraceChannel[];
+  summary: string;
+  open_questions: string[];
+}
+
+export interface TraceArbiter {
+  agreement: Record<string, "agree" | "disagree" | "single">;
+  disputes: string[];
+  bank_check: string[];
+  on_review: boolean;
+}
+
+export interface TraceCriticRound {
+  round: number;
+  ok: boolean;
+  failures: string[];
+  planner_task?: string | null;
 }
 
 export interface RunTrace {
@@ -174,6 +219,15 @@ export interface RunTrace {
   cost_rub: number;
   started_at: string;
   finished_at?: string | null;
+  plan?: TracePlanStep[];
+  gaps?: string[];
+  tool_results?: TraceToolResult[];
+  analyst_reports?: TraceAnalystReport[];
+  arbiter?: TraceArbiter | null;
+  critic_rounds?: TraceCriticRound[];
+  card_source?: "llm" | "template" | "fixture" | null;
+  analysis_cached?: boolean;
+  saved_rub?: number;
 }
 
 export interface StepCost {

@@ -845,5 +845,5 @@
   ],
   "title": "InsightCard",
   "type": "object",
-  "$comment": "schema 0.2.2"
+  "$comment": "schema 0.2.3"
 }

@@ -1,5 +1,231 @@
 {
   "$defs": {
+    "AnalystReport": {
+      "additionalProperties": false,
+      "description": "9. Отчёт независимого аналитика (бизнес / финансы) по паре «сюжет × отрасль».",
+      "properties": {
+        "story_id": {
+          "title": "Story Id",
+          "type": "string"
+        },
+        "sector": {
+          "title": "Sector",
+          "type": "string"
+        },
+        "analyst": {
+          "enum": [
+            "business",
+            "finance"
+          ],
+          "title": "Analyst",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "channels": {
+          "items": {
+            "$ref": "#/$defs/ChannelImpact"
+          },
+          "title": "Channels",
+          "type": "array"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "open_questions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Open Questions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "story_id",
+        "sector",
+        "analyst",
+        "model",
+        "channels",
+        "summary"
+      ],
+      "title": "AnalystReport",
+      "type": "object"
+    },
+    "ChannelImpact": {
+      "additionalProperties": false,
+      "description": "Как событие двигает фактор: «ставка выше», «рубль крепче». Это направление фактора,\nа не «хорошо / плохо» (У17): знак для клиента получается только умножением на его\nчувствительность к фактору (ChannelExposure.sensitivity).",
+      "properties": {
+        "channel": {
+          "description": "id фактора из config/channels_matrix.yaml",
+          "title": "Channel",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "flat"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "strength": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Strength",
+          "type": "number"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "enum": [
+                "days",
+                "weeks",
+                "months",
+                "quarters",
+                "years"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "channel",
+        "direction",
+        "strength"
+      ],
+      "title": "ChannelImpact",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Ссылка на фрагмент первоисточника. quote — дословная цитата, span — позиции в тексте.",
+      "properties": {
+        "source_id": {
+          "description": "raw_item id, bank chunk id 'doc#p3#c2' или 'csv:FIELD'",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "doc_date": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Date"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "цитата найдена в тексте (rapidfuzz ≥ 90)",
+          "title": "Verified"
+        },
+        "feed_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "лента материала из config/sources.yaml ('cbr_press', 'prime'); у ЦМИ — нет",
+          "title": "Feed Id"
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
     "LlmCall": {
       "additionalProperties": false,
       "properties": {
@@ -36,6 +262,19 @@
           "default": false,
           "title": "Cached",
           "type": "boolean"
+        },
+        "original_cost_rub": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "для ответа из кеша — сколько стоил исходный вызов (экономия)",
+          "title": "Original Cost Rub"
         }
       },
       "required": [
@@ -91,10 +330,148 @@
       ],
       "title": "ToolCall",
       "type": "object"
+    },
+    "TraceArbiter": {
+      "additionalProperties": false,
+      "description": "Итог арбитра: согласие аналитиков по каналам, споры, сверка знака с ЦМИ.",
+      "properties": {
+        "agreement": {
+          "additionalProperties": {
+            "enum": [
+              "agree",
+              "disagree",
+              "single"
+            ],
+            "type": "string"
+          },
+          "title": "Agreement",
+          "type": "object"
+        },
+        "disputes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Disputes",
+          "type": "array"
+        },
+        "bank_check": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Bank Check",
+          "type": "array"
+        },
+        "on_review": {
+          "default": false,
+          "title": "On Review",
+          "type": "boolean"
+        }
+      },
+      "title": "TraceArbiter",
+      "type": "object"
+    },
+    "TraceCriticRound": {
+      "additionalProperties": false,
+      "properties": {
+        "round": {
+          "title": "Round",
+          "type": "integer"
+        },
+        "ok": {
+          "default": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "failures": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Failures",
+          "type": "array"
+        },
+        "planner_task": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Planner Task"
+        }
+      },
+      "required": [
+        "round"
+      ],
+      "title": "TraceCriticRound",
+      "type": "object"
+    },
+    "TracePlanStep": {
+      "additionalProperties": false,
+      "description": "Шаг плана досье: инструмент, открытые аргументы (тема, канал, дата; company_id в них не бывает).",
+      "properties": {
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "why": {
+          "default": "",
+          "title": "Why",
+          "type": "string"
+        },
+        "origin": {
+          "default": "template",
+          "title": "Origin",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "TracePlanStep",
+      "type": "object"
+    },
+    "TraceToolResult": {
+      "additionalProperties": false,
+      "description": "Что нашёл инструмент: число элементов и их id/заголовки. Без сырых данных, платежей и физлиц.",
+      "properties": {
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "found": {
+          "default": 0,
+          "title": "Found",
+          "type": "integer"
+        },
+        "items": {
+          "description": "[{id, kind, title}]",
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "TraceToolResult",
+      "type": "object"
     }
   },
   "additionalProperties": false,
-  "description": "12. Журнал разбора: шаги, инструменты, вызовы моделей, итог проверки и стоимость.",
+  "description": "12. Журнал разбора: шаги, инструменты, вызовы моделей, итог проверки и стоимость.\nС 0.2.3 — и промежуточные результаты: план, сводка инструментов, отчёты аналитиков, арбитр, критик.",
   "properties": {
     "run_id": {
       "title": "Run Id",
@@ -171,6 +548,82 @@
       ],
       "default": null,
       "title": "Finished At"
+    },
+    "plan": {
+      "items": {
+        "$ref": "#/$defs/TracePlanStep"
+      },
+      "title": "Plan",
+      "type": "array"
+    },
+    "gaps": {
+      "description": "чего не хватило досье",
+      "items": {
+        "type": "string"
+      },
+      "title": "Gaps",
+      "type": "array"
+    },
+    "tool_results": {
+      "items": {
+        "$ref": "#/$defs/TraceToolResult"
+      },
+      "title": "Tool Results",
+      "type": "array"
+    },
+    "analyst_reports": {
+      "items": {
+        "$ref": "#/$defs/AnalystReport"
+      },
+      "title": "Analyst Reports",
+      "type": "array"
+    },
+    "arbiter": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TraceArbiter"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "critic_rounds": {
+      "items": {
+        "$ref": "#/$defs/TraceCriticRound"
+      },
+      "title": "Critic Rounds",
+      "type": "array"
+    },
+    "card_source": {
+      "anyOf": [
+        {
+          "enum": [
+            "llm",
+            "template",
+            "fixture"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Card Source"
+    },
+    "analysis_cached": {
+      "default": false,
+      "description": "разбор отрасли взят из кеша",
+      "title": "Analysis Cached",
+      "type": "boolean"
+    },
+    "saved_rub": {
+      "default": 0.0,
+      "description": "сколько ₽ сэкономил кеш на этом прогоне",
+      "title": "Saved Rub",
+      "type": "number"
     }
   },
   "required": [
@@ -180,5 +633,5 @@
   ],
   "title": "RunTrace",
   "type": "object",
-  "$comment": "schema 0.2.2"
+  "$comment": "schema 0.2.3"
 }

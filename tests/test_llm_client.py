@@ -198,6 +198,17 @@ def test_cache_hit_skips_transport(tmp_path):
     assert c.journal.by_trace("t1")[-1]["cached"] is True
 
 
+def test_cache_hit_keeps_original_cost(tmp_path):
+    """CRITERIA_CHECK 4: у ответа из кеша в трассе видна исходная стоимость («экономия ≈ X ₽»)."""
+    t = StubTransport([GOOD])
+    c = make_client(tmp_path, t)
+    r1 = call(c)
+    call(c)
+    calls = c.journal.to_llm_calls("t1")
+    assert calls[-1].cached and calls[-1].cost_rub == 0.0
+    assert calls[-1].original_cost_rub == pytest.approx(r1.cost_rub) and r1.cost_rub > 0
+
+
 def test_cache_disabled(tmp_path):
     t = StubTransport([GOOD, GOOD])
     c = make_client(tmp_path, t, llm_cache_enabled=False)

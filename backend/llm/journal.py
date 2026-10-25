@@ -27,6 +27,7 @@ class JournalEntry(BaseModel):
     provider_cost: float | None = None  # стоимость от провайдера, ₽
     provider_cost_raw: float | None = None  # сырое число, если единицы неизвестны
     cached: bool = False
+    original_cost_rub: float | None = None  # ответ из кеша: стоимость исходного вызова
     prompt_version: str | None = None
     prompt_hash: str = ""
     args_hash: str = ""
@@ -94,6 +95,7 @@ class Journal:
                 cost_rub=e.cost_rub,
                 at=e.at,
                 cached=e.cached,
+                original_cost_rub=e.original_cost_rub,
             )
             for e in self._trace(trace_id)
         ]
