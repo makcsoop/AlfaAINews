@@ -262,3 +262,26 @@ def test_bank_view_with_review_date_in_words_passes(bundle, tmp_path):
               "октября", "ноября", "декабря"]  # fmt: skip
     text = f"В обзоре от {day.day} {months[day.month - 1]} ЦМИ: {claim.text}"
     assert _check(e, _with_text(card, bid, text)).ok
+
+
+def test_fact_number_checked_by_shown_quote_not_neighbour_fact(bundle, tmp_path):
+    # CRITERIA_CHECK 7б: цитата «Заявление Председателя…» без числа, а «14%» — в соседнем факте того же
+    # документа; раньше проверка находила число в досье и пропускала, хотя показанная цитата его не содержит
+    e, card = _llm_card(bundle, tmp_path, CASES[0])
+    fid = card.what_happened[0]
+    claims = []
+    for c in card.claims:
+        if c.claim_id == fid:
+            ev = [x.model_copy(update={"quote": "Заявление Председателя Банка России по итогам заседания"})
+                  for x in c.evidence[:1]]
+            c = c.model_copy(update={"text": "Банк России сохранил ключевую ставку на уровне 14,00% годовых.",
+                                     "evidence": ev})
+        claims.append(c)
+    check = _check(e, card.model_copy(update={"claims": claims}))
+    assert "number_not_in_source" in _codes(check)
+
+
+def test_main_fact_quote_contains_its_number(bundle, tmp_path):
+    _, card = _llm_card(bundle, tmp_path, CASES[0])
+    f1 = next(c for c in card.claims if c.claim_id == card.what_happened[0])
+    assert "14" in " ".join(ev.quote for ev in f1.evidence)

@@ -111,6 +111,11 @@ def _sentences(text: str) -> list[str]:
     return out
 
 
+def _nums(text: str) -> set[float]:
+    """Числа текста как значения: «14,00» и «14» — одно число."""
+    return {float(n.replace(",", ".")) for n in _NUM.findall(text)}
+
+
 def _best_sentence(text: str, claim_text: str, limit: int = 300) -> str:
     sentences = _sentences(text)
     if not sentences:
@@ -197,12 +202,29 @@ class _Builder:
         d = item.data
         source_id = str(d.get("source_id") or item.id) if item.kind == "fact" else item.id
         quote = d.get("quote") or (item.text and _best_sentence(item.text, claim_text)) or item.title
+        if item.kind == "fact" and (want := _nums(claim_text)) and not want & _nums(str(quote)):
+            # «суть события» часто цитирует заголовок без числа («Заявление Председателя…»), а в утверждении
+            # «14,00%»: берём факт того же сюжета, в цитате которого это число есть
+            alt = self._fact_with_numbers(item, want)
+            if alt is not None:
+                return self.evidence(alt, claim_text)
         doc_date = _as_datetime(d.get("doc_date")) or item.published_at
         # у новости в data.source_id — лента («prime»); у факта — id материала, ленту допишет проверка
         feed = d.get("source_id") if item.kind == "news" else None
         return Evidence(
             source_id=source_id, quote=str(quote)[:400], url=d.get("url"), doc_date=doc_date, feed_id=feed
         )
+
+    def _fact_with_numbers(self, item: DossierItem, want: set[float]) -> DossierItem | None:
+        prefix = item.id.rsplit(":", 1)[0] + ":"
+        best, hits = None, 0
+        for other in self.dossier.items:
+            if other.kind != "fact" or not other.id.startswith(prefix) or other.id == item.id:
+                continue
+            n = len(want & _nums(str(other.data.get("quote") or "")))
+            if n > hits:
+                best, hits = other, n
+        return best
 
     def evidences(self, items: Sequence[DossierItem], claim_text: str) -> list[Evidence]:
         """Одна цитата на документ и без почти одинаковых цитат (перепечатки одного текста)."""

@@ -151,6 +151,10 @@ class _Pool:
         return any(d == sd and m == sm and (y is None or y == sy) for sd, sm, sy in self.dates)
 
 
+def _is_year(n: str) -> bool:
+    return n.isdigit() and 1990 <= int(n) <= 2100
+
+
 def _items_for(dossier: Dossier, source_id: str) -> list[DossierItem]:
     """Элементы досье, на которые указывает evidence: по id или по id документа в data.source_id."""
     return [i for i in dossier.items if i.id == source_id or i.data.get("source_id") == source_id]
@@ -165,7 +169,18 @@ def _claim_pool(
     for ev in claim.evidence:
         pool.add_text(ev.quote)
         pool.add_datetime(ev.doc_date)
-        for item in _items_for(dossier, ev.source_id):
+        items = _items_for(dossier, ev.source_id)
+        if claim.type == "fact":
+            # числа факта — только по показанной цитате (а не по соседнему факту того же документа с «14%»);
+            # даты — и по самому документу: дата заседания обычно в шапке материала, а не в цитате
+            doc = _Pool()
+            for item in items:
+                doc.add_item(item)
+            pool.dates |= doc.dates
+            pool.numbers |= {n for n in doc.numbers if _is_year(n)}  # «с июня 2025 года» — часть даты
+            pool.numbers |= {str(d) for d, _, _ in doc.dates} | {str(y) for _, _, y in doc.dates if y}
+            continue
+        for item in items:
             pool.add_item(item)
     if claim.type == "model_inference" or claim.type == "bank_offer":
         for key, refs in claim.based_on.items():
