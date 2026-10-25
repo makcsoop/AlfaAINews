@@ -1,0 +1,13 @@
+# Вход на сервер: TLS и проксирование на фронт (nginx внутри отдаёт интерфейс и /api/ → backend).
+# SITE_ADDRESS в .env: домен (news.example.ru) — Caddy сам получит сертификат Let's Encrypt;
+# «:80» — без домена, только HTTP (тогда SESSION_COOKIE_SECURE=false).
+{$SITE_ADDRESS::80} {
+	encode gzip zstd
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	reverse_proxy frontend:80
+}

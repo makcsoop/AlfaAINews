@@ -7,7 +7,7 @@ import yaml
 
 from tests.conftest import ROOT
 
-DOCS = ["docs/scaling_and_ops.md", "docs/monitoring.md", "docs/security.md"]
+DOCS = ["docs/scaling_and_ops.md", "docs/monitoring.md", "docs/security.md", "docs/deploy.md"]
 # пути в `кавычках`: начинаются с известной папки проекта и не содержат шаблонов
 _PATH = re.compile(r"`((?:backend|config|docs|eval|frontend|prompts|scripts|tests|reports)/[\w./-]+)`")
 _LINK = re.compile(r"\]\(([\w./-]+\.md)\)")

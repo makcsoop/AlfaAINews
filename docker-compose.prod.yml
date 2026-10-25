@@ -1,0 +1,67 @@
+# Сервер: поверх docker-compose.yml
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Отличия от локального стенда: всё перезапускается само, наружу открыт только Caddy (80/443, TLS по домену
+# из SITE_ADDRESS), Redis с сохранением на диск, логи контейнеров ограничены по размеру.
+# Нужен Docker Compose ≥ 2.24 (тег !reset).
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "5"}
+
+services:
+  db:
+    restart: unless-stopped
+    logging: *logging
+
+  redis:
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: !reset []
+    volumes:
+      - redisdata:/data
+    logging: *logging
+
+  init:
+    logging: *logging
+
+  backend:
+    restart: unless-stopped
+    environment:
+      # true — только при HTTPS (SITE_ADDRESS — домен); на голом HTTP вход перестанет работать
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *logging
+
+  ingest:
+    logging: *logging
+
+  frontend:
+    restart: unless-stopped
+    ports: !reset []
+    logging: *logging
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    logging: *logging
+
+volumes:
+  redisdata:
+  caddy_data:
+  caddy_config:
