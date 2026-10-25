@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -37,15 +38,31 @@ class JournalEntry(BaseModel):
     at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+MAX_ENTRIES = 50_000  # в памяти — последние вызовы; полный журнал — в JSONL по дням
+
+
 class Journal:
-    def __init__(self, directory: str | Path | None = None) -> None:
+    """В памяти — кольцевой буфер последних вызовов и индекс trace_id → записи (поиск по прогону
+    не сканирует весь журнал); на диске — всё."""
+
+    def __init__(self, directory: str | Path | None = None, *, max_entries: int = MAX_ENTRIES) -> None:
         self._dir = Path(directory) if directory else None
-        self._entries: list[JournalEntry] = []
+        self._max = max(1, max_entries)
+        self._entries: deque[JournalEntry] = deque()
+        self._by_trace: dict[str, deque[JournalEntry]] = {}
         self._lock = threading.Lock()
 
     def record(self, entry: JournalEntry) -> None:
         with self._lock:
             self._entries.append(entry)
+            self._by_trace.setdefault(entry.trace_id, deque()).append(entry)
+            while len(self._entries) > self._max:
+                old = self._entries.popleft()
+                same = self._by_trace.get(old.trace_id)
+                if same:
+                    same.popleft()  # записи прогона идут по порядку: вытесняемая — самая ранняя
+                    if not same:
+                        del self._by_trace[old.trace_id]
             if self._dir is not None:
                 try:
                     self._dir.mkdir(parents=True, exist_ok=True)
@@ -59,8 +76,12 @@ class Journal:
         with self._lock:
             return list(self._entries)
 
+    def _trace(self, trace_id: str) -> list[JournalEntry]:
+        with self._lock:
+            return list(self._by_trace.get(trace_id, ()))
+
     def by_trace(self, trace_id: str) -> list[dict]:
-        return [e.model_dump(mode="json") for e in self.entries() if e.trace_id == trace_id]
+        return [e.model_dump(mode="json") for e in self._trace(trace_id)]
 
     def to_llm_calls(self, trace_id: str) -> list[LlmCall]:
         return [
@@ -74,16 +95,13 @@ class Journal:
                 at=e.at,
                 cached=e.cached,
             )
-            for e in self.entries()
-            if e.trace_id == trace_id
+            for e in self._trace(trace_id)
         ]
 
     def cost_by_step(self, trace_id: str | None = None) -> dict[str, dict[str, float]]:
         """Звонки, токены и ₽ по шагам; с trace_id — только по одному прогону."""
         out: dict[str, dict[str, float]] = {}
-        for e in self.entries():
-            if trace_id is not None and e.trace_id != trace_id:
-                continue
+        for e in self.entries() if trace_id is None else self._trace(trace_id):
             b = out.setdefault(e.step, {"calls": 0, "tokens_in": 0, "tokens_out": 0, "cost_rub": 0.0})
             b["calls"] += 1
             b["tokens_in"] += e.tokens_in

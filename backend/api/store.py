@@ -91,6 +91,8 @@ DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_
 DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
 DEFAULT_FEED_REFRESH_S = 300.0  # как часто лента досчитывает новые сюжеты (склейка в ingest — раз в 5 минут)
+DEEP_LOG_MAX = 5000  # журнал глубоких разборов в памяти — последние записи
+TRACES_MAX = 5000  # трассы в памяти: сверх — вытесняются самые старые, кроме трасс карточек в лентах
 DEFAULT_FEED_RETRY_S = 600.0  # через сколько повторять разбор, который упал или деградировал
 
 
@@ -386,8 +388,21 @@ class PipelineCardStore:
         self._put_deep(feed, story_id, card)
         trace = self._redis.get_trace(run_id) if run_id else None
         if trace is not None:
-            self._traces[trace.run_id] = trace
+            self._add_trace(trace)
         return True
+
+    def _add_trace(self, trace: RunTrace) -> None:
+        """Трасса в памяти; сверх TRACES_MAX вытесняются самые старые, кроме трасс карточек в лентах."""
+        self._traces[trace.run_id] = trace
+        if len(self._traces) <= TRACES_MAX:
+            return
+        live = {c.trace_id for c in self._cards.values() if c.trace_id}
+        target = int(TRACES_MAX * 0.9)
+        for run_id in list(self._traces):
+            if len(self._traces) <= target:
+                break
+            if run_id not in live:
+                del self._traces[run_id]
 
     def _put_deep(self, feed: _Feed, story_id: str, card: InsightCard) -> None:
         old = feed.cards.get(story_id)
@@ -492,6 +507,8 @@ class PipelineCardStore:
             cost_rub=round(trace.cost_rub, 6) if trace else 0.0, at=datetime.now(UTC),
         )
         self.deep_log.append(run)
+        if len(self.deep_log) > DEEP_LOG_MAX:
+            del self.deep_log[: len(self.deep_log) - DEEP_LOG_MAX]
         if status in ("failed", "dropped"):
             log.warning("глубокий разбор %s для %s/%s: %s (%s)", story_id, feed.company_id, feed.role,
                         status, reason)
@@ -548,7 +565,7 @@ class PipelineCardStore:
         feed.retry_at[story_id] = time.monotonic() + feed_retry_s()
 
     def _apply_result(self, feed: _Feed, story_id: str, card: InsightCard, trace: RunTrace) -> None:
-        self._traces[trace.run_id] = trace
+        self._add_trace(trace)
         if _is_degraded(trace):
             self._apply_degraded(feed, story_id, card, trace)
             return
@@ -581,7 +598,7 @@ class PipelineCardStore:
                 company_id=feed.company_id, started_at=now, finished_at=now,
             )
         trace.steps.append(f"pipeline_failed:{type(exc).__name__}")
-        self._traces[trace.run_id] = trace
+        self._add_trace(trace)
         # сюжета уже нет в ленте — ничего не подставляем (карточка фикстуры перезаписала бы настоящую)
         card = self._cards.get(feed.cards.get(story_id, ""))
         if card is not None:
