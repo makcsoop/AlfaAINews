@@ -4,6 +4,10 @@
 через ?before=<id>. Ограничения: только публичные каналы с включённым предпросмотром; страница может
 отставать от канала (в архитектуре — опыт Honey Money), нет точной даты правки. Запросы — через общий
 Fetcher: не больше 1 в секунду на хост.
+
+Проход читает не больше MAX_PAGES страниц. Не дочитали до сохранённого id (вышло больше ~120 постов) —
+точку дочитывания не сдвигаем: следующий проход продолжает с нижнего края прочитанного, пока не закроет
+дыру, и только тогда переносит точку на самый новый сохранённый пост.
 """
 
 import logging
@@ -12,7 +16,9 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import lxml.html
+from sqlalchemy import BigInteger, Connection, cast, func, select
 
+from backend.db import models as m
 from backend.db.engine import get_engine
 from backend.ingest import store
 from backend.ingest.http import Fetcher
@@ -72,16 +78,27 @@ def parse_page(html: bytes | str, channel: str) -> list[SimpleNamespace]:
     return posts
 
 
+def saved_above(conn: Connection, source_id: str, last: int) -> tuple[int | None, int | None]:
+    """Самый старый и самый новый сохранённый пост канала новее точки дочитывания (есть — значит, дыра)."""
+    nid = cast(m.raw_items.c.native_id, BigInteger)
+    row = conn.execute(
+        select(func.min(nid), func.max(nid)).where(m.raw_items.c.source_id == source_id, nid > last)
+    ).one()
+    return row[0], row[1]
+
+
 async def ingest_channel_web(fetcher: Fetcher, src: Source) -> int:
     channel = username(src)
     engine = get_engine()
     with engine.begin() as conn:
         state = store.get_state(conn, src.id)
-    last = state.get("last_native_id") or 0
+        last = state.get("last_native_id") or 0
+        gap_top, saved_top = saved_above(conn, src.id, last) if last else (None, None)
     fetched_at = datetime.now(UTC)
     url = f"https://t.me/s/{channel}"
     collected: dict[int, SimpleNamespace] = {}
-    before = None
+    before = gap_top  # прошлый проход не дочитал — продолжаем вниз от нижнего края прочитанного
+    reached = False
     for _page in range(MAX_PAGES):
         resp = await fetcher.get(url + (f"?before={before}" if before else ""))
         if resp.status_code != 200:
@@ -93,13 +110,15 @@ async def ingest_channel_web(fetcher: Fetcher, src: Source) -> int:
             return 0
         page = parse_page(resp.content, channel)
         if not page:
+            reached = True  # дальше постов нет — начало канала
             break
         for p in page:
             if p.id > last:
                 collected[p.id] = p
         oldest = min(p.id for p in page)
-        # дочитали до уже сохранённого или набрали бэкфилл первого прохода
+        # дочитали до уже сохранённого, набрали бэкфилл первого прохода или дошли до начала канала
         if oldest <= last or (not last and len(collected) >= BACKFILL) or before == oldest:
+            reached = True
             break
         before = oldest
     items: list[RawItem] = [
@@ -107,7 +126,8 @@ async def ingest_channel_web(fetcher: Fetcher, src: Source) -> int:
         for p in sorted(collected.values(), key=lambda p: p.id)
         if (i := message_to_item(src, channel, p, fetched_at))
     ]
-    newest = max([last, *collected])
+    # точка дочитывания — только через прочитанное без дыр; иначе остаётся, дыру закроют следующие проходы
+    newest = max([last, *collected, saved_top or 0]) if reached or not last else last
     with engine.begin() as conn:
         n = store.insert_items(conn, items)
         store.save_state(

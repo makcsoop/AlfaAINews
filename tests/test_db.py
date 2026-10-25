@@ -340,3 +340,18 @@ def test_story_id_survives_window_slide_and_late_item(engine):
     assert slid["first_seen"] == now - timedelta(hours=70)
     assert late_ids == {fid} and gone is None
     assert late["data"]["item_ids"][0] == "stab_5" and late["first_seen"] == now - timedelta(hours=12)
+
+
+def test_tme_web_saved_above_finds_gap(engine):
+    from backend.ingest.tme_web import saved_above
+
+    now = datetime.now(UTC)
+    posts = [
+        RawItem(id=f"gap_{n}", source_id="tg_gap", native_id=str(n), tier=2, title=f"Пост {n}",
+                published_at=now, fetched_at=now, content_hash=f"gap_{n}")
+        for n in (5, 98, 120, 1000)
+    ]
+    with engine.begin() as conn:
+        insert_items(conn, posts)
+        assert saved_above(conn, "tg_gap", 100) == (120, 1000)  # числовое сравнение, не строковое
+        assert saved_above(conn, "tg_gap", 1000) == (None, None)

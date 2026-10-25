@@ -2,6 +2,8 @@
 
 Каналы — источники kind: telegram в config/sources.yaml (username берётся из url). Для каждого канала
 дочитываем посты от последнего сохранённого id (feed_state.last_native_id): обрыв связи не теряет посты.
+Дочитывание идёт от старых к новым, поэтому при обрыве или долгом FloodWait прочитанное сохраняется и
+следующий круг продолжает с места остановки (большое отставание догоняется по частям).
 Первый проход берёт последние BACKFILL постов. FloodWait до 2 минут Telethon пережидает сам.
 Сохраняем пересылки (fwd_from — видно копирование и первоисточник), дату правки и просмотры/пересылки.
 Реклама (erid, «реклама») уходит в отсев по config/filters.yaml.
@@ -19,6 +21,7 @@ from telethon import TelegramClient
 from telethon.errors import (
     ChannelPrivateError,
     FloodWaitError,
+    RPCError,
     UsernameInvalidError,
     UsernameNotOccupiedError,
 )
@@ -110,6 +113,7 @@ async def ingest_channel(client: TelegramClient, src: Source) -> int:
     fetched_at = datetime.now(UTC)
     items: list[RawItem] = []
     newest = last
+    error: str | None = None
     try:
         kwargs = {"min_id": last, "reverse": True} if last else {"limit": BACKFILL}
         async for msg in client.iter_messages(channel, **kwargs):
@@ -122,16 +126,22 @@ async def ingest_channel(client: TelegramClient, src: Source) -> int:
             store.save_state(conn, src.id, last_status=0, last_error=f"канал недоступен: {e}"[:500])
         log.warning("%s (@%s): канал недоступен: %s", src.id, channel, e)
         return 0
-    except FloodWaitError as e:  # дольше порога Telethon — отложим канал до следующего круга
-        log.warning("%s: FloodWait %s с — пропускаю круг", src.id, e.seconds)
-        return 0
+    except (RPCError, OSError) as e:  # FloodWait дольше порога Telethon, обрыв связи, таймаут
+        reason = f"FloodWait {e.seconds} с" if isinstance(e, FloodWaitError) else f"{type(e).__name__}: {e}"
+        # дочитывание (reverse=True) идёт по возрастанию id: всё до newest прочитано без пропусков —
+        # сохраняем и продолжим со следующего круга. Первый проход (новые → старые) — просто повторим
+        if not last or newest == last:
+            log.warning("%s: %s — пропускаю круг", src.id, reason)
+            return 0
+        error = f"прервано ({reason}), прочитано до id {newest}"[:500]
+        log.warning("%s: %s — сохраняю прочитанное, дочитаю со следующего круга", src.id, error)
     with engine.begin() as conn:
         n = store.insert_items(conn, items)
         store.save_state(
             conn,
             src.id,
             last_status=200,
-            last_error=None,
+            last_error=error,
             last_native_id=newest,
             items_total=(state.get("items_total") or 0) + n,
         )
