@@ -40,21 +40,68 @@ class Usage:
     log: list[dict] = field(default_factory=list)
 
 
+_JSON_TYPES: dict[str, tuple[type, ...]] = {
+    "object": (dict,),
+    "array": (list,),
+    "string": (str,),
+    "number": (int, float),
+    "integer": (int,),
+    "boolean": (bool,),
+}
+
+
+def _type_ok(value: Any, kind: str) -> bool:
+    if kind == "null":
+        return value is None
+    if kind in ("number", "integer") and isinstance(value, bool):
+        return False  # True — не число
+    return isinstance(value, _JSON_TYPES.get(kind, (object,)))
+
+
+def _check(value: Any, schema: dict, path: str) -> str | None:
+    """Подмножество JSON Schema, которым пользуются модули Р1: type, enum, properties, required, items.
+
+    null в необязательном поле допустим (модели пишут null вместо пропуска) — проверяют правила Р1.
+    """
+    if "enum" in schema and value not in schema["enum"]:
+        return f"{path}: значение не из списка"
+    kinds = schema.get("type")
+    if kinds is not None:
+        kinds = [kinds] if isinstance(kinds, str) else list(kinds)
+        if not any(_type_ok(value, k) for k in kinds):
+            return f"{path}: ожидался тип {'/'.join(kinds)}"
+    if isinstance(value, dict):
+        missing = [k for k in schema.get("required", ()) if k not in value]
+        if missing:
+            return f"{path}: нет обязательных полей: {', '.join(missing)}"
+        for key, sub in (schema.get("properties") or {}).items():
+            if value.get(key) is not None and (err := _check(value[key], sub, f"{path}.{key}")):
+                return err
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        for n, el in enumerate(value):
+            if err := _check(el, schema["items"], f"{path}[{n}]"):
+                return err
+    return None
+
+
 def _schema_model(json_schema: dict) -> type[BaseModel]:
-    """Pydantic-обёртка над JSON Schema порта: объект с обязательными ключами верхнего уровня."""
-    required = tuple(json_schema.get("required", ()))
+    """Pydantic-обёртка над JSON Schema порта: обязательные ключи и типы полей (инвариант 3).
+
+    Невалидный ответ — ValueError внутри валидации, поэтому клиент делает повтор, потом запасную модель,
+    а модуль Р1 при None остаётся на правилах.
+    """
+    schema = {"type": "object", **json_schema}
 
     class PortJson(BaseModel):
         model_config = ConfigDict(extra="allow")
 
         @model_validator(mode="before")
         @classmethod
-        def _required(cls, data: Any) -> Any:
+        def _valid(cls, data: Any) -> Any:
             if not isinstance(data, dict):
                 raise ValueError("ответ не JSON-объект")
-            missing = [k for k in required if k not in data]
-            if missing:
-                raise ValueError(f"нет обязательных полей: {', '.join(missing)}")
+            if err := _check(data, schema, "$"):
+                raise ValueError(err)
             return data
 
     return PortJson

@@ -68,3 +68,27 @@ def test_other_allowed_model_is_probe_and_unknown_model_refused(tmp_path):
         llm.complete_json(model="openai/gpt-x", system="s", user="u", json_schema=SCHEMA, purpose="extract")
         is None
     )
+
+
+def test_port_schema_checks_types():
+    """B7: порт проверяет типы по JSON Schema, а не только наличие ключей: невалидный — в повтор/запасную."""
+    import pytest
+    from pydantic import ValidationError
+
+    from backend.extract.extractor import RESPONSE_SCHEMA
+    from backend.llm.port import _schema_model
+
+    model = _schema_model(RESPONSE_SCHEMA)
+    ok = {"event_type": "rate_decision", "status": "fact", "summary": "s", "summary_quote": "q",
+          "participants": [{"name": "ЦБ", "quote": None}], "numbers": [{"value": 14, "unit": "%"}]}
+    assert model.model_validate(ok).model_dump()["event_type"] == "rate_decision"
+    for bad in (
+        {"event_type": ["rate_decision"]},
+        {"participants": ["ЦБ"]},
+        {"summary": {"x": 1}},
+        {"status": "maybe"},
+        {"numbers": [{"value": "14"}]},
+        {"numbers": [{"value": True}]},
+    ):
+        with pytest.raises(ValidationError):
+            model.model_validate({**ok, **bad})
