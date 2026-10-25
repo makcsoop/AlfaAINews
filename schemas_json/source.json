@@ -116,6 +116,19 @@
       ],
       "default": null,
       "title": "Audience"
+    },
+    "publisher": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "издатель: ленты одного издателя (сайт и Telegram) — один независимый источник; None — id",
+      "title": "Publisher"
     }
   },
   "required": [

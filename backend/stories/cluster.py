@@ -353,19 +353,27 @@ def merge_related(
     return [d for n, d in enumerate(drafts) if root(n) == n]
 
 
+def publisher_of(source_id: str, sources: dict) -> str:
+    """Издатель ленты из config/sources.yaml; без поля — сама лента."""
+    src = sources.get(source_id)
+    return (src.publisher if src is not None and src.publisher else None) or source_id
+
+
 def to_story(d: _Draft, sources: dict) -> Story:
     first = d.items[0]
     # вставка пользователя (/analyze) — не независимый источник: подтверждать сюжет она не может
     independent = {i.source_id for i in d.items if i.id not in d.copies and i.source_id != PASTE_SOURCE_ID}
     tiers = {s: sources[s].tier if s in sources else 3 for s in independent}
     official = any(sources[s].official for s in independent if s in sources)
-    strong = sum(1 for t in tiers.values() if t <= 1)
+    # независимость — по издателю: сайт и Telegram «Коммерсанта», пресс-релизы и события ЦБ — один источник
+    publishers = {publisher_of(s, sources) for s in independent}
+    strong = len({publisher_of(s, sources) for s, t in tiers.items() if t <= 1})
     rumor = any(RUMOR.search(_text(i)) for i in d.items)
     if official or strong >= 2:
         status = "confirmed"
     elif rumor:
         status = "rumor"
-    elif len(independent) <= 1:
+    elif len(publishers) <= 1:
         status = "single"
     else:
         status = "unconfirmed"
@@ -376,7 +384,7 @@ def to_story(d: _Draft, sources: dict) -> Story:
         title=head.title,
         status=status,
         item_ids=[i.id for i in d.items],
-        corroboration=len(independent),
+        corroboration=len(publishers),
         source_ids=sorted({i.source_id for i in d.items}),
         first_seen=first.published_at,
         last_seen=max(i.published_at for i in d.items),

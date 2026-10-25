@@ -7,7 +7,7 @@ import pytest
 from backend.ingest.normalize import content_hash, simhash
 from backend.ingest.registry import load_sources
 from backend.schemas import RawItem
-from backend.stories.cluster import cluster_items, story_id, to_story
+from backend.stories.cluster import _Draft, cluster_items, story_id, to_story
 from backend.stories.filters import drop_reason
 
 T0 = datetime(2026, 10, 21, 10, tzinfo=UTC)
@@ -155,6 +155,22 @@ def test_user_paste_not_independent_source():
     assert story.corroboration == 1 and story.status == "single"
     only = to_story(cluster_items([b], entity_keys=[{"org:Северсталь"}])[0], SOURCES)
     assert only.corroboration == 0 and only.status == "single"
+
+
+def test_independent_sources_counted_by_publisher():
+    """CRITERIA_CHECK 7а: ленты одного издателя (пресс-релизы и события ЦБ, сайт и Telegram «Коммерсанта»)
+    — один независимый источник, как и в списке источников карточки."""
+    titles = [
+        ("cbr_press", "ЦБ сохранил ключевую ставку 14% годовых", "Совет директоров Банка России"),
+        ("cbr_events", "Набиуллина объяснила решение сохранить ставку 14%", "пресс-конференция Банка России"),
+        ("tg_kommersant", "Банк России оставил ставку 14%", "решение совета директоров"),
+        ("kommersant", "ЦБ оставил ключевую ставку на уровне 14%", "регулятор сохранил паузу"),
+    ]
+    items = [item(n, src, t, lead, minutes=n * 3) for n, (src, t, lead) in enumerate(titles, 1)]
+    # склейка — отдельный тест; здесь только подсчёт независимых по готовому черновику
+    story = to_story(_Draft(items=items, idx=list(range(len(items)))), SOURCES)
+    assert story.corroboration == 2
+    assert len(story.source_ids) == 4  # сами ленты в сюжете остаются
 
 
 # --- персоны по фамилии и второй проход склейки (живая проверка 25.10) --------------------------

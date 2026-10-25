@@ -36,6 +36,10 @@ class Source(Schema):
     enabled: bool = True
     tags: list[str] = Field(default_factory=list)
     audience: str | None = None
+    publisher: str | None = Field(
+        default=None,
+        description="издатель: ленты одного издателя (сайт и Telegram) — один независимый источник; None — id",
+    )
 
 
 class ItemEdit(Schema):

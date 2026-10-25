@@ -186,6 +186,8 @@ const SOURCE_NAMES: Record<string, string> = {
   tg_tass_agency: "ТАСС",
   tg_prime1: "ПРАЙМ",
   tg_rbc_news: "РБК",
+  tg_smartlabnews: "Смартлаб",
+  tg_moex_derivatives: "Московская биржа",
 };
 
 export function sourceName(sourceId: string, title?: string | null): string {

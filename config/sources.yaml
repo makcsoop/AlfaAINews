@@ -5,6 +5,8 @@
 # full_text: feed — полный текст в ленте; fetch — скачиваем статью (trafilatura); none — только заголовок и лид
 # is_partial: пейволл — храним только заголовок и лид, страницу не качаем
 # official: одного такого источника достаточно для статуса «подтверждено»
+# publisher: издатель — разные ленты одного издателя (сайт и Telegram, пресс-релизы и события ЦБ) считаются
+#   одним независимым источником; по умолчанию издатель = id
 
 defaults:
   poll_seconds: 180
@@ -12,72 +14,72 @@ defaults:
 
 sources:
   # ---------- RSS: день 1 ----------
-  - {id: prime, name: "ПРАЙМ", kind: rss, url: "https://1prime.ru/export/rss2/index.xml",
+  - {id: prime, publisher: prime, name: "ПРАЙМ", kind: rss, url: "https://1prime.ru/export/rss2/index.xml",
      tier: 1, weight: 0.85, value: 4, poll_seconds: 120, full_text: fetch,
      tags: [agency, fx, commodities], audience: "Казначейство, ВЭД, сырьевые компании"}
-  - {id: interfax, name: "Интерфакс", kind: rss, url: "https://www.interfax.ru/rss.asp",
+  - {id: interfax, publisher: interfax, name: "Интерфакс", kind: rss, url: "https://www.interfax.ru/rss.asp",
      tier: 1, weight: 0.9, value: 5, poll_seconds: 120, full_text: fetch,
      tags: [agency], audience: "Все отрасли; основной источник подтверждения фактов"}
-  - {id: rbc, name: "РБК", kind: rss, url: "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
+  - {id: rbc, publisher: rbc, name: "РБК", kind: rss, url: "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
      tier: 2, weight: 0.8, value: 4, poll_seconds: 180, full_text: feed,
      tags: [business_media], audience: "Все"}
 
   # ---------- RSS: день 2 ----------
-  - {id: tass, name: "ТАСС", kind: rss, url: "https://tass.ru/rss/v2.xml",
+  - {id: tass, publisher: tass, name: "ТАСС", kind: rss, url: "https://tass.ru/rss/v2.xml",
      tier: 1, weight: 0.85, value: 4, full_text: none,
      tags: [agency], audience: "ВЭД, госсектор"}  # страницы статей отдают 403 боту — берём лид из ленты
-  - {id: kommersant, name: "Коммерсантъ", kind: rss, url: "https://www.kommersant.ru/RSS/news.xml",
+  - {id: kommersant, publisher: kommersant, name: "Коммерсантъ", kind: rss, url: "https://www.kommersant.ru/RSS/news.xml",
      tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true,
      tags: [business_media], audience: "Отраслевые эксклюзивы"}
-  - {id: vedomosti, name: "Ведомости", kind: rss, url: "https://www.vedomosti.ru/rss/news",
+  - {id: vedomosti, publisher: vedomosti, name: "Ведомости", kind: rss, url: "https://www.vedomosti.ru/rss/news",
      tier: 2, weight: 0.8, value: 4, full_text: none, is_partial: true,
      tags: [business_media], audience: "Отраслевые рубрики"}
-  - {id: cbr_press, name: "ЦБ — пресс-релизы", kind: rss, url: "http://www.cbr.ru/rss/RssPress",
+  - {id: cbr_press, publisher: cbr, name: "ЦБ — пресс-релизы", kind: rss, url: "http://www.cbr.ru/rss/RssPress",
      tier: 0, weight: 1.0, value: 5, poll_seconds: 300, full_text: fetch, official: true,
      tags: [regulator, rate], audience: "Заёмщики, казначейство, ВЭД"}
-  - {id: cbr_events, name: "ЦБ — новости и выступления", kind: rss, url: "http://www.cbr.ru/rss/eventrss",
+  - {id: cbr_events, publisher: cbr, name: "ЦБ — новости и выступления", kind: rss, url: "http://www.cbr.ru/rss/eventrss",
      tier: 0, weight: 1.0, value: 4, poll_seconds: 600, full_text: fetch, official: true,
      tags: [regulator], audience: "Казначейство, финдиректора"}
-  - {id: agroinvestor, name: "Агроинвестор", kind: rss, url: "https://www.agroinvestor.ru/rss/",
+  - {id: agroinvestor, publisher: agroinvestor, name: "Агроинвестор", kind: rss, url: "https://www.agroinvestor.ru/rss/",
      tier: 2, weight: 0.7, value: 3, poll_seconds: 600, full_text: fetch, enabled: false,
      tags: [industry, agro], audience: "АПК и пищепром"}
 
   # ---------- Данные (структурированные, не новости) ----------
-  - {id: cbr_fx, name: "ЦБ — курсы валют", kind: api, url: "https://www.cbr.ru/scripts/XML_daily.asp",
+  - {id: cbr_fx, publisher: cbr, name: "ЦБ — курсы валют", kind: api, url: "https://www.cbr.ru/scripts/XML_daily.asp",
      tier: 0, weight: 1.0, value: 5, poll_seconds: 3600, full_text: none, official: true, enabled: false,
      tags: [data, fx]}
-  - {id: cbr_dailyinfo, name: "ЦБ — ключевая ставка, RUONIA", kind: api,
+  - {id: cbr_dailyinfo, publisher: cbr, name: "ЦБ — ключевая ставка, RUONIA", kind: api,
      url: "https://cbr.ru/DailyInfoWebServ/DailyInfo.asmx",
      tier: 0, weight: 1.0, value: 5, poll_seconds: 3600, full_text: none, official: true, enabled: false,
      tags: [data, rate]}
-  - {id: moex_iss, name: "Московская биржа — ISS", kind: api, url: "https://iss.moex.com/iss/",
+  - {id: moex_iss, publisher: moex, name: "Московская биржа — ISS", kind: api, url: "https://iss.moex.com/iss/",
      tier: 0, weight: 1.0, value: 5, poll_seconds: 900, full_text: none, official: true, enabled: false,
      tags: [data, market]}
 
   # ---------- Telegram (Telethon; без TG_SESSION_STRING пропускаются) ----------
-  - {id: tg_centralbank_russia, name: "Банк России", kind: telegram, url: "https://t.me/centralbank_russia",
+  - {id: tg_centralbank_russia, publisher: cbr, name: "Банк России", kind: telegram, url: "https://t.me/centralbank_russia",
      tier: 0, weight: 1.0, value: 5, official: true, tags: [regulator]}
   - {id: tg_minfin, name: "Минфин России", kind: telegram, url: "https://t.me/minfin",
      tier: 0, weight: 1.0, value: 5, official: true, tags: [regulator]}
-  - {id: tg_interfaxonline, name: "Интерфакс", kind: telegram, url: "https://t.me/interfaxonline",
+  - {id: tg_interfaxonline, publisher: interfax, name: "Интерфакс", kind: telegram, url: "https://t.me/interfaxonline",
      tier: 1, weight: 0.9, value: 5, tags: [agency]}
   - {id: tg_minec_russia, name: "Минэкономразвития", kind: telegram, url: "https://t.me/minec_russia",
      tier: 0, weight: 1.0, value: 4, official: true, tags: [regulator]}
   - {id: tg_news_kremlin, name: "Кремль. Новости", kind: telegram, url: "https://t.me/news_kremlin",
      tier: 0, weight: 1.0, value: 4, official: true, tags: [primary]}
-  - {id: tg_tass_agency, name: "ТАСС", kind: telegram, url: "https://t.me/tass_agency",
+  - {id: tg_tass_agency, publisher: tass, name: "ТАСС", kind: telegram, url: "https://t.me/tass_agency",
      tier: 1, weight: 0.85, value: 4, tags: [agency]}
-  - {id: tg_prime1, name: "ПРАЙМ", kind: telegram, url: "https://t.me/prime1",
+  - {id: tg_prime1, publisher: prime, name: "ПРАЙМ", kind: telegram, url: "https://t.me/prime1",
      tier: 1, weight: 0.85, value: 4, tags: [agency]}
-  - {id: tg_rbc_news, name: "РБК. Главное", kind: telegram, url: "https://t.me/rbc_news",
+  - {id: tg_rbc_news, publisher: rbc, name: "РБК. Главное", kind: telegram, url: "https://t.me/rbc_news",
      tier: 2, weight: 0.8, value: 4, tags: [business_media]}
-  - {id: tg_moex_derivatives, name: "MOEX Derivatives", kind: telegram, url: "https://t.me/moex_derivatives",
+  - {id: tg_moex_derivatives, publisher: moex, name: "MOEX Derivatives", kind: telegram, url: "https://t.me/moex_derivatives",
      tier: 0, weight: 1.0, value: 4, official: true, tags: [exchange]}
   - {id: tg_rosstat_official, name: "Росстат", kind: telegram, url: "https://t.me/rosstat_official",
      tier: 0, weight: 1.0, value: 3, official: true, tags: [statistics]}
   - {id: tg_dohod, name: "ДОХОДЪ", kind: telegram, url: "https://t.me/dohod",
      tier: 2, weight: 0.7, value: 3, tags: [analytics]}
-  - {id: tg_smartlabnews, name: "СМАРТЛАБ", kind: telegram, url: "https://t.me/smartlabnews",
+  - {id: tg_smartlabnews, publisher: smartlab, name: "СМАРТЛАБ", kind: telegram, url: "https://t.me/smartlabnews",
      tier: 3, weight: 0.6, value: 3, tags: [aggregator, analytics]}
   - {id: tg_alfa_investments, name: "Альфа-Инвестиции", kind: telegram, url: "https://t.me/alfa_investments",
      tier: 2, weight: 0.75, value: 3, tags: [analytics, bank]}
@@ -112,11 +114,11 @@ sources:
      tier: 0, weight: 1.0, value: 4, official: true, tags: [fiscal, regulation]}
   - {id: tg_spimexofficial, name: "Петербургская биржа (СПбМТСБ)", kind: telegram, url: "https://t.me/spimexofficial",
      tier: 0, weight: 1.0, value: 4, official: true, tags: [commodities]}
-  - {id: tg_kommersant, name: "Коммерсантъ", kind: telegram, url: "https://t.me/kommersant",
+  - {id: tg_kommersant, publisher: kommersant, name: "Коммерсантъ", kind: telegram, url: "https://t.me/kommersant",
      tier: 1, weight: 0.849, value: 4, tags: []}
-  - {id: tg_vedomosti, name: "Ведомости", kind: telegram, url: "https://t.me/vedomosti",
+  - {id: tg_vedomosti, publisher: vedomosti, name: "Ведомости", kind: telegram, url: "https://t.me/vedomosti",
      tier: 1, weight: 0.867, value: 4, tags: []}
-  - {id: tg_agroinvestor, name: "Агроинвестор", kind: telegram, url: "https://t.me/agroinvestor",
+  - {id: tg_agroinvestor, publisher: agroinvestor, name: "Агроинвестор", kind: telegram, url: "https://t.me/agroinvestor",
      tier: 1, weight: 0.761, value: 3, tags: []}
   - {id: tg_neftegazchannel, name: "Neftegaz.RU", kind: telegram, url: "https://t.me/neftegazchannel",
      tier: 1, weight: 0.77, value: 3, tags: []}
@@ -133,7 +135,7 @@ sources:
      tier: 1, weight: 0.77, value: 3, poll_seconds: 600, full_text: none, tags: []}
   - {id: frank_media, name: "Frank Media", kind: rss, url: "https://frankmedia.ru/feed",
      tier: 1, weight: 0.77, value: 2, poll_seconds: 600, full_text: none, tags: []}
-  - {id: smartlab, name: "Смартлаб, RSS", kind: rss, url: "https://smart-lab.ru/news/rss/",
+  - {id: smartlab, publisher: smartlab, name: "Смартлаб, RSS", kind: rss, url: "https://smart-lab.ru/news/rss/",
      tier: 2, weight: 0.517, value: 3, poll_seconds: 600, full_text: none, tags: []}
 
   # ---------- Аналитика банка (офлайн, день 3) ----------
