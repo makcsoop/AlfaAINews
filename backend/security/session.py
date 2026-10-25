@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import time
 from typing import Annotated
 
@@ -18,7 +19,9 @@ from backend.schemas.common import UserRole
 log = logging.getLogger(__name__)
 
 COOKIE_NAME = "session"
-DEV_SECRET = "dev-insecure-session-secret"
+# без SESSION_SECRET — случайный секрет процесса: известной строкой нельзя подделать сессию чужой компании,
+# сессии живут до перезапуска (демо без Docker работает, на стенде compose требует SESSION_SECRET)
+_PROCESS_SECRET = secrets.token_hex(32)
 DEFAULT_TTL_SECONDS = 8 * 3600
 _warned = False
 
@@ -39,9 +42,9 @@ def _secret() -> bytes:
     secret = os.environ.get("SESSION_SECRET")
     if not secret:
         if not _warned:
-            log.warning("SESSION_SECRET не задан: используется секрет для разработки, не для продакшена")
+            log.warning("SESSION_SECRET не задан: случайный секрет процесса, сессии до перезапуска")
             _warned = True
-        secret = DEV_SECRET
+        secret = _PROCESS_SECRET
     return secret.encode()
 
 

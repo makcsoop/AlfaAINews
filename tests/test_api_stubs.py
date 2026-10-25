@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.api.main import app
 from backend.security.audit import AuditLog, get_audit
-from backend.security.session import Session, issue_token, verify_token
+from backend.security.session import InvalidToken, Session, issue_token, verify_token
 
 BORROWER = "U_DEMO_BORROWER"
 DEPOSITOR = "U_DEMO_DEPOSITOR"
@@ -175,6 +175,24 @@ def test_wrong_secret_rejected(client, monkeypatch):
     client.cookies.clear()
     monkeypatch.setenv("SESSION_SECRET", "other")
     assert client.get("/feed", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
+def test_no_secret_means_no_known_dev_secret(monkeypatch):
+    # без SESSION_SECRET токен, подписанный известной строкой из кода, не проходит — нельзя войти за чужую компанию
+    import base64
+    import hashlib
+    import hmac
+
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    body = {"cid": "U_ANY", "role": "cfo", "uid": "x", "exp": 4_102_444_800}
+    payload = base64.urlsafe_b64encode(json.dumps(body, separators=(",", ":")).encode()).rstrip(b"=").decode()
+    for guess in ("dev-insecure-session-secret", "", "secret"):
+        sig = hmac.new(guess.encode(), payload.encode(), hashlib.sha256).digest()
+        forged = payload + "." + base64.urlsafe_b64encode(sig).rstrip(b"=").decode()
+        with pytest.raises(InvalidToken):
+            verify_token(forged)
+    own = issue_token(Session(company_id=BORROWER, role="cfo", user_id="u"))
+    assert verify_token(own).company_id == BORROWER  # свои токены процесса работают
 
 
 def test_validation_error_format(client):
