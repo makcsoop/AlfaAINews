@@ -235,6 +235,29 @@ def test_template_card_has_two_features_and_no_bank_voice(bundle):
         assert all(c.type in ("bank_view", "market_view") for c in card.claims if c.claim_id in card.bank_and_market)
 
 
+def test_template_bank_view_is_thesis_on_topic(bundle):
+    """Шаблон: позиция банка — тезис, а не название обзора; позиция того же канала не по теме не берётся."""
+    e = env(bundle, *CASES[0])
+    dossier = e["dossier"]
+    titles = {i.title for i in dossier.by_kind("bank_position")}
+    dossier.items.append(
+        DossierItem(
+            id="cmi_bondbrief_2026_09_14#p2#r1", kind="bank_position", title="Бонд Бриф: Итоги недели",
+            text="Альфа-Банк не ожидает ухудшения кредитного качества Полюса.",
+            data={"thesis": "Альфа-Банк не ожидает ухудшения кредитного качества Полюса.", "channel": "key_rate",
+                  "doc_date": "2026-09-20"},
+            source_tool="get_bank_positions",
+        )
+    )
+    draft = template_draft(**{k: e[k] for k in ("story", "dossier", "relevance", "profile", "role", "analyses", "graph")})
+    bank = [x for x in draft.bank_and_market if x.kind == "bank_view"]
+    assert bank, "позиция по ставке в шаблоне есть"
+    assert all(x.text not in titles and "Полюс" not in x.text for x in bank)
+    own = {i.id: i.data.get("thesis") or i.text for i in dossier.by_kind("bank_position")}
+    assert all(x.text == own[x.refs[0]] for x in bank)
+    assemble(e, draft)  # тезис проходит проверку чисел и меток
+
+
 # ---------- правила сборки ----------
 
 

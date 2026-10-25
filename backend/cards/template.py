@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from backend.agents.dossier import Dossier, DossierItem
+from backend.bank.search import topic_overlap
 from backend.cards.build import CardAssemblyError, _as_datetime
 from backend.cards.features import channel_label, company_features, is_sector_feature
 from backend.cards.llm_schema import CardDraft, DraftAction, DraftItem
@@ -72,12 +73,21 @@ def _factor_label(factor: str) -> str:
     return channel_label(factor)  # подписи всех видов вкладов — из скоринга (ranking.select.factor_label)
 
 
-def _bank_candidates(dossier: Dossier, channel: str | None, story_at: datetime) -> list[DossierItem]:
+def _bank_text(i: DossierItem) -> str:
+    """Тезис позиции, без него — цитата. Название обзора («Бонд Бриф: Итоги недели») — не позиция."""
+    return str(i.data.get("thesis") or i.text or i.title)
+
+
+def _bank_candidates(
+    dossier: Dossier, channel: str | None, story_at: datetime, story_text: str
+) -> list[DossierItem]:
     out = []
     for i in dossier.by_kind("bank_position"):
         if not i.id.startswith(BANK_SOURCE_PREFIX) or i.data.get("superseded_by"):
             continue
         if channel and i.data.get("channel") != channel:
+            continue
+        if topic_overlap(_bank_text(i), story_text) == 0:  # канал тот же, но про другое
             continue
         until = i.data.get("valid_until")
         if until:
@@ -171,10 +181,11 @@ def template_draft(
     if question:
         actions.append(DraftAction(type="analysis_question", text=question, refs=fact0))
 
-    bank_items = _bank_candidates(dossier, top_channel, dossier.story_published_at)
+    story_text = " ".join([story.title, *(f.text or f.title or "" for f in facts)])
+    bank_items = _bank_candidates(dossier, top_channel, dossier.story_published_at, story_text)
     if not bank_items and top_channel:  # по главному каналу позиции нет: берём ближайшую по теме сюжета
-        bank_items = _bank_candidates(dossier, None, dossier.story_published_at)
-    bank = [DraftItem(text=i.title or i.text, refs=[i.id], kind="bank_view") for i in bank_items]
+        bank_items = _bank_candidates(dossier, None, dossier.story_published_at, story_text)
+    bank = [DraftItem(text=_bank_text(i), refs=[i.id], kind="bank_view") for i in bank_items]
     for i in dossier.by_kind("market_knowledge")[:1]:
         text = i.title or i.text
         real = i.id.startswith("mk_") and text and not text.upper().startswith("ЗАГЛУШКА")
