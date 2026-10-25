@@ -63,6 +63,35 @@ def _fact(story: Story, facts: EventFacts | None, items: Mapping[str, RawItem]) 
     return Claim(claim_id="F1", type="fact", text=facts.summary if facts else first.title, evidence=[ev])
 
 
+def _checked_fact(claim: Claim, items: Mapping[str, RawItem]) -> Claim:
+    """Факт быстрой карточки проверяется кодом, как в глубокой: цитата есть в материале сюжета,
+    числа и даты текста — в материалах, на которые он ссылается. Без этого фронт пишет «не проверено»
+    при живом источнике."""
+    from backend.cards.verify import _norm, _Pool, extract_dates, extract_numbers  # cards → fast_card: цикл
+
+    def found(ev: Evidence) -> bool | None:
+        it = items.get(ev.source_id)
+        if not ev.quote or it is None:
+            return None
+        q = _norm(ev.quote)
+        return any(q in _norm(t) for t in (it.title, it.lead, it.text) if t)
+
+    evidence = [ev.model_copy(update={"verified": found(ev)}) for ev in claim.evidence]
+    pool = _Pool()
+    for ev in evidence:
+        if ev.verified and (it := items.get(ev.source_id)) is not None:
+            for t in (it.title, it.lead, it.text):
+                pool.add_text(t)
+            pool.add_datetime(it.published_at)
+    dates, rest = extract_dates(claim.text)
+    verified: dict[str, bool | str] = {
+        "refs": bool(evidence) and all(ev.verified for ev in evidence),
+        "numbers": extract_numbers(rest) <= pool.numbers,
+        "dates": all(pool.has_date(d) for d in dates),
+    }
+    return claim.model_copy(update={"verified": verified, "evidence": evidence})
+
+
 # флаги CSV словами — только для текста; в based_on остаются исходные признаки (их сверяет проверка карточки)
 FEATURE_WORDS = {
     "CL_PRODUCT_LOA_MARK=1": "кредиты в банке",
@@ -188,6 +217,8 @@ def fast_card(
         market=market,
     )
     reasons.insert(0, STATUS_REASON.get(story.status, story.status))
+    # проверка факта — после уверенности: совпадение заголовка с цитатой не повод поднимать уровень
+    claims[0] = _checked_fact(claims[0], items)
     return InsightCard(
         card_id=card_id(story.id, relevance.company_id, role),
         company_id=relevance.company_id,

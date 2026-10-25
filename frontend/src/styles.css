@@ -578,6 +578,7 @@ a { color: inherit; }
 .check .icon { width: 14px; height: 14px; }
 .check-ok { color: var(--opp); }
 .check-no { color: var(--mixed); }
+.check-estimate { color: var(--ink-3); }
 
 .fn { position: relative; display: inline; }
 .fn-btn {

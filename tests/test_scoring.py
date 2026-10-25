@@ -262,6 +262,40 @@ def test_fast_card_without_facts_uses_item_title():
     assert card.claims[0].evidence[0].quote
 
 
+def test_fast_card_fact_checked_by_code():
+    """Факт быстрой карточки сверяется с цитатой кодом: фронт пишет «проверено», а не «не проверено»."""
+    b = load_bundle("rate_14")
+    story, facts = b["story"][0], b["event_facts"][0]
+    rel = score_pair(story, b["company_profile"][0], now=story.last_seen, facts=facts)
+    items = {i.id: i for i in b["raw_item"]}
+    for card in (
+        fast_card(story, rel, "cfo", facts=facts, items=items),
+        fast_card(story, rel, "cfo", items=items),  # без фактов — заголовок материала
+    ):
+        f1 = card.claims[0]
+        assert f1.verified == {"refs": True, "numbers": True, "dates": True}
+        assert all(ev.verified for ev in f1.evidence)
+        # выводы — быстрая оценка скоринга: код их не проверял, фронт так и подписывает
+        assert all(not c.verified for c in card.claims if c.type == "model_inference")
+
+
+def test_fast_card_fact_check_catches_number_and_foreign_quote():
+    from backend.ranking.fast_card import _checked_fact
+    from backend.schemas import Claim
+
+    b = load_bundle("rate_14")
+    item = b["raw_item"][0]
+    ev = Evidence(source_id=item.id, quote=item.title)
+    wrong_number = Claim(claim_id="F1", type="fact", text=f"{item.title} Ставка 99%.", evidence=[ev])
+    checked = _checked_fact(wrong_number, {item.id: item})
+    assert checked.verified["numbers"] is False and checked.verified["refs"] is True
+    foreign = Claim(
+        claim_id="F1", type="fact", text="Ставка 14%", evidence=[ev.model_copy(update={"quote": "Ставка 14%"})]
+    )
+    checked = _checked_fact(foreign, {item.id: item.model_copy(update={"title": "x", "lead": None, "text": None})})
+    assert checked.verified["refs"] is False and checked.evidence[0].verified is False
+
+
 # ---------- топ-K на глубокий разбор ----------
 
 

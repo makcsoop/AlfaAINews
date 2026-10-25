@@ -42,8 +42,9 @@ interface Ctx {
   noteNo: Map<Evidence, number>;
   open: number | null;
   setOpen: (n: number | null) => void;
+  fast: boolean; // быстрая карточка: выводы — оценка скоринга, модель и критик их не проверяли
 }
-const CardCtx = createContext<Ctx>({ mark: () => {}, noteNo: new Map(), open: null, setOpen: () => {} });
+const CardCtx = createContext<Ctx>({ mark: () => {}, noteNo: new Map(), open: null, setOpen: () => {}, fast: false });
 
 interface Props {
   card: InsightCard;
@@ -187,7 +188,7 @@ export function CardView({ card, api, onBack, onTrace }: Props) {
 
   const channel = mainChannel(card);
   return (
-    <CardCtx.Provider value={{ mark, noteNo, open, setOpen }}>
+    <CardCtx.Provider value={{ mark, noteNo, open, setOpen, fast: card.stage === "fast" }}>
       <ReadingProgress />
       <div className="view article">
         <div className="crumbs">
@@ -403,8 +404,17 @@ const CHECK_NAMES: Record<string, string> = {
 };
 
 // Итог проверки кодом: все проверки пройдены — «проверено», иначе — что именно не прошло
-export function CheckBadge({ checks }: { checks: ClaimChecks }) {
+export function CheckBadge({ checks, estimate = false }: { checks: ClaimChecks; estimate?: boolean }) {
   const entries = Object.entries(checks ?? {});
+  if (entries.length === 0 && estimate)
+    return (
+      <span
+        className="check check-estimate"
+        title="Вывод скоринга по профилю компании. Модель и критик его ещё не проверяли — это сделает глубокий разбор"
+      >
+        быстрая оценка
+      </span>
+    );
   if (entries.length === 0)
     return (
       <span className="check check-no" title="Код не проверял это утверждение">
@@ -434,7 +444,7 @@ function ReviewDate({ claim }: { claim: Claim }) {
 }
 
 function Note({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) {
-  const { mark, noteNo } = useContext(CardCtx);
+  const { mark, noteNo, fast } = useContext(CardCtx);
   const [wrong, setWrong] = useState(false);
   const facts = [...(claim.based_on.facts ?? []), ...(claim.based_on.bank_views ?? [])];
   const features = claim.based_on.client_features ?? [];
@@ -443,7 +453,7 @@ function Note({ claim, byId }: { claim: Claim; byId: Map<string, Claim> }) {
       <div className="note-label">
         <ClaimTag type={claim.type} />
         <ReviewDate claim={claim} />
-        <CheckBadge checks={claim.verified} />
+        <CheckBadge checks={claim.verified} estimate={fast && claim.type === "model_inference"} />
       </div>
       <div className="note-body">
         <p className="note-text">
