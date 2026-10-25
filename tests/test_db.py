@@ -402,3 +402,36 @@ def test_extract_failure_of_one_story_keeps_others(engine, monkeypatch):
         conn.rollback()
     assert stats["failed"] == 1 and saved["fail_1"] is None and saved["fail_2"] is not None
 
+
+def test_service_endpoints_hide_foreign_pastes(engine, monkeypatch, tmp_path):
+    """B3/B4: /raw_items и /stories* с сессией; вставки другой компании и полные тексты не отдаются."""
+    from fastapi.testclient import TestClient
+
+    import backend.api.main as api_main
+    from backend.ingest.paste import ingest_paste
+    from backend.security.audit import AuditLog, get_audit
+
+    now = datetime.now(UTC)
+    with engine.begin() as conn:
+        mine = ingest_paste(conn, url=None, text="Наша вставка: завод в Туле остановлен на ремонт до весны.",
+                            title=None, company_id="U_DEMO_BORROWER", now=now)
+        theirs = ingest_paste(conn, url=None, text="КОНФИДЕНЦИАЛЬНО: сделка по покупке порта в Мурманске.",
+                              title=None, company_id="U_DEMO_DEPOSITOR", now=now)
+    monkeypatch.setattr(api_main, "get_engine", lambda: engine)
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.delenv("DEMO_COMPANIES", raising=False)
+    api_main.app.dependency_overrides[get_audit] = lambda: AuditLog(tmp_path / "audit")
+    try:
+        c = TestClient(api_main.app, raise_server_exceptions=False)
+        assert c.post("/session", json={"company_id": "U_DEMO_BORROWER", "role": "cfo"}).status_code == 200
+        items = c.get("/raw_items?source_id=user_paste&limit=500").json()
+        stories = c.get("/stories?limit=500").json()
+        own, foreign = c.get(f"/stories/{mine}"), c.get(f"/stories/{theirs}")
+        foreign_bm = c.get(f"/stories/{theirs}/bank_market")
+    finally:
+        api_main.app.dependency_overrides.pop(get_audit, None)
+    assert items and all("U_DEMO_DEPOSITOR" not in str(i.get("source_tags")) for i in items)
+    assert all("text" not in i for i in items)  # тексты целиком не отдаём
+    ids = {s["id"] for s in stories}
+    assert mine in ids and theirs not in ids
+    assert own.status_code == 200 and foreign.status_code == 404 and foreign_bm.status_code == 404

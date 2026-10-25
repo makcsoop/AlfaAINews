@@ -20,7 +20,8 @@ docker compose up --build
   - `/stories/{id}` — сюжет, факты с цитатами и материалы; `/stories/{id}/bank_market`, `/stories/{id}/statistician`;
   - `/labeling` — разметка пар «сюжет × клиент» (только при `LABELING_ENABLED=true`, на демо — 404);
   - `/companies/{id}/counterparties` — граф платежей компании;
-  - `/raw_items`, `/stats/ingest`, `/health` — служебные.
+  - `/raw_items` (без полного текста), `/stats/ingest`, `/health` — служебные.
+  - `/stories*`, `/raw_items`, `/stats/ingest` — только с сессией (`POST /session`); вставки (`/analyze`) личные: видны только своей компании.
 - `ingest` раз в 5 минут склеивает материалы в сюжеты и извлекает факты: правила, а при `EXTRACT_LLM=true` подтверждённые сюжеты типирует Gemma через общий LLM-клиент (до 60 вызовов за проход).
 - `frontend` работает на http://localhost:3000: макет главного экрана Альфа-Бизнеса, виджет «Важно для вашего бизнеса», лента и карточка. API доступен под `/api` (nginx проксирует на `backend`).
 

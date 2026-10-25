@@ -2,16 +2,17 @@
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select, text
+from sqlalchemy import Connection, or_, select, text
 
 from backend.api.errors import install_error_handling
 from backend.api.labeling import router as labeling_router
 from backend.api.routes import AuditDep, SessionDep, router
 from backend.db import models as m
 from backend.db.engine import get_engine
+from backend.ingest.private import PASTE_SOURCE_ID, has_paste, owner_tag, story_visible
 from backend.ingest.store import ingest_stats
 from backend.profile.graph import get_graph
-from backend.schemas import CounterpartyGraph
+from backend.schemas import CounterpartyGraph, RawItem, Story
 from backend.security.guard import enforce_company
 
 app = FastAPI(title="AlfaAINews")
@@ -35,17 +36,48 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+def _visible_stories(conn: Connection, datas: list[dict], company_id: str) -> list[dict]:
+    """Сюжеты, которые видит компания из сессии: личные вставки других компаний (/analyze) отсекаются."""
+    stories = [(d, Story.model_validate(d)) for d in datas]
+    need = [i for _, st in stories if has_paste(st) for i in st.item_ids]
+    items: dict[str, RawItem] = {}
+    if need:
+        rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(need))).scalars()
+        items = {it.id: it for it in (RawItem.model_validate(r) for r in rows)}
+    return [d for d, st in stories if story_visible(st, company_id, items)]
+
+
+def _visible_story(conn: Connection, story_id: str, company_id: str) -> dict:
+    data = conn.execute(select(m.stories.c.data).where(m.stories.c.id == story_id)).scalar()
+    if data is None or not _visible_stories(conn, [data], company_id):
+        raise HTTPException(404, f"нет сюжета {story_id}")
+    return data
+
+
 @app.get("/raw_items")
-def raw_items(limit: int = Query(50, ge=1, le=500), source_id: str | None = None) -> list[dict]:
-    q = select(m.raw_items.c.data).order_by(m.raw_items.c.published_at.desc()).limit(limit)
+def raw_items(
+    session: SessionDep, limit: int = Query(50, ge=1, le=500), source_id: str | None = None
+) -> list[dict]:
+    """Служебное: свежие материалы без полного текста (заголовок, лид, ссылка). Вставки — только свои."""
+    q = (
+        select(m.raw_items.c.data)
+        .where(
+            or_(
+                m.raw_items.c.source_id != PASTE_SOURCE_ID,
+                m.raw_items.c.data.contains({"source_tags": [owner_tag(session.company_id)]}),
+            )
+        )
+        .order_by(m.raw_items.c.published_at.desc())
+        .limit(limit)
+    )
     if source_id:
         q = q.where(m.raw_items.c.source_id == source_id)
     with get_engine().connect() as conn:
-        return list(conn.execute(q).scalars())
+        return [{k: v for k, v in d.items() if k != "text"} for d in conn.execute(q).scalars()]
 
 
 @app.get("/stats/ingest")
-def stats() -> list[dict]:
+def stats(session: SessionDep) -> list[dict]:
     with get_engine().connect() as conn:
         return ingest_stats(conn)
 
@@ -68,6 +100,7 @@ def counterparties(
 
 @app.get("/stories")
 def stories(
+    session: SessionDep,
     limit: int = Query(50, ge=1, le=500),
     event_type: str | None = None,
     status: str | None = None,
@@ -87,16 +120,16 @@ def stories(
     if business_only:
         q = q.where(m.event_facts.c.event_type.notin_(["other"]))
     with get_engine().connect() as conn:
-        return [{**data, "event_type": et} for data, et in conn.execute(q)]
+        rows = list(conn.execute(q))
+        visible = {d["id"] for d in _visible_stories(conn, [d for d, _ in rows], session.company_id)}
+        return [{**data, "event_type": et} for data, et in rows if data["id"] in visible]
 
 
 @app.get("/stories/{story_id}")
-def story(story_id: str) -> dict:
+def story(story_id: str, session: SessionDep) -> dict:
     """Сюжет целиком: сюжет, факты с цитатами и материалы (заголовок, лид, ссылка — без полного текста)."""
     with get_engine().connect() as conn:
-        data = conn.execute(select(m.stories.c.data).where(m.stories.c.id == story_id)).scalar()
-        if data is None:
-            raise HTTPException(404, f"нет сюжета {story_id}")
+        data = _visible_story(conn, story_id, session.company_id)
         facts = conn.execute(
             select(m.event_facts.c.data).where(m.event_facts.c.story_id == story_id)
         ).scalar()
@@ -116,22 +149,22 @@ def story(story_id: str) -> dict:
 
 
 @app.get("/stories/{story_id}/bank_market")
-def bank_market(story_id: str) -> dict:
+def bank_market(story_id: str, session: SessionDep) -> dict:
     """«Банк и рынок»: позиции ЦМИ до события, консенсус рынка, сюрприз. Без генерации."""
     from backend.agents.bank_market import report
 
     with get_engine().connect() as conn:
-        if not conn.execute(select(m.stories.c.id).where(m.stories.c.id == story_id)).first():
-            raise HTTPException(404, f"нет сюжета {story_id}")
+        _visible_story(conn, story_id, session.company_id)
         return report(conn, story_id).model_dump(mode="json")
 
 
 @app.get("/stories/{story_id}/statistician")
-def statistician(story_id: str, sector: str = Query(min_length=2, max_length=2)) -> dict:
+def statistician(
+    story_id: str, session: SessionDep, sector: str = Query(min_length=2, max_length=2)
+) -> dict:
     """«Статистик»: чувствительность отрасли (2 знака ОКВЭД) и похожие случаи из архива."""
     from backend.agents.statistician import report
 
     with get_engine().connect() as conn:
-        if not conn.execute(select(m.stories.c.id).where(m.stories.c.id == story_id)).first():
-            raise HTTPException(404, f"нет сюжета {story_id}")
+        _visible_story(conn, story_id, session.company_id)
         return report(conn, story_id, sector).model_dump(mode="json")

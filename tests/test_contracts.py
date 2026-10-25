@@ -18,8 +18,12 @@ def test_schemas_json_up_to_date():
         assert got == expected, f"schemas_json/{name}.json устарел"
 
 
-def test_raw_items_limit_validated():
+def test_raw_items_limit_validated(monkeypatch):
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.delenv("DEMO_COMPANIES", raising=False)
     client = TestClient(app)
+    assert client.get("/raw_items?limit=0").status_code == 401  # служебный эндпоинт — только с сессией
+    assert client.post("/session", json={"company_id": "U_DEMO_BORROWER", "role": "cfo"}).status_code == 200
     assert client.get("/raw_items?limit=0").status_code == 422
     assert client.get("/raw_items?limit=-5").status_code == 422
     assert client.get("/raw_items?limit=501").status_code == 422

@@ -63,7 +63,7 @@ services:
       # подпись сессий: без секрета стенд не поднимется (в git не хранить; openssl rand -hex 32)
       SESSION_SECRET: ${SESSION_SECRET:?задайте SESSION_SECRET в .env — openssl rand -hex 32}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"  # наружу — только через nginx фронта (/api/)
     depends_on:
       init:
         condition: service_completed_successfully
