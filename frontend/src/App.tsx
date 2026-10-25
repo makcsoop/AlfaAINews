@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Api } from "./api";
 import { errorText, getApi } from "./api";
 import { DEMO_CLIENTS } from "./clients";
@@ -75,6 +75,8 @@ export function App() {
   const seenKey = `seen:${companyId}:${role}`;
   const [seen, setSeen] = useState<Set<string>>(() => readSeen(seenKey));
   const [opened, setOpened] = useState<InsightCard | null>(null);
+  // входы идут строго по очереди: при быстром переключении последней ставится cookie выбранной пары
+  const loginChain = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     getApi().then(setApi);
@@ -95,10 +97,13 @@ export function App() {
     setCards(null);
     setError(null);
     setSeen(readSeen(seenKey));
-    api
-      .login(companyId, role)
-      .then(() => api.feed())
-      .then((c) => alive && setCards(c))
+    // устаревший выбор (уже переключили дальше) не входит и не читает ленту
+    const run = loginChain.current.then(() =>
+      alive ? api.login(companyId, role).then(() => (alive ? api.feed() : null)) : null,
+    );
+    loginChain.current = run.catch(() => undefined);
+    run
+      .then((c) => alive && c && setCards(c))
       .catch((e) => alive && (setError(errorText(e)), setCards([])));
     return () => {
       alive = false;
@@ -130,10 +135,12 @@ export function App() {
   useEffect(() => {
     if (!api || !hasFast) return;
     let tries = 0;
+    let alive = true; // ответ опроса прежней пары после переключения не записываем
     const timer = setInterval(() => {
       tries += 1;
       api.feed().then(
         (fresh) => {
+          if (!alive) return;
           setCards(fresh);
           setOpened((cur) => (cur ? (fresh.find((c) => c.card_id === cur.card_id) ?? cur) : cur));
           if (!fresh.some((c) => c.stage === "fast") || tries >= FEED_REFRESH_TRIES) clearInterval(timer);
@@ -141,7 +148,10 @@ export function App() {
         () => clearInterval(timer),
       );
     }, FEED_REFRESH_MS);
-    return () => clearInterval(timer);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, [api, hasFast, companyId, role]);
 
   const unseen = useMemo(
