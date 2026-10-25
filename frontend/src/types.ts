@@ -191,7 +191,7 @@ export interface AskResponse {
   refs: string[];
   tools_used: string[];
   trace_id: string;
-  status: "ok" | "refused" | "degraded";
+  status: "ok" | "refused" | "degraded" | "unclear";
 }
 
 export type FeedbackKind = "useful" | "not_relevant" | "wrong" | "click_source";

@@ -101,6 +101,12 @@ export function AskPanel({ api, card }: { api: Api; card: InsightCard }) {
                       Ответ неполный: часть данных сейчас недоступна.
                     </div>
                   )}
+                  {x.reply.status === "unclear" && (
+                    <div className="qa-note">
+                      <IconAlert size={16} />
+                      Вопрос не понят — уточните его.
+                    </div>
+                  )}
                   <p>{x.reply.answer}</p>
                   {x.reply.refs.length > 0 && (
                     <div className="qa-meta">Основано на: {[...new Set(x.reply.refs.map(refLabel))].join(" · ")}</div>
