@@ -315,3 +315,17 @@ def test_surprise_hold_kept_when_superseded_after_story():
     )
     s = find_surprise(oct23, FACTS, bank_positions=[hold])  # cmi#nov вышел после 23.10 — не в списке «до события»
     assert s is not None and s.bank_expected == 14.0
+
+
+def test_fast_card_fact_evidence_has_url_and_feed():
+    """Цитата факта быстрой карточки — материал с адресом и лентой (во фронте «Банк России», не «первоисточник»)."""
+    rel = score_pair(STORY, BORROWER, now=STORY.last_seen, facts=FACTS, role="cfo")
+    facts = FACTS.model_copy(update={"summary_evidence": [
+        e.model_copy(update={"feed_id": None, "url": None}) for e in FACTS.summary_evidence
+    ]})
+    card = fast_card(
+        STORY, rel, "cfo", facts=facts, items={i.id: i for i in B["raw_item"]}, sources=SOURCES,
+        bank_positions=B["bank_position"], profile=BORROWER, market=[],
+    )
+    ev = next(c for c in card.claims if c.claim_id == "F1").evidence[0]
+    assert ev.feed_id == "cbr_press" and ev.url and ev.url.startswith("https://www.cbr.ru/")

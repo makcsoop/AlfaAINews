@@ -43,12 +43,22 @@ def card_id(story_id: str, company_id: str, role: UserRole) -> str:
 
 def _fact(story: Story, facts: EventFacts | None, items: Mapping[str, RawItem]) -> Claim:
     if facts is not None and facts.summary_evidence:
-        return Claim(claim_id="F1", type="fact", text=facts.summary, evidence=facts.summary_evidence)
+        # у цитаты экстрактора дописываем ссылку и ленту материала: во фронте — «ПРАЙМ», а не «первоисточник»
+        evidence = [
+            e.model_copy(update={"url": e.url or it.url, "feed_id": e.feed_id or it.source_id})
+            if (it := items.get(e.source_id)) is not None
+            else e
+            for e in facts.summary_evidence
+        ]
+        return Claim(claim_id="F1", type="fact", text=facts.summary, evidence=evidence)
     # без фактов экстрактора — заголовок первого материала сюжета как цитата
     first = next((items[i] for i in story.item_ids if i in items), None)
     if first is None:
         raise ValueError(f"{story.id}: нет ни фактов с цитатой, ни материалов — быструю карточку не собрать")
-    ev = Evidence(source_id=first.id, quote=first.title, url=first.url, doc_date=first.published_at)
+    ev = Evidence(
+        source_id=first.id, quote=first.title, url=first.url, doc_date=first.published_at,
+        feed_id=first.source_id,
+    )
     return Claim(claim_id="F1", type="fact", text=facts.summary if facts else first.title, evidence=[ev])
 
 
