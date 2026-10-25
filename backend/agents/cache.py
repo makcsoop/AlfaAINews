@@ -102,8 +102,12 @@ class RedisJsonStore:
 
     # --- карточки и трассы ---
 
-    def get_card(self, story_id: str, company_id: str, role: str) -> tuple[InsightCard, str | None] | None:
-        data = self._read(f"card:{story_id}:{company_id}:{role}")
+    # версия сюжета в ключе: после существенного изменения сюжета старая глубокая карточка не отдаётся
+
+    def get_card(
+        self, story_id: str, company_id: str, role: str, version: int = 1
+    ) -> tuple[InsightCard, str | None] | None:
+        data = self._read(f"card:{story_id}:v{version}:{company_id}:{role}")
         if data is None:
             return None
         try:
@@ -113,10 +117,16 @@ class RedisJsonStore:
             return None
 
     def put_card(
-        self, story_id: str, company_id: str, role: str, card: InsightCard, run_id: str | None
+        self,
+        story_id: str,
+        company_id: str,
+        role: str,
+        card: InsightCard,
+        run_id: str | None,
+        version: int = 1,
     ) -> None:
         self._put(
-            f"card:{story_id}:{company_id}:{role}",
+            f"card:{story_id}:v{version}:{company_id}:{role}",
             {"card": card.model_dump(mode="json"), "run_id": run_id},
         )
 

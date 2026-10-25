@@ -310,3 +310,30 @@ def test_background_failure_logged_and_worker_survives():
 
 def test_background_off_in_fixture_mode():
     assert PipelineCardStore(source=MultiSource())._background is False
+
+
+def test_feed_picks_up_new_and_changed_stories_without_restart(monkeypatch):
+    # лента досчитывает новые сюжеты из ingest; изменившийся сюжет — новая быстрая карточка и новый разбор
+    monkeypatch.setenv("FEED_REFRESH_S", "0")
+    store, calls = make_store(k=10)
+    src = store._explicit_source
+    assert len(store.list_cards(BORROWER, "cfo")) == 4 and calls.count("s_2") == 1
+    base_story, base_facts = src._b["story"][0], src._b["event_facts"][0]
+    src._b["story"].append(base_story.model_copy(update={"id": "s_5", "title": "Новый сюжет (s_5)"}))
+    src._b["event_facts"].append(base_facts.model_copy(update={"story_id": "s_5"}))
+    stories = src._b["story"]
+    i = next(n for n, s in enumerate(stories) if s.id == "s_2")
+    stories[i] = stories[i].model_copy(update={"version": 2})
+    cards = store.list_cards(BORROWER, "cfo")
+    assert len(cards) == 5 and "s_5" in calls
+    assert calls.count("s_2") == 2  # новая версия — разбор заново
+    assert calls.count("s_4") == 1  # без изменений — не трогаем
+
+
+def test_feed_not_rescanned_before_refresh_interval(monkeypatch):
+    monkeypatch.setenv("FEED_REFRESH_S", "3600")
+    store, _ = make_store(k=0)
+    src = store._explicit_source
+    store.list_cards(BORROWER, "cfo")
+    src._b["story"].append(src._b["story"][0].model_copy(update={"id": "s_6"}))
+    assert len(store.list_cards(BORROWER, "cfo")) == 4

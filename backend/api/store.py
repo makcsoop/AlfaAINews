@@ -4,6 +4,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -88,6 +89,11 @@ DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_
 # переменные окружения — переопределение для стенда
 DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
+DEFAULT_FEED_REFRESH_S = 300.0  # как часто лента досчитывает новые сюжеты (склейка в ingest — раз в 5 минут)
+
+
+def feed_refresh_s() -> float:
+    return _env_float("FEED_REFRESH_S", DEFAULT_FEED_REFRESH_S)
 
 
 def feed_background() -> bool:
@@ -177,6 +183,12 @@ class _Feed:
     attempted: set[str] = field(default_factory=set)  # по ним глубокий разбор уже запускали или он не нужен
     pending: set[str] = field(default_factory=set)  # в очереди фонового разбора или разбираются сейчас
     pinned: set[str] = field(default_factory=set)  # прислал пользователь (/analyze): из ленты не убираем
+    seen: dict[str, int] = field(default_factory=dict)  # story_id -> версия: все оценённые сюжеты источника
+    refreshed_at: float = 0.0  # time.monotonic() последнего досчёта новых сюжетов
+
+
+# сюжет, его оценка и быстрая карточка; None — оценить не удалось
+_Scored = tuple[Story, RelevanceScore | None, InsightCard | None]
 
 
 class PipelineCardStore:
@@ -280,21 +292,48 @@ class PipelineCardStore:
         elif self._load_cached(feed, story.id):
             feed.attempted.add(story.id)
 
-    def _build_feed(self, company_id: str, role: str) -> _Feed | None:
+    def _scan(
+        self, company_id: str, role: str, seen: Mapping[str, int]
+    ) -> tuple[_Ctx, list[_Scored]] | None:
+        """Оценка сюжетов, которых лента ещё не видела в этой версии. Общих данных не трогает — идёт без
+        блокировки, /card, /trace и /analyze его не ждут. None — нет профиля компании."""
         ctx = self._context(company_id)
         if ctx is None:
             return None
-        min_score = self._min_score()
-        feed = _Feed(company_id, role, ctx.profile.sector or "")
+        out: list[_Scored] = []
         for story in self._src().stories():
+            if seen.get(story.id) == story.version:
+                continue
             try:
                 rel, card = self._score_story(ctx, role, story)
             except Exception as e:  # один плохой сюжет не ломает ленту
                 log.warning("сюжет %s для %s/%s пропущен: %r", story.id, company_id, role, e)
+                out.append((story, None, None))
                 continue
-            if rel.score >= min_score:
+            out.append((story, rel, card))
+        return ctx, out
+
+    def _apply_scan(self, feed: _Feed, ctx: _Ctx, scored: list[_Scored]) -> None:
+        """Под блокировкой: новые сюжеты — в ленту; изменившиеся — новая быстрая карточка и новый разбор."""
+        min_score = self._min_score()
+        for story, rel, card in scored:
+            feed.seen[story.id] = story.version
+            if rel is None or card is None:
+                continue
+            changed = feed.story_version.get(story.id, story.version) != story.version
+            if changed and story.id in feed.pending:
+                continue  # разбор прежней версии ещё идёт — досчитаем при следующем обновлении
+            if changed:
+                feed.attempted.discard(story.id)
+                feed.deep.discard(story.id)
+            if rel.score >= min_score or story.id in feed.pinned:
+                old = feed.cards.get(story.id)
+                if old and old != card.card_id:
+                    self._cards.pop(old, None)
                 self._put_fast(feed, ctx, story, rel, card)
-        return feed
+            elif story.id in feed.cards:
+                self._drop(feed, story.id)
+        feed.refreshed_at = time.monotonic()
 
     def add_story(self, story_id: str, company_id: str, role: str) -> InsightCard | None:
         """Сюжет, который прислал пользователь («вставить ссылку или текст»): быстрая карточка сразу и в ленту
@@ -320,7 +359,8 @@ class PipelineCardStore:
     def _load_cached(self, feed: _Feed, story_id: str) -> bool:
         if self._redis is None:
             return False
-        found = self._redis.get_card(story_id, feed.company_id, feed.role)
+        version = feed.story_version.get(story_id, 1)
+        found = self._redis.get_card(story_id, feed.company_id, feed.role, version)
         if found is None:
             return False
         card, run_id = found
@@ -484,7 +524,9 @@ class PipelineCardStore:
             self._log_run(feed, story_id, card.review_status, trace=trace, score=card.relevance.score)
         # в общий кеш — только настоящие результаты, не деградацию
         if self._redis is not None and not _is_degraded(trace):
-            self._redis.put_card(story_id, feed.company_id, feed.role, card, trace.run_id)
+            self._redis.put_card(
+                story_id, feed.company_id, feed.role, card, trace.run_id, feed.story_version.get(story_id, 1)
+            )
             self._redis.put_trace(trace)
 
     @staticmethod
@@ -515,14 +557,23 @@ class PipelineCardStore:
         return trace
 
     def _ensure(self, company_id: str, role: str, *, upgrade: bool = True) -> None:
+        """Лента пары: строится при первом обращении и раз в FEED_REFRESH_S досчитывает новые сюжеты."""
+        key = (company_id, role)
         with self._lock:
-            feed = self._feeds.get((company_id, role))
-            if feed is None:
-                feed = self._build_feed(company_id, role)
+            feed = self._feeds.get(key)
+            due = feed is None or time.monotonic() - feed.refreshed_at >= feed_refresh_s()
+            if feed is not None and due:
+                feed.refreshed_at = time.monotonic()  # параллельные запросы досчёт не повторяют
+            seen = dict(feed.seen) if feed is not None else {}
+        scan = self._scan(company_id, role, seen) if due else None
+        with self._lock:
+            feed = self._feeds.get(key)
+            if scan is not None:
+                ctx, scored = scan
                 if feed is None:
-                    return
-                self._feeds[(company_id, role)] = feed
-            if upgrade:
+                    feed = self._feeds[key] = _Feed(company_id, role, ctx.profile.sector or "")
+                self._apply_scan(feed, ctx, scored)
+            if feed is not None and upgrade:
                 self._upgrade(feed)
 
     def _ensure_demo(self) -> None:

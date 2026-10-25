@@ -44,7 +44,8 @@ def test_analysis_roundtrip_between_caches():
     assert AnalysisCache(backend=RedisJsonStore(kv)).get("нет") is None
 
 
-def test_second_store_reads_cards_from_redis_without_pipeline():
+def test_second_store_reads_cards_from_redis_without_pipeline(monkeypatch):
+    monkeypatch.setenv("LLM_MODE", "fixture")  # иначе зависит от порядка тестов: время сюжета, а не «сейчас»
     kv = FakeKV()
     first = PipelineCardStore(kv=kv)
     cards = first.list_cards("U_DEMO_BORROWER", "cfo")
@@ -67,3 +68,14 @@ def test_fallback_to_memory_when_redis_unreachable(monkeypatch, caplog):
     assert "в памяти" in caplog.text
     monkeypatch.delenv("CACHE_BACKEND")
     assert make_kv() is None
+
+
+def test_card_cache_keyed_by_story_version():
+    # после существенного изменения сюжета (версия +1) старая глубокая карточка из Redis не отдаётся
+    from backend.fixtures import load_bundle
+
+    card = load_bundle("rate_14")["insight_card"][0]
+    store = RedisJsonStore(FakeKV(), 100)
+    store.put_card("s", "U", "cfo", card, "run_1", version=1)
+    assert store.get_card("s", "U", "cfo", version=1) is not None
+    assert store.get_card("s", "U", "cfo", version=2) is None
