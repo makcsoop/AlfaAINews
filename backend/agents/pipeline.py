@@ -233,6 +233,15 @@ async def _call(handler: Callable[[PipelineContext], Any], ctx: PipelineContext)
     return result if isinstance(result, PipelineContext) else ctx
 
 
+def _degrade(ctx: PipelineContext) -> None:
+    """DEGRADED: наружу только быстрая карточка «на проверке». Черновик глубокой карточки проверку кодом
+    не прошёл (или проверка не дошла до конца), поэтому его не отдаём (инвариант 4)."""
+    if ctx.quick_card is None:
+        ctx.card = None
+        return
+    ctx.card = ctx.quick_card.model_copy(update={"review_status": "on_review"})
+
+
 def _fail_state(ctx: PipelineContext, exc: Exception) -> State:
     """Деградация возможна, если есть что отдать вместо разбора: быстрая карточка."""
     if getattr(exc, "fatal", False) or ctx.quick_card is None:
@@ -260,6 +269,9 @@ async def run_pipeline(
     while ctx.state not in TERMINAL:
         dst, reason = _decide(ctx)
         _move(ctx, dst, reason)
+        if dst == S.DEGRADED:
+            _degrade(ctx)
+            ctx.flags.append("card_unverified")
         handler = handlers.get(dst)
         if handler is not None:
             try:
@@ -274,7 +286,7 @@ async def run_pipeline(
                 if target not in TRANSITIONS[ctx.state]:
                     target = S.FAILED
                 if target == S.DEGRADED:
-                    ctx.card = ctx.card or ctx.quick_card
+                    _degrade(ctx)
                     ctx.flags.append("deep_unavailable")
                 _move(ctx, target, f"{type(exc).__name__} в {dst}")
                 break

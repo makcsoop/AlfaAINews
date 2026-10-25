@@ -146,7 +146,8 @@ async def test_analyst_failure_degrades_to_quick_card():
     handlers[S.ANALYZED] = analysts
     ctx, trace = await run_pipeline(make_ctx(), handlers)
     assert ctx.state == S.DEGRADED
-    assert ctx.card is ctx.quick_card and ctx.card is not None
+    assert ctx.card is not None and ctx.quick_card is not None
+    assert ctx.card.card_id == ctx.quick_card.card_id and ctx.card.review_status == "on_review"
     assert "deep_unavailable" in ctx.flags
     assert ctx.errors[0]["error"] == "LLMUnavailable"
     assert "handler:ANALYZED:error:LLMUnavailable" in trace.steps
@@ -227,6 +228,54 @@ async def test_template_failing_too_degrades():
     ctx, trace = await run_pipeline(make_ctx(), handlers)
     assert ctx.state == S.DEGRADED and trace.verify_rounds == 3
     assert ctx.card is not None
+
+
+def _with_fast_quick(handlers):
+    quick = handlers[S.QUICK_CARD]
+
+    def fast(ctx):
+        ctx = quick(ctx)
+        ctx.quick_card = ctx.quick_card.model_copy(update={"stage": "fast"})
+        return ctx
+
+    handlers[S.QUICK_CARD] = fast
+
+
+def _unverified_draft(ctx):
+    assert ctx.quick_card is not None
+    ctx.card = ctx.quick_card.model_copy(update={"stage": "deep", "review_status": "published"})
+    return ctx
+
+
+async def test_unverified_template_is_not_published():
+    """B1: шаблон не прошёл проверку — наружу быстрая карточка «на проверке», а не непроверенный черновик."""
+    handlers = dict(make_stub_handlers())
+
+    def verify(ctx):
+        ctx.verify_ok = False
+        return ctx
+
+    _with_fast_quick(handlers)
+    handlers[S.CARD_DRAFTED] = _unverified_draft
+    handlers[S.CARD_VERIFIED] = verify
+    ctx, _ = await run_pipeline(make_ctx(), handlers)
+    assert ctx.state == S.DEGRADED
+    assert ctx.card is not None and ctx.card.stage == "fast" and ctx.card.review_status == "on_review"
+
+
+async def test_verify_crash_does_not_publish_draft():
+    """B1: упала сама проверка — непроверенный черновик не выходит наружу."""
+    handlers = dict(make_stub_handlers())
+
+    def boom(ctx):
+        raise RuntimeError("проверка упала")
+
+    _with_fast_quick(handlers)
+    handlers[S.CARD_DRAFTED] = _unverified_draft
+    handlers[S.CARD_VERIFIED] = boom
+    ctx, _ = await run_pipeline(make_ctx(), handlers)
+    assert ctx.state == S.DEGRADED
+    assert ctx.card is not None and ctx.card.stage == "fast" and ctx.card.review_status == "on_review"
 
 
 async def test_publish_error_fails():

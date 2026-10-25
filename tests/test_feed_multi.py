@@ -337,3 +337,74 @@ def test_feed_not_rescanned_before_refresh_interval(monkeypatch):
     store.list_cards(BORROWER, "cfo")
     src._b["story"].append(src._b["story"][0].model_copy(update={"id": "s_6"}))
     assert len(store.list_cards(BORROWER, "cfo")) == 4
+
+
+# ---------- деградация разбора (B1, B2): не публикуется и не кешируется ----------
+class _KV:
+    def __init__(self):
+        self.data: dict[str, str] = {}
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def set(self, key, value, ex=None):
+        self.data[key] = value
+
+
+def make_degraded_store(transition: str, review_status: str = "on_review", kv=None):
+    """Раннер возвращает карточку, но автомат закончил в DEGRADED (как run_for_client при сбое модели)."""
+    calls: list[str] = []
+    holder: dict = {}
+
+    def runner(story_id, company_id, role, *, sector, story_version, handlers):
+        calls.append(story_id)
+        fast = holder["store"]._cards[f"card_{story_id}_{company_id}_{role}"]
+        now = datetime.now(UTC)
+        trace = RunTrace(run_id=f"run_{story_id}_{len(calls)}", story_id=story_id, company_id=company_id,
+                         started_at=now, finished_at=now,
+                         steps=[f"{transition}->DEGRADED (сбой)"])
+        return fast.model_copy(update={"trace_id": trace.run_id, "review_status": review_status}), trace
+
+    store = PipelineCardStore(kv=kv, source=MultiSource(), runner=runner, deep_per_request=1)
+    holder["store"] = store
+    return store, calls
+
+
+def test_degraded_run_not_cached_and_not_deep():
+    kv = _KV()
+    store, _ = make_degraded_store("PLANNED", kv=kv)
+    cards = store.list_cards(BORROWER, "cfo")
+    (run,) = store.deep_runs(BORROWER)
+    assert run.status == "failed"
+    feed = store._feeds[(BORROWER, "cfo")]
+    assert run.story_id not in feed.deep  # сюжет не считается глубоко разобранным
+    assert not [k for k in kv.data if k.startswith("card:")]  # деградация не идёт в общий кеш
+    card = next(c for c in cards if c.event.story_id == run.story_id)
+    assert card.review_status == "on_review"
+
+
+def test_degraded_unverified_card_shown_on_review():
+    # B1: даже если раннер вернул карточку как «published», после DEGRADED она уходит «на проверке»
+    store, _ = make_degraded_store("CARD_VERIFIED", review_status="published")
+    cards = store.list_cards(BORROWER, "cfo")
+    (run,) = store.deep_runs(BORROWER)
+    assert run.status == "failed"
+    card = next(c for c in cards if c.event.story_id == run.story_id)
+    assert card.review_status == "on_review"
+
+
+def test_degraded_story_retried_after_cooldown(monkeypatch):
+    monkeypatch.setenv("FEED_RETRY_S", "0")
+    store, calls = make_degraded_store("PLANNED")
+    store.list_cards(BORROWER, "cfo")
+    first = calls[0]
+    store.list_cards(BORROWER, "cfo")
+    assert calls.count(first) == 2  # после паузы деградировавший сюжет разбирается заново
+
+
+def test_degraded_story_not_retried_before_cooldown(monkeypatch):
+    monkeypatch.setenv("FEED_RETRY_S", "3600")
+    store, calls = make_degraded_store("PLANNED")
+    store.list_cards(BORROWER, "cfo")
+    store.list_cards(BORROWER, "cfo")
+    assert len(calls) == len(set(calls))

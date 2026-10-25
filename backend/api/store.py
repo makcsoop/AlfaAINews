@@ -90,10 +90,15 @@ DEMO_PAIRS: tuple[tuple[str, str], ...] = (("U_DEMO_BORROWER", "cfo"), ("U_DEMO_
 DEFAULT_DEEP_PER_REQUEST = 1  # глубоких разборов на один запрос ленты; остальное — быстрые карточки
 DEFAULT_FEED_MIN_SCORE = 0.05  # ниже — сюжет в ленту клиента не попадает
 DEFAULT_FEED_REFRESH_S = 300.0  # как часто лента досчитывает новые сюжеты (склейка в ingest — раз в 5 минут)
+DEFAULT_FEED_RETRY_S = 600.0  # через сколько повторять разбор, который упал или деградировал
 
 
 def feed_refresh_s() -> float:
     return _env_float("FEED_REFRESH_S", DEFAULT_FEED_REFRESH_S)
+
+
+def feed_retry_s() -> float:
+    return _env_float("FEED_RETRY_S", DEFAULT_FEED_RETRY_S)
 
 
 def feed_background() -> bool:
@@ -124,7 +129,11 @@ def feed_min_score() -> float:
 
 
 def _is_degraded(trace: RunTrace) -> bool:
-    return any(step.startswith("pipeline_failed") for step in trace.steps)
+    """Разбор не дошёл до проверенной карточки: исключение конвейера или автомат кончил в DEGRADED/FAILED."""
+    return any(
+        step.startswith("pipeline_failed") or "->DEGRADED" in step or "->FAILED" in step
+        for step in trace.steps
+    )
 
 
 def _env_int(name: str, default: int) -> int:
@@ -184,6 +193,7 @@ class _Feed:
     pending: set[str] = field(default_factory=set)  # в очереди фонового разбора или разбираются сейчас
     pinned: set[str] = field(default_factory=set)  # прислал пользователь (/analyze): из ленты не убираем
     seen: dict[str, int] = field(default_factory=dict)  # story_id -> версия: все оценённые сюжеты источника
+    retry_at: dict[str, float] = field(default_factory=dict)  # story_id -> monotonic: когда повторить разбор
     refreshed_at: float = 0.0  # time.monotonic() последнего досчёта новых сюжетов
 
 
@@ -387,6 +397,11 @@ class PipelineCardStore:
         """Глубокий разбор лучших ещё не разобранных сюжетов: не более K за обращение, по остатку бюджета."""
         if self._deep_per_request <= 0 or not feed.sector:
             return
+        now = time.monotonic()
+        for sid, at in list(feed.retry_at.items()):
+            if now >= at and sid not in feed.pending:
+                del feed.retry_at[sid]
+                feed.attempted.discard(sid)  # упавший или деградировавший разбор — попробовать снова
         todo = [r for sid, r in feed.scores.items() if sid not in feed.attempted]
         if not todo:
             return
@@ -507,11 +522,27 @@ class PipelineCardStore:
         failed = self._degraded(feed, story_id, e)
         reason = f"{type(e).__name__}: {str(e)[:200]}"
         self._log_run(feed, story_id, "failed", reason=reason, trace=failed)
+        feed.retry_at[story_id] = time.monotonic() + feed_retry_s()
+
+    def _apply_degraded(self, feed: _Feed, story_id: str, card: InsightCard, trace: RunTrace) -> None:
+        """Разбор деградировал: карточка «на проверке» вместо быстрой, но сюжет не глубоко разобран,
+        в общий кеш не идёт и через FEED_RETRY_S разбирается заново."""
+        self._log_run(feed, story_id, "failed", reason="pipeline_degraded", trace=trace)
+        if story_id in feed.cards:  # сюжет за время разбора не убрали из ленты
+            on_review = card.model_copy(update={"review_status": "on_review", "trace_id": trace.run_id})
+            old = feed.cards.get(story_id)
+            if old and old != on_review.card_id:
+                self._cards.pop(old, None)
+            self._cards[on_review.card_id] = on_review
+            feed.cards[story_id] = on_review.card_id
+        feed.deep.discard(story_id)
+        feed.retry_at[story_id] = time.monotonic() + feed_retry_s()
 
     def _apply_result(self, feed: _Feed, story_id: str, card: InsightCard, trace: RunTrace) -> None:
         self._traces[trace.run_id] = trace
         if _is_degraded(trace):
-            self._log_run(feed, story_id, "failed", reason="pipeline_failed", trace=trace)
+            self._apply_degraded(feed, story_id, card, trace)
+            return
         if card.relevance.score < self._min_score() and story_id not in feed.pinned:
             self._drop(feed, story_id)
             self._log_run(
@@ -520,10 +551,9 @@ class PipelineCardStore:
             )
             return
         self._put_deep(feed, story_id, card)
-        if not _is_degraded(trace):
-            self._log_run(feed, story_id, card.review_status, trace=trace, score=card.relevance.score)
+        self._log_run(feed, story_id, card.review_status, trace=trace, score=card.relevance.score)
         # в общий кеш — только настоящие результаты, не деградацию
-        if self._redis is not None and not _is_degraded(trace):
+        if self._redis is not None:
             self._redis.put_card(
                 story_id, feed.company_id, feed.role, card, trace.run_id, feed.story_version.get(story_id, 1)
             )
