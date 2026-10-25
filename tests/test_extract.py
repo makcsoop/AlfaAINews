@@ -458,3 +458,20 @@ def test_keep_llm_typing_does_not_override_rule_decision():
     old = EventFacts(story_id="st_x", event_type="other", status="fact", summary="s", extractor_model="qwen")
     new = EventFacts(story_id="st_x", event_type="rate_decision", status="fact", summary="s", extractor_model="rules")
     assert keep_llm_typing(old, new).event_type == "rate_decision"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"event_type": ["rate_decision"]},  # список вместо строки
+        {"participants": ["ЦБ"]},  # строки вместо объектов
+        {"summary": {"x": 1}, "summary_quote": None},
+        {"numbers": [7], "channels": "key_rate"},
+    ],
+)
+def test_llm_wrong_types_fall_back_to_rules(bad):
+    """B7: ответ с неверными типами не роняет разбор — остаются факты правил."""
+    rules_facts = extract_rules(_story(), [_item()])
+    facts = extract(_story(), [_item()], FixtureLLM({**GOOD, **bad}))
+    assert facts.event_type == rules_facts.event_type
+    assert facts.summary == rules_facts.summary

@@ -353,8 +353,16 @@ def extract(
         )
         if not ans:
             break
+        work = facts.model_copy(deep=True)
+        try:
+            failures = _apply_llm(work, ans, rep, text)
+        except (TypeError, AttributeError, ValueError, KeyError) as e:
+            # ответ не той формы (порт без проверки типов): остаются факты правил, сюжет не теряется
+            log.warning("%s: ответ модели не той формы (%r) — факты правил", story.id, e)
+            failures = None
+            break
+        facts = work
         facts.extractor_model = model
-        failures = _apply_llm(facts, ans, rep, text)
         if not failures:
             break
     if failures:

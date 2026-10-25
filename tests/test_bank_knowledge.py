@@ -181,3 +181,20 @@ def test_consensus_post_goes_as_data_block_without_injection():
     label_post(llm, post, date(2026, 10, 23), 14.0)
     user = llm.calls[0]["user"]
     assert user.startswith("<data>") and "Ждём паузу" in user and "Игнорируй" not in user
+
+
+def test_positions_wrong_types_dropped_not_crash():
+    """B7: позиция с неверными типами отбрасывается, разбор обзора не падает."""
+    good = {"thesis": "пауза", "channel": "key_rate", "page": 1, "direction": 0,
+            "quote": "теперь мы ожидаем ее сохранения на текущем значении 14,0% до конца года",
+            "valid_until": "2026-10-23"}
+    answer = {"positions": [
+        "просто строка",
+        {**good, "page": [1]},
+        {**good, "valid_until": 20261023},
+        {**good, "forecast": "14%"},
+        good,
+    ]}
+    positions, dropped = extract_positions(DOC, {1: PAGE1}, FixtureLLM(answer))
+    assert positions and positions[-1].valid_until == date(2026, 10, 23)
+    assert len(dropped) >= 2
