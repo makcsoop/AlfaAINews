@@ -1,8 +1,9 @@
 // «Полезно / не про нас»: в обучение скоринга идут только эти явные отметки (вес 0,3), клики — в метрики.
+// «Неверно» порядок ленты не меняет: это сигнал качества разбора, он идёт в очередь проверки (docs/monitoring.md).
 import { useState } from "react";
 import { completeStep } from "../onboarding";
 import type { FeedbackKind } from "../types";
-import { IconCheck, IconEyeOff, IconThumb } from "./icons";
+import { IconAlert, IconCheck, IconEyeOff, IconThumb } from "./icons";
 
 export function FeedbackBar({ onMark }: { onMark: (kind: FeedbackKind) => void }) {
   const [sent, setSent] = useState<FeedbackKind | null>(null);
@@ -23,7 +24,9 @@ export function FeedbackBar({ onMark }: { onMark: (kind: FeedbackKind) => void }
             <p>
               {sent === "useful"
                 ? "Будем показывать больше похожих событий."
-                : "Похожие события будем показывать реже."}
+                : sent === "wrong"
+                  ? "Передадим разбор на проверку аналитику."
+                  : "Похожие события будем показывать реже."}
             </p>
           </div>
         </div>
@@ -41,6 +44,10 @@ export function FeedbackBar({ onMark }: { onMark: (kind: FeedbackKind) => void }
             <button className="btn" onClick={() => send("not_relevant")}>
               <IconEyeOff size={18} />
               Не про нас
+            </button>
+            <button className="btn" onClick={() => send("wrong")}>
+              <IconAlert size={18} />
+              Неверно?
             </button>
           </div>
         </>

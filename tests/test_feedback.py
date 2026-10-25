@@ -125,3 +125,10 @@ def test_db_store_writes_feedback_table():
     assert kinds == ["not_relevant", "not_relevant"]
     (row,) = store.list(BORROWER)  # только своя компания
     assert row["user_id"] == "u1" and row["kind"] == "not_relevant"
+
+
+def test_wrong_is_quality_signal_not_ranking():
+    # «Неверно?» в интерфейсе: отметка сохраняется (тест выше), но порядок ленты не меняет
+    from backend.ranking.feedback import EXPLICIT
+
+    assert "wrong" not in EXPLICIT and set(EXPLICIT) == {"useful", "not_relevant"}
