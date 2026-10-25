@@ -41,3 +41,65 @@ def test_item_is_unverified_user_source():
 def test_too_short_text_rejected():
     with pytest.raises(PasteError):
         make_item(url=None, text="коротко", title=None, now=NOW)
+
+
+@pytest.fixture
+def dns(monkeypatch):
+    """Подменный DNS: имя → адрес; второй запрос того же имени может вернуть другой адрес (rebinding)."""
+    import socket
+
+    from backend.ingest import paste
+
+    table: dict[str, list[str]] = {}
+
+    def getaddrinfo(host, port, *a, **kw):
+        ips = table[host]
+        ip = ips.pop(0) if len(ips) > 1 else ips[0]
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port))]
+
+    monkeypatch.setattr(paste.socket, "getaddrinfo", getaddrinfo)
+    return table
+
+
+def test_fetch_connects_to_checked_ip_with_host_and_sni(dns):
+    import httpx
+
+    from backend.ingest.paste import fetch_page
+
+    dns["news.example"] = ["93.184.216.34", "10.0.0.5"]  # повторный резолв вёл бы во внутреннюю сеть
+    seen = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        html = "<html><head><title>Новость</title></head><body><article><p>" + "Текст статьи. " * 50
+        return httpx.Response(200, html=html + "</p></article></body></html>")
+
+    title, text = fetch_page("https://news.example/a", transport=httpx.MockTransport(handler))
+    req = seen[0]
+    assert req.url.host == "93.184.216.34" and req.headers["host"] == "news.example"
+    assert req.extensions["sni_hostname"] == "news.example"
+    assert title == "Новость" and text and "Текст статьи" in text
+
+
+def test_fetch_rejects_redirect_inside_and_caps_body(dns, monkeypatch):
+    import httpx
+
+    from backend.ingest import paste
+
+    dns["news.example"] = ["93.184.216.34"]
+    dns["intranet.example"] = ["10.0.0.5"]
+    redirect = httpx.MockTransport(lambda r: httpx.Response(302, headers={"location": "http://intranet.example/"}))
+    with pytest.raises(PasteError, match="внутреннюю сеть"):
+        paste.fetch_page("https://news.example/a", transport=redirect)
+
+    monkeypatch.setattr(paste, "MAX_BYTES", 1000)
+    chunks: list[int] = []
+
+    def stream():
+        for _ in range(100):  # 100 КБ, а читаем не больше 1000 байт
+            chunks.append(1)
+            yield b"x" * 1024
+
+    big = httpx.MockTransport(lambda r: httpx.Response(200, content=stream()))
+    paste.fetch_page("https://news.example/big", transport=big)
+    assert len(chunks) <= 2

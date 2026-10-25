@@ -15,9 +15,10 @@
 import hashlib
 import ipaddress
 import socket
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 import numpy as np
@@ -41,6 +42,7 @@ SOURCE_ID = "user_paste"
 TIER = 3
 MAX_TEXT = 50_000
 MAX_BYTES = 3_000_000
+FETCH_DEADLINE_S = 20.0  # на всю загрузку с редиректами, а не на каждую операцию
 TITLE_MAX = 200
 
 
@@ -48,8 +50,12 @@ class PasteError(ValueError):
     """Материал не принят: пустой текст, плохая ссылка, страница не скачалась."""
 
 
-def check_url(url: str) -> str:
-    """Только http(s) и только публичные адреса (защита от запросов во внутреннюю сеть стенда)."""
+def resolve_public(url: str) -> tuple[str, str]:
+    """Ссылка и её публичный IP: только http(s) и только публичные адреса (не во внутреннюю сеть стенда).
+
+    Подключаемся именно к проверенному IP (fetch_page): иначе второй DNS-запрос при подключении
+    мог бы вернуть внутренний адрес (DNS rebinding).
+    """
     u = urlparse(url.strip())
     if u.scheme not in {"http", "https"} or not u.hostname:
         raise PasteError("нужна ссылка http(s)")
@@ -57,28 +63,57 @@ def check_url(url: str) -> str:
         infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80))
     except OSError:
         raise PasteError("адрес не найден") from None
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
-            raise PasteError("ссылка ведёт во внутреннюю сеть")
-    return u.geturl()
+    except ValueError:
+        raise PasteError("нужна ссылка http(s)") from None
+    ips = [ipaddress.ip_address(info[4][0]) for info in infos]
+    if not ips or any(not ip.is_global for ip in ips):
+        raise PasteError("ссылка ведёт во внутреннюю сеть")
+    return u.geturl(), str(ips[0])
 
 
-def fetch_page(url: str) -> tuple[str | None, str | None]:
+def check_url(url: str) -> str:
+    """Только http(s) и только публичные адреса (защита от запросов во внутреннюю сеть стенда)."""
+    return resolve_public(url)[0]
+
+
+def _get_pinned(client: httpx.Client, url: str, ip: str, deadline: float) -> tuple[int, str | None, bytes]:
+    """GET к проверенному IP с исходными Host и SNI; тело — потоком, не больше MAX_BYTES и до дедлайна."""
+    target = httpx.URL(url)
+    headers = {"Host": target.netloc.decode("ascii")}
+    ext = {"sni_hostname": target.host} if target.scheme == "https" else {}
+    with client.stream("GET", target.copy_with(host=ip), headers=headers, extensions=ext) as r:
+        if r.is_redirect:
+            return r.status_code, r.headers.get("location"), b""
+        if r.status_code != 200:
+            return r.status_code, None, b""
+        body = bytearray()
+        for chunk in r.iter_bytes():
+            body += chunk
+            if len(body) >= MAX_BYTES or time.monotonic() > deadline:
+                break
+        return 200, None, bytes(body[:MAX_BYTES])
+
+
+def fetch_page(url: str, transport: httpx.BaseTransport | None = None) -> tuple[str | None, str | None]:
     """(заголовок, текст) страницы. Редиректы проверяются заново: публичная ссылка не уведёт внутрь."""
     s = get_settings()
-    with httpx.Client(timeout=10, headers={"User-Agent": s.ingest_user_agent}) as client:
+    deadline = time.monotonic() + FETCH_DEADLINE_S
+    with httpx.Client(
+        timeout=10, headers={"User-Agent": s.ingest_user_agent}, transport=transport
+    ) as client:
         for _ in range(5):
-            r = client.get(check_url(url))
-            if r.is_redirect and r.headers.get("location"):
-                url = str(r.next_request.url) if r.next_request else r.headers["location"]
+            if time.monotonic() > deadline:
+                raise PasteError("страница грузится слишком долго")
+            url, ip = resolve_public(url)
+            status, location, html = _get_pinned(client, url, ip, deadline)
+            if location:
+                url = urljoin(url, location)
                 continue
             break
         else:
             raise PasteError("слишком много перенаправлений")
-    if r.status_code != 200:
-        raise PasteError(f"страница не открылась: HTTP {r.status_code}")
-    html = r.content[:MAX_BYTES]
+    if status != 200:
+        raise PasteError(f"страница не открылась: HTTP {status}")
     text = trafilatura.extract(html, url=url, favor_precision=True, include_comments=False)
     meta = trafilatura.extract_metadata(html)
     return (meta.title if meta else None), text
