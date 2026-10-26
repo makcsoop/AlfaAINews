@@ -76,11 +76,10 @@ if ! has SESSION_SECRET; then
   say "сгенерирован SESSION_SECRET"
 fi
 
-if [ -n "${LLM_MODE:-}" ] && ! has LLM_MODE; then
-  put LLM_MODE "$LLM_MODE"
-fi
+# режим моделей: LLM_MODE из окружения (только на этот запуск, compose берёт его сам) или из .env
+fixture() { [ "${LLM_MODE:-}" = fixture ] || { [ -z "${LLM_MODE:-}" ] && grep -qE '^LLM_MODE=fixture' .env; }; }
 
-if grep -qE '^LLM_MODE=fixture' .env; then
+if fixture; then
   say "LLM_MODE=fixture: модели не вызываются, карточки из фикстур"
 else
   if ! has LLM_API_BASE; then
@@ -129,7 +128,7 @@ if [ "${n:-0}" -lt 1000 ]; then
   [ -f data/snapshot/bank_positions.json.gz ] || say "нет data/snapshot: без реестра ЦМИ и архива"
   say "первый запуск: заливаем демо-базу (≈5–7 минут)"
   $C stop ingest >/dev/null
-  if grep -qE '^LLM_MODE=fixture' .env; then
+  if fixture; then
     $C run --rm backend python -m backend.db.demo
   else
     $C run --rm backend python -m backend.db.demo --llm
@@ -149,7 +148,7 @@ for _ in $(seq 1 60); do
 done
 curl -sf -m 3 http://localhost:$WEB_PORT/api/health >/dev/null || fail "API не отвечает: docker compose logs backend"
 
-if ! grep -qE '^LLM_MODE=fixture' .env; then
+if ! fixture; then
   say "прогрев: глубокие разборы живыми моделями (до $WARM_STORIES карточек, не больше $WARM_MAX_RUB ₽)"
   $C exec -T backend python scripts/warm_demo_cache.py --base http://localhost:8000 \
     --client U_DEMO_BORROWER:cfo --stories "$WARM_STORIES" --max-rub "$WARM_MAX_RUB" --patience 240 || \
