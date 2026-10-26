@@ -40,7 +40,7 @@ fetch_data() {
   local href tmp
   case "$DATA_URL" in
     https://disk.yandex.*|https://yadi.sk/*)
-      href="$(curl -sf -m 30 -G "https://cloud-api.yandex.net/v1/disk/public/resources/download" \
+      href="$(curl -sf -m 30 --retry 5 --retry-all-errors --retry-delay 3 -G "https://cloud-api.yandex.net/v1/disk/public/resources/download" \
         --data-urlencode "public_key=$DATA_URL" | sed -n 's/.*"href":"\([^"]*\)".*/\1/p')"
       [ -n "$href" ] || { say "Яндекс Диск не отдал архив (ссылка закрыта или недоступна)"; return 1; }
       ;;
@@ -49,7 +49,7 @@ fetch_data() {
   esac
   tmp="$(mktemp -d)"
   say "скачиваем данные кейса (30 МБ)"
-  if ! curl -sfL -m 900 --retry 3 -o "$tmp/demo-data.tar.gz" "$href"; then
+  if ! curl -sfL -m 900 --retry 5 --retry-all-errors --retry-delay 3 -o "$tmp/demo-data.tar.gz" "$href"; then
     rm -rf "$tmp"; say "не удалось скачать архив данных"; return 1
   fi
   # распаковываем только data/case и data/snapshot: архив — внешний файл, чужие пути не пускаем
@@ -63,7 +63,11 @@ fetch_data() {
 }
 
 if [ ! -f data/case/df_Uid_data_hack.csv ] || [ ! -f data/snapshot/bank_positions.json.gz ]; then
-  fetch_data || say "продолжаем на синтетике: 200 компаний, без позиций ЦМИ"
+  if ! fetch_data; then
+    printf '\033[33m! Данные кейса не скачались — запуск на синтетике: 200 компаний, без позиций ЦМИ.\n'
+    printf '  Для полной версии остановите (Ctrl+C), проверьте интернет и запустите ./start.sh снова.\033[0m\n'
+    sleep 5
+  fi
 fi
 
 # --- 1. .env -------------------------------------------------------------------------------------------
