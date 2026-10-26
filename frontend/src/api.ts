@@ -6,6 +6,9 @@ import type {
   DeepRun,
   FeedbackKind,
   InsightCard,
+  OkvedSector,
+  OwnCompanyForm,
+  OwnSession,
   RunTrace,
   SessionInfo,
   ShowcaseCompany,
@@ -15,7 +18,9 @@ import type {
 
 export interface Api {
   demoCompanies(): Promise<ShowcaseCompany[]>;
-  login(companyId: string, role: UserRole): Promise<SessionInfo>;
+  login(companyId: string, role: UserRole, ownerKey?: string): Promise<SessionInfo>;
+  ownSectors(): Promise<OkvedSector[]>;
+  createOwn(form: OwnCompanyForm, role: UserRole): Promise<OwnSession>;
   feed(): Promise<InsightCard[]>;
   card(cardId: string): Promise<InsightCard>;
   ask(question: string, cardId?: string): Promise<AskResponse>;
@@ -50,7 +55,13 @@ export function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-let lastLogin: { companyId: string; role: UserRole } | null = null;
+let lastLogin: { companyId: string; role: UserRole; ownerKey?: string } | null = null;
+
+const loginBody = (l: { companyId: string; role: UserRole; ownerKey?: string }) => ({
+  company_id: l.companyId,
+  role: l.role,
+  ...(l.ownerKey ? { owner_key: l.ownerKey } : {}),
+});
 
 async function raw<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -78,7 +89,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return await raw<T>(path, init);
   } catch (e) {
     if (e instanceof HttpError && e.status === 401 && lastLogin) {
-      await raw("/session", { method: "POST", body: JSON.stringify({ company_id: lastLogin.companyId, role: lastLogin.role }) });
+      await raw("/session", { method: "POST", body: JSON.stringify(loginBody(lastLogin)) });
       return raw<T>(path, init);
     }
     throw e;
@@ -89,9 +100,15 @@ const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.strin
 
 const httpApi: Api = {
   demoCompanies: () => raw("/demo/companies"),
-  async login(companyId, role) {
-    lastLogin = { companyId, role };
-    return raw("/session", post({ company_id: companyId, role }));
+  async login(companyId, role, ownerKey) {
+    lastLogin = { companyId, role, ownerKey };
+    return raw("/session", post(loginBody(lastLogin)));
+  },
+  ownSectors: () => raw("/own/sectors"),
+  async createOwn(form, role) {
+    const s = await raw<OwnSession>("/session/own", post({ form, role }));
+    lastLogin = { companyId: s.company_id, role, ownerKey: s.owner_key };
+    return s;
   },
   feed: () => request("/feed"),
   card: (cardId) => request(`/card/${encodeURIComponent(cardId)}`),

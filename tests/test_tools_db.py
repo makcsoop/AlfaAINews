@@ -101,7 +101,7 @@ def test_factory_db_unavailable_falls_back(monkeypatch, caplog):
     set_tool_source(None)
     try:
         with caplog.at_level(logging.WARNING):
-            assert isinstance(get_tool_source(), FixtureDataSource)
+            assert isinstance(get_tool_source().inner, FixtureDataSource)  # под слоем своих компаний
     finally:
         set_tool_source(None)
     assert "TOOL_SOURCE=db" in caplog.text

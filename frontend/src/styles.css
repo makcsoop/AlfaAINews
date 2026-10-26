@@ -1037,3 +1037,31 @@ details ul { margin-top: 8px; padding-left: 18px; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   html { scroll-behavior: auto; }
 }
+
+/* «Своя компания»: анкета */
+.own { display: grid; gap: 12px; max-width: 760px; }
+.own h1 { font-size: 28px; }
+.own-lead { color: var(--ink-2); font-size: 15px; }
+.own-form { display: grid; gap: 16px; }
+.own-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
+.own-field { display: grid; gap: 6px; font-size: 14px; }
+.own-field > span, .own-form legend { color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.own-form input:not([type="checkbox"]):not([type="radio"]), .own-form select {
+  width: 100%; min-width: 0; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--bg);
+  color: var(--ink); padding: 10px 12px; font: inherit; font-size: 15px;
+}
+.own-form input:focus, .own-form select:focus { outline: none; border-color: var(--ink-3); box-shadow: 0 0 0 4px var(--focus); }
+.own-form input[aria-invalid="true"] { border-color: var(--accent); }
+.own-form fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.own-form legend { width: 100%; margin-bottom: 8px; }
+.own-checks label { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+.own-checks .own-field { flex-basis: 100%; }
+.own-shares { display: grid !important; gap: 8px; }
+.own-share { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 8px; }
+.own-hint { color: var(--ink-3); font-size: 13px; margin: 0; }
+.own-bad { color: var(--accent-ink); }
+.own-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .own-row { grid-template-columns: minmax(0, 1fr); }
+  .own h1 { font-size: 24px; }
+}

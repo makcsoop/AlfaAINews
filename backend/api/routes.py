@@ -21,12 +21,13 @@ from backend.api.feedback import (
 from backend.api.showcase import ShowcaseCompany, showcase
 from backend.api.store import CardStore, DeepRun, get_store
 from backend.llm import get_client
+from backend.profile.own import OwnCompanyForm, okved_sectors, own_companies
 from backend.schemas import Feedback
 from backend.schemas.common import UserRole
 from backend.schemas.insight import InsightCard, RunTrace
 from backend.security.audit import AuditLog, get_audit
 from backend.security.guard import audit_foreign, enforce_company, trace_id_of
-from backend.security.ratelimit import analyze_limiter, ask_limiter, feedback_limiter
+from backend.security.ratelimit import analyze_limiter, ask_limiter, feedback_limiter, own_limiter
 from backend.security.session import (
     COOKIE_NAME,
     Session,
@@ -60,6 +61,9 @@ class LoginRequest(BaseModel):
     role: UserRole = Field(description="Роль пользователя")
     user_id: str | None = Field(
         default=None, max_length=64, description="Необязательно; по умолчанию демо-пользователь"
+    )
+    owner_key: str | None = Field(
+        default=None, max_length=64, description="Ключ владельца своей компании (U_OWN_…), POST /session/own"
     )
 
 
@@ -97,8 +101,10 @@ class AskResponse(BaseModel):
 
 @router.post("/session", response_model=LoginResponse, tags=["session"], summary="Демо-вход")
 def login(body: LoginRequest, request: Request, response: Response, audit: AuditDep) -> LoginResponse:
-    """Выдаёт сессию только для демо-компаний (env DEMO_COMPANIES). Токен также кладётся в cookie."""
-    if body.company_id not in demo_companies():
+    """Выдаёт сессию только для демо-компаний (env DEMO_COMPANIES) и своей компании по ключу владельца.
+    Токен также кладётся в cookie."""
+    allowed = body.company_id in demo_companies() or own_companies().verify(body.company_id, body.owner_key)
+    if not allowed:
         audit.record(
             user_id=body.user_id,
             session_company=None,
@@ -112,6 +118,10 @@ def login(body: LoginRequest, request: Request, response: Response, audit: Audit
         role=body.role,
         user_id=body.user_id or f"demo_{body.company_id}_{body.role}",
     )
+    return _issue(session, response)
+
+
+def _issue(session: Session, response: Response) -> LoginResponse:
     token = issue_token(session)
     response.set_cookie(
         COOKIE_NAME, token, max_age=ttl_seconds(), httponly=True, samesite="lax", path="/",
@@ -120,6 +130,47 @@ def login(body: LoginRequest, request: Request, response: Response, audit: Audit
     return LoginResponse(
         **session.model_dump(include={"company_id", "role", "user_id"}), token=token, expires_in=ttl_seconds()
     )
+
+
+class OwnSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    form: OwnCompanyForm
+    role: UserRole = "cfo"
+
+
+class OwnSessionResponse(LoginResponse):
+    title: str
+    owner_key: str = Field(description="Ключ повторного входа (POST /session с owner_key), выдаётся один раз")
+
+
+class OkvedSector(BaseModel):
+    code: str
+    name: str
+
+
+@router.get("/own/sectors", response_model=list[OkvedSector], tags=["session"], summary="Отрасли анкеты")
+def own_sectors() -> list[OkvedSector]:
+    """Справочник отраслей для анкеты «Своя компания», без сессии."""
+    return [OkvedSector(code=k, name=v) for k, v in okved_sectors().items()]
+
+
+@router.post(
+    "/session/own", response_model=OwnSessionResponse, tags=["session"], summary="Своя компания по анкете",
+    responses={429: error_doc("Слишком много анкет с одного адреса")},
+)
+def own_login(body: OwnSessionRequest, request: Request, response: Response) -> OwnSessionResponse:
+    """Создаёт компанию по анкете (id выдаёт сервер) и входит в неё. Лента строится как у компаний кейса:
+    профиль и чувствительности — из анкеты, доли контрагентов по отраслям — со слов пользователя."""
+    # за Caddy и nginx адрес клиента — первый в X-Forwarded-For (Caddy не доверяет присланному клиентом)
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    client = forwarded or (request.client.host if request.client else "unknown")
+    if not own_limiter.allow(f"own:{client}"):
+        raise HTTPException(status_code=429, detail="Слишком много анкет, попробуйте позже")
+    company_id, owner_key = own_companies().create(body.form)
+    session = Session(company_id=company_id, role=body.role, user_id=f"own_{company_id}")
+    login = _issue(session, response)
+    return OwnSessionResponse(**login.model_dump(), title=body.form.title, owner_key=owner_key)
 
 
 @router.get(

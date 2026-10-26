@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Api } from "./api";
-import { errorText, getApi } from "./api";
-import { DEMO_CLIENTS, fromShowcase } from "./clients";
+import { HttpError, errorText, getApi } from "./api";
+import { DEMO_CLIENTS, OWN_NEW, fromShowcase, readOwn, saveOwn } from "./clients";
 import type { DemoClient } from "./clients";
 import { Brief } from "./components/Brief";
 import { CardView } from "./components/CardView";
@@ -14,6 +14,7 @@ import { SkeletonRows, whyFeatures } from "./components/bits";
 import { IconAlert } from "./components/icons";
 import { Layout } from "./components/Layout";
 import type { Place } from "./components/Layout";
+import { OwnCompany } from "./components/OwnCompany";
 import { PasteBox } from "./components/PasteBox";
 import { ProductHeader } from "./components/ProductNav";
 import type { Tab } from "./components/ProductNav";
@@ -41,12 +42,13 @@ type View =
   | { name: "runs" }
   | { name: "how" }
   | { name: "faq" }
+  | { name: "own" }
   | { name: "card"; id: string }
   | { name: "trace"; id: string };
 
 function parseHash(): View {
   const h = location.hash.replace(/^#\/?/, "");
-  if (h === "brief" || h === "runs" || h === "how" || h === "faq") return { name: h };
+  if (h === "brief" || h === "runs" || h === "how" || h === "faq" || h === "own") return { name: h };
   if (h === "feed") return { name: "feed" };
   if (h.startsWith("feed/p/")) return { name: "feed", filter: h.slice(7) as FeedFilter };
   if (h.startsWith("feed/ch/")) return { name: "feed", channel: decodeURIComponent(h.slice(8)) };
@@ -95,7 +97,10 @@ export function App() {
 
 function Shell() {
   const [api, setApi] = useState<Api | null>(null);
-  const [clients, setClients] = useState<DemoClient[]>(DEMO_CLIENTS);
+  const [showcase, setShowcase] = useState<DemoClient[]>(DEMO_CLIENTS);
+  // свои компании по анкете — из этого браузера, в переключателе после компаний витрины
+  const [own, setOwn] = useState<DemoClient[]>(readOwn);
+  const clients = useMemo(() => [...showcase, ...own], [showcase, own]);
   const [companyId, setCompanyId] = useState(() => readChoice().companyId);
   const [role, setRole] = useState<UserRole>(() => readChoice().role);
   const [cards, setCards] = useState<InsightCard[] | null>(null);
@@ -152,9 +157,9 @@ function Shell() {
       (list) => {
         if (!alive || !list.length) return;
         const next = fromShowcase(list);
-        setClients(next);
+        setShowcase(next);
         setCompanyId((cur) => {
-          if (next.some((c) => c.companyId === cur)) return cur;
+          if (next.some((c) => c.companyId === cur) || readOwn().some((c) => c.companyId === cur)) return cur;
           setRole(next[0].defaultRole);
           return next[0].companyId;
         });
@@ -166,7 +171,8 @@ function Shell() {
     };
   }, [api]);
 
-  // Смена компании или роли — новая сессия и новая лента
+  // Смена компании или роли — новая сессия и новая лента. Своя компания входит по ключу владельца
+  const ownerKey = own.find((c) => c.companyId === companyId)?.ownerKey;
   useEffect(() => {
     if (!api) return;
     let alive = true;
@@ -183,7 +189,7 @@ function Shell() {
     // устаревший выбор (уже переключили дальше) не входит и не читает ленту
     const run = loginChain.current.then(() =>
       alive
-        ? api.login(companyId, role).then(() => {
+        ? api.login(companyId, role, ownerKey).then(() => {
             if (!alive) return null;
             setSignedIn(`${companyId}:${role}`);
             return api.feed();
@@ -193,11 +199,23 @@ function Shell() {
     loginChain.current = run.catch(() => undefined);
     run
       .then((c) => alive && c && setCards(c))
-      .catch((e) => alive && (setError(errorText(e)), setCards([])));
+      .catch((e) => {
+        if (!alive) return;
+        // анкету своей компании сервер забыл (прошёл месяц или стенд пересоздан) — убираем её из списка
+        if (ownerKey && e instanceof HttpError && e.status === 403) {
+          setError("Анкета своей компании устарела — заполните её заново.");
+          setOwn((list) => {
+            const next = list.filter((c) => c.companyId !== companyId);
+            saveOwn(next);
+            return next;
+          });
+        } else setError(errorText(e));
+        setCards([]);
+      });
     return () => {
       alive = false;
     };
-  }, [api, companyId, role, seenKey]);
+  }, [api, companyId, role, seenKey, ownerKey]);
 
   // Карточка, которой нет в ленте (прямая ссылка), догружается отдельно
   const cardId = view.name === "card" ? view.id : null;
@@ -251,12 +269,26 @@ function Shell() {
 
   const onCompany = useCallback(
     (id: string) => {
+      if (id === OWN_NEW) {
+        go("own");
+        return;
+      }
       setCompanyId(id);
       setRole(clients.find((c) => c.companyId === id)?.defaultRole ?? "cfo");
       go("");
     },
     [clients],
   );
+  const onOwnCreated = useCallback((c: DemoClient, r: UserRole) => {
+    setOwn((list) => {
+      const next = [...list.filter((x) => x.companyId !== c.companyId), c];
+      saveOwn(next);
+      return next;
+    });
+    setCompanyId(c.companyId);
+    setRole(r);
+    go("brief");
+  }, []);
   const onRole = useCallback((r: UserRole) => {
     setRole(r);
     if (parseHash().name === "card") go("feed");
@@ -373,6 +405,7 @@ function Shell() {
           {view.name === "faq" && <FaqPage />}
         </div>
       )}
+      {view.name === "own" && api && <OwnCompany api={api} onCreated={onOwnCreated} onCancel={() => history.back()} />}
       {view.name === "trace" &&
         api &&
         (signedIn ? (

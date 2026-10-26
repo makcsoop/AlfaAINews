@@ -19,6 +19,7 @@ from backend.agents.tools import FixtureDataSource, ToolDataSource
 from backend.fixtures import load_bundle
 from backend.ingest.private import story_visible
 from backend.llm import get_client
+from backend.profile.own import WithOwnCompanies
 from backend.ranking.config import FeedCfg, load_scoring
 from backend.ranking.fast_card import fast_card
 from backend.ranking.score import score_pair
@@ -294,7 +295,7 @@ class PipelineCardStore:
             return self._explicit_source
         if os.environ.get("TOOL_SOURCE", "").strip().lower() == "db":
             return get_tool_source()
-        return FixtureDataSource(self._bundle_name)
+        return WithOwnCompanies(FixtureDataSource(self._bundle_name))  # type: ignore[return-value]
 
     # --- вычисление ---
 

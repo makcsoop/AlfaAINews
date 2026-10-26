@@ -1,14 +1,15 @@
 // Клиенты для переключателя. Основной источник — витрина API (GET /demo/companies, config/demo_companies.yaml):
 // реальные компании кейса и демо-архетипы. DEMO_CLIENTS — запасной список (моки, API недоступен).
-import type { ShowcaseCompany, UserRole } from "./types";
+import type { OwnCompanyForm, OwnSession, ShowcaseCompany, UserRole } from "./types";
 
 export interface DemoClient {
   companyId: string;
   title: string;
   subtitle: string;
   okvedName?: string;
-  kind?: "case" | "demo";
+  kind?: "case" | "demo" | "own";
   defaultRole: UserRole;
+  ownerKey?: string; // своя компания по анкете: ключ повторного входа
 }
 
 export const DEMO_CLIENTS: DemoClient[] = [
@@ -50,4 +51,45 @@ export function fromShowcase(list: ShowcaseCompany[]): DemoClient[] {
       defaultRole: c.default_role,
     };
   });
+}
+
+// Пункт переключателя «+ Своя компания…»: открывает анкету
+export const OWN_NEW = "__own_new__";
+
+// Свои компании по анкете живут в этом браузере: id и ключ владельца нужны для повторного входа.
+// Хранилище может быть недоступно — тогда компания живёт до перезагрузки.
+const OWN_KEY = "own:companies";
+
+export function readOwn(): DemoClient[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(OWN_KEY) ?? "[]") as DemoClient[];
+    return Array.isArray(list) ? list.filter((c) => c.companyId?.startsWith("U_OWN_") && c.ownerKey) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveOwn(list: DemoClient[]) {
+  try {
+    localStorage.setItem(OWN_KEY, JSON.stringify(list));
+  } catch {
+    /* без хранилища — до перезагрузки */
+  }
+}
+
+export function ownClient(s: OwnSession, form: OwnCompanyForm, sectorName?: string): DemoClient {
+  const products = PRODUCT_LABELS.filter(([k]) => k !== "fea" && form.products[k as keyof OwnCompanyForm["products"]]).map(
+    ([, v]) => v,
+  );
+  const fea = form.fea ? (form.fea_countries.length ? `ВЭД: ${form.fea_countries.join(", ")}` : "ВЭД") : "";
+  const parts = [`ОКВЭД ${form.okved_code}`, form.region, products.join(", "), fea].filter(Boolean);
+  return {
+    companyId: s.company_id,
+    title: `${s.title} (своя)`,
+    subtitle: parts.join(" · "),
+    okvedName: sectorName,
+    kind: "own",
+    defaultRole: s.role,
+    ownerKey: s.owner_key,
+  };
 }

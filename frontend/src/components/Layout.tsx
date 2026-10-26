@@ -2,6 +2,7 @@
 // на телефоне — нижняя навигация.
 import type { ReactNode } from "react";
 import type { DemoClient } from "../clients";
+import { OWN_NEW } from "../clients";
 import { DEMO_ROLES, ROLE_LABELS } from "../labels";
 import type { Theme } from "../theme";
 import type { UserRole } from "../types";
@@ -129,6 +130,7 @@ export function Layout({ clients, companyId, role, section, place, unseen, theme
                   {c.title}
                 </option>
               ))}
+              <option value={OWN_NEW}>+ Своя компания…</option>
             </select>
           </div>
           <div className="topbar-right">

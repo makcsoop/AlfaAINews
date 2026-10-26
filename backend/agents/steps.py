@@ -57,7 +57,10 @@ def set_tool_source(source: ToolDataSource | None) -> None:
 def get_tool_source() -> ToolDataSource:
     global _source
     if _source is None:
-        _source = _make_source()
+        from backend.profile.own import WithOwnCompanies
+
+        # свои компании по анкете (U_OWN_…) — поверх данных кейса
+        _source = WithOwnCompanies(_make_source())  # type: ignore[assignment]
     return _source
 
 

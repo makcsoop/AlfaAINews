@@ -141,6 +141,28 @@ export interface SessionInfo {
   user_id: string;
 }
 
+// Анкета «Своя компания» (POST /session/own): только то, что влияет на ленту
+export interface OwnCompanyForm {
+  title: string;
+  okved_code: string;
+  region?: string | null;
+  products: { loans: boolean; leasing: boolean; deposits: boolean; guarantees: boolean; factoring: boolean; payroll: boolean };
+  fea: boolean;
+  fea_countries: string[];
+  buyers: Record<string, number>; // отрасль покупателей → доля входящих платежей, %
+  suppliers: Record<string, number>; // отрасль поставщиков → доля исходящих платежей, %
+}
+
+export interface OwnSession extends SessionInfo {
+  title: string;
+  owner_key: string; // ключ повторного входа: хранится только в этом браузере
+}
+
+export interface OkvedSector {
+  code: string;
+  name: string;
+}
+
 export interface ApiError {
   error: { code: string; message: string; trace_id: string };
 }

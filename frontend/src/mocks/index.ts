@@ -90,6 +90,12 @@ export const mockApi: Api = {
     session = { company_id: companyId, role, user_id: `demo_${companyId}_${role}` };
     return delay(session);
   },
+  async ownSectors() {
+    return delay([{ code: "46", name: "Оптовая торговля" }]);
+  },
+  async createOwn() {
+    throw new HttpError(503, "Своя компания доступна только с API");
+  },
   async feed() {
     const s = requireSession();
     const own = cards.filter((c) => c.company_id === s.company_id);
