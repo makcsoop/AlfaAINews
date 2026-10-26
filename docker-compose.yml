@@ -37,7 +37,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
 
   # Однократно: таблицы, расширение vector, CSV кейса и демо-компании из фикстуры «ставка 14%».
   # Сам сюжет фикстуры (11.09) в живую базу не заливается; стенд на фикстуре: --load-fixtures
@@ -92,7 +92,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "3000:80"
+      - "${WEB_PORT:-3000}:80"
     depends_on:
       - backend
 

@@ -25,3 +25,6 @@ reports/
 
 # разметка: профили компаний кейса и метки — в git не кладём
 data/labeling/
+
+# архив данных для жюри (scripts/pack_demo_data.sh) — выкладывается ссылкой, не в git
+demo-data.tar.gz
