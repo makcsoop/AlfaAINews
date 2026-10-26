@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Запуск всего решения одной командой: ./start.sh [ссылка на архив данных кейса]
+# Запуск всего решения одной командой: ./start.sh
 #
-# 0. Данные кейса и снимок знаний: скачиваются по ссылке (в git их нет), без ссылки — синтетика.
+# 0. Данные кейса и снимок знаний: скачиваются архивом с Яндекс Диска (в git их нет).
 # 1. .env: секрет сессий генерируется сам, ключ модели спрашивается один раз (пишется только в локальный .env).
 # 2. docker compose up: база, Redis, API, сборщик новостей, интерфейс.
 # 3. Первый запуск: демо-база из данных кейса (data/case) и снимка знаний (data/snapshot) — профили 85 тыс.
@@ -30,37 +30,40 @@ docker compose version >/dev/null 2>&1 || fail "нужен Docker Compose v2 (к
 C="docker compose"
 
 # --- 0.5. Данные кейса и снимок знаний -----------------------------------------------------------------
-# В открытом репозитории их нет (данные организаторов и тексты ЦМИ): архив demo-data.tar.gz
-# (scripts/pack_demo_data.sh) передаётся ссылкой — ./start.sh <ссылка> или DEMO_DATA_URL=<ссылка> ./start.sh.
-# Яндекс Диск — публичная ссылка disk.yandex.ru/d/…; иначе — прямая ссылка на файл. Без ссылки — синтетика.
-DATA_URL="${1:-${DEMO_DATA_URL:-}}"
-if [ ! -f data/case/df_Uid_data_hack.csv ] || [ ! -f data/snapshot/bank_positions.json.gz ]; then
-  if [ -z "$DATA_URL" ] && [ -t 0 ]; then
-    printf 'Ссылка на архив данных кейса (Enter — без него, на синтетике): '
-    read -r DATA_URL
+# В git их нет: архив demo-data.tar.gz (scripts/pack_demo_data.sh) лежит на Яндекс Диске, скрипт качает его сам.
+# Другая ссылка — ./start.sh <ссылка> или DEMO_DATA_URL=<ссылка> ./start.sh (Яндекс Диск или прямая ссылка);
+# архив недоступен — запуск продолжается на синтетике (200 компаний, без позиций ЦМИ).
+DEFAULT_DATA_URL="https://disk.yandex.ru/d/Rhd5iiIumWFXBA"
+DATA_URL="${1:-${DEMO_DATA_URL:-$DEFAULT_DATA_URL}}"
+
+fetch_data() {
+  local href tmp
+  case "$DATA_URL" in
+    https://disk.yandex.*|https://yadi.sk/*)
+      href="$(curl -sf -m 30 -G "https://cloud-api.yandex.net/v1/disk/public/resources/download" \
+        --data-urlencode "public_key=$DATA_URL" | sed -n 's/.*"href":"\([^"]*\)".*/\1/p')"
+      [ -n "$href" ] || { say "Яндекс Диск не отдал архив (ссылка закрыта или недоступна)"; return 1; }
+      ;;
+    https://*) href="$DATA_URL" ;;
+    *) say "ссылка на архив должна начинаться с https://"; return 1 ;;
+  esac
+  tmp="$(mktemp -d)"
+  say "скачиваем данные кейса (30 МБ)"
+  if ! curl -sfL -m 900 --retry 3 -o "$tmp/demo-data.tar.gz" "$href"; then
+    rm -rf "$tmp"; say "не удалось скачать архив данных"; return 1
   fi
-  if [ -n "$DATA_URL" ]; then
-    case "$DATA_URL" in
-      https://disk.yandex.*|https://yadi.sk/*)
-        href="$(curl -sf -m 30 -G "https://cloud-api.yandex.net/v1/disk/public/resources/download" \
-          --data-urlencode "public_key=$DATA_URL" | sed -n 's/.*"href":"\([^"]*\)".*/\1/p')"
-        [ -n "$href" ] || fail "Яндекс Диск не отдал ссылку на скачивание — проверьте, что доступ открыт по ссылке"
-        ;;
-      https://*) href="$DATA_URL" ;;
-      *) fail "ссылка на архив должна начинаться с https://" ;;
-    esac
-    tmp="$(mktemp -d)"
-    say "скачиваем данные кейса"
-    curl -fL -m 900 --retry 3 -o "$tmp/demo-data.tar.gz" "$href" || fail "не удалось скачать архив данных"
-    # распаковываем только data/case и data/snapshot: архив — внешний файл, чужие пути не пускаем
-    if tar -tzf "$tmp/demo-data.tar.gz" | grep -vqE '^data/(case|snapshot)(/[A-Za-z0-9_.-]*)?$'; then
-      rm -rf "$tmp"
-      fail "в архиве лишние файлы — ожидаются только data/case/ и data/snapshot/"
-    fi
-    tar -xzf "$tmp/demo-data.tar.gz" --no-same-owner
+  # распаковываем только data/case и data/snapshot: архив — внешний файл, чужие пути не пускаем
+  if tar -tzf "$tmp/demo-data.tar.gz" | grep -vqE '^data/(case|snapshot)(/[A-Za-z0-9_.-]*)?$'; then
     rm -rf "$tmp"
-    say "данные кейса на месте"
+    fail "в архиве лишние файлы — ожидаются только data/case/ и data/snapshot/"
   fi
+  tar -xzf "$tmp/demo-data.tar.gz" --no-same-owner
+  rm -rf "$tmp"
+  say "данные кейса на месте"
+}
+
+if [ ! -f data/case/df_Uid_data_hack.csv ] || [ ! -f data/snapshot/bank_positions.json.gz ]; then
+  fetch_data || say "продолжаем на синтетике: 200 компаний, без позиций ЦМИ"
 fi
 
 # --- 1. .env -------------------------------------------------------------------------------------------
