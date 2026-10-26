@@ -1,8 +1,8 @@
 """Схема ответа модели на шаге card. Метки, числа вкладов, скор и знак ставит код, не модель."""
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from backend.schemas.common import Schema
 
@@ -44,3 +44,26 @@ class CardDraft(Schema):
     bank_and_market: list[DraftItem] = Field(default_factory=list, max_length=4)
     what_would_change: list[DraftItem] = Field(default_factory=list, max_length=3)
     surprise: DraftSurprise | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _inference_refs_from_event(cls, data: Any) -> Any:
+        """Пустые refs у выводов — частая ошибка модели (26.10: 21% ответов Qwen, каждый — повторный вызов).
+        Вывод «почему важно / что дальше / что изменит оценку» опирается на само событие, поэтому берёт refs
+        из what_happened. Ссылки не выдумываются: дальше они проходят ту же сверку с досье, цитатами, числами
+        и датами. Факты, голос банка и действия без ссылки по-прежнему невалидны."""
+        if not isinstance(data, dict) or not isinstance(data.get("what_happened"), list):
+            return data
+        event = list(dict.fromkeys(
+            r for x in data["what_happened"] if isinstance(x, dict) for r in x.get("refs") or [] if r
+        ))
+        if not event:
+            return data
+        for section in INFERENCE_SECTIONS:
+            for item in data.get(section) or []:
+                if isinstance(item, dict) and not item.get("refs"):
+                    item["refs"] = list(event)
+        return data
+
+
+INFERENCE_SECTIONS = ("why_it_matters", "consequences", "what_would_change")

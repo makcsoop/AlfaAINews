@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from backend.agents.dossier import Dossier, DossierItem
 from backend.cards import CardAssemblyError, CardDraft, assemble_card, find_offer, template_draft, write_card
@@ -156,7 +157,7 @@ def test_card_valid_and_labelled(bundle, tmp_path, company, role):
             assert c.type == "bank_offer" and c.is_advertising
     # метки и обоснование: у каждого утверждения есть либо источник, либо based_on
     assert all(c.evidence or any(c.based_on.values()) for c in card.claims)
-    assert res.cost_rub == 0.0 and res.prompt_version == "card-v4"
+    assert res.cost_rub == 0.0 and res.prompt_version == "card-v5"
 
 
 def test_confidence_and_surprise_set_by_code(bundle, tmp_path):
@@ -427,11 +428,11 @@ def test_role_focus_in_prompt(bundle, role):
 
 def test_prompt_version_in_header_and_journal(bundle, tmp_path):
     version, system, _user = load_prompt()
-    assert version == "card-v4" and "cmi_" in system and "mk_" in system
+    assert version == "card-v5" and "cmi_" in system and "mk_" in system
     client = fixture_client(tmp_path)
     res = write(env(bundle, *CASES[0]), client, sources=bundle["source"])
     entries = client.journal.by_trace(res.card.trace_id)
-    assert entries and all(en["prompt_version"] == "card-v4" and en["step"] == "card" for en in entries)
+    assert entries and all(en["prompt_version"] == "card-v5" and en["step"] == "card" for en in entries)
     assert sum(en["cost_rub"] for en in entries) == 0.0
 
 
@@ -588,3 +589,36 @@ def test_market_view_is_russian_statement_not_dossier_title():
     assert market_title("expectation", "key_rate") == "Ожидание рынка: ключевая ставка и стоимость денег"
     assert market_title("case", None) == "Случай"
     assert not any(ch.isascii() and ch.isalpha() for ch in market_title("forecast", "fx_rub"))
+
+
+def test_empty_refs_in_inference_inherit_event_refs(bundle):
+    """Пустые refs у выводов (why_it_matters, consequences, what_would_change) — частая ошибка Qwen (21% ответов
+    26.10): вывод опирается на само событие, поэтому берёт refs из what_happened, а не уходит на повтор."""
+    def empty(d):
+        d["why_it_matters"][0]["refs"] = []
+        d["consequences"][0].pop("refs")
+        d.setdefault("what_would_change", []).append({"text": "Новое решение ЦБ", "refs": [], "client_features": []})
+
+    draft = mutate("U_DEMO_BORROWER_cfo", empty)
+    event = list(dict.fromkeys(r for x in draft.what_happened for r in x.refs))
+    assert draft.why_it_matters[0].refs == event
+    assert draft.consequences[0].refs == event and draft.what_would_change[-1].refs == event
+    card = assemble(env(bundle, *CASES[0]), draft)  # ссылки настоящие: сборка и проверка по досье проходят
+    assert all(c.evidence or c.based_on for c in card.claims)
+
+
+def test_empty_refs_elsewhere_still_invalid():
+    """Факты, голос банка и действия без ссылки — по-прежнему невалидны: им опора из события не годится."""
+    for section in ("what_happened", "actions"):
+        with pytest.raises(ValidationError):
+            mutate("U_DEMO_BORROWER_cfo", lambda d, s=section: d[s][0].update(refs=[]))
+
+
+def test_empty_inference_refs_invalid_when_event_has_no_refs():
+    def both(d):
+        for x in d["what_happened"]:
+            x["refs"] = []
+        d["why_it_matters"][0]["refs"] = []
+
+    with pytest.raises(ValidationError):
+        mutate("U_DEMO_BORROWER_cfo", both)
