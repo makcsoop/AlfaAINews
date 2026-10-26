@@ -280,6 +280,7 @@ class PipelineCardStore:
         self._feeds: dict[tuple[str, str], _Feed] = {}
         self._lock = threading.RLock()
         self._demo_done = False
+        self._warm_pairs: set[tuple[str, str]] = set()  # их ленты досчитывает прогрев, а не запросы
         self.runs = 0  # сколько раз запускался конвейер (для тестов и мониторинга)
         self._background = feed_background() if background is None else background
         # один фоновый поток на хранилище: разборы идут по одному, бюджет и лимит модели не перегружаются
@@ -339,11 +340,12 @@ class PipelineCardStore:
             feed.attempted.add(story.id)
 
     def _scan(
-        self, company_id: str, role: str, seen: Mapping[str, int]
+        self, company_id: str, role: str, seen: Mapping[str, int], ctx: _Ctx | None = None
     ) -> tuple[_Ctx, list[_Scored]] | None:
         """Оценка сюжетов, которых лента ещё не видела в этой версии. Общих данных не трогает — идёт без
-        блокировки, /card, /trace и /analyze его не ждут. None — нет профиля компании."""
-        ctx = self._context(company_id)
+        блокировки, /card, /trace и /analyze его не ждут. None — нет профиля компании.
+        ctx — данные компании, уже загруженные для другой роли (прогрев)."""
+        ctx = ctx or self._context(company_id)
         if ctx is None:
             return None
         out: list[_Scored] = []
@@ -659,16 +661,21 @@ class PipelineCardStore:
             feed.cards[story_id] = degraded.card_id
         return trace
 
-    def _ensure(self, company_id: str, role: str, *, upgrade: bool = True) -> None:
-        """Лента пары: строится при первом обращении и раз в FEED_REFRESH_S досчитывает новые сюжеты."""
+    def _ensure(
+        self, company_id: str, role: str, *, upgrade: bool = True, ctx: _Ctx | None = None,
+        force: bool = False,
+    ) -> None:
+        """Лента пары: строится при первом обращении и раз в FEED_REFRESH_S досчитывает новые сюжеты.
+        Прогретые пары досчитывает только прогрев (force): запрос посетителя отдаёт готовую ленту."""
         key = (company_id, role)
         with self._lock:
             feed = self._feeds.get(key)
-            due = feed is None or time.monotonic() - feed.refreshed_at >= feed_refresh_s()
+            stale = time.monotonic() - feed.refreshed_at >= feed_refresh_s() if feed else True
+            due = feed is None or force or (stale and key not in self._warm_pairs)
             if feed is not None and due:
                 feed.refreshed_at = time.monotonic()  # параллельные запросы досчёт не повторяют
             seen = dict(feed.seen) if feed is not None else {}
-        scan = self._scan(company_id, role, seen) if due else None
+        scan = self._scan(company_id, role, seen, ctx) if due else None
         with self._lock:
             feed = self._feeds.get(key)
             if scan is not None:
@@ -693,14 +700,31 @@ class PipelineCardStore:
     def warm(self, pairs: Sequence[tuple[str, str]], deep_pairs: Collection[tuple[str, str]]) -> None:
         """Прогрев: лента каждой пары считается заранее, первый заход не ждёт подсчёта. Глубокий разбор —
         только для deep_pairs (компания × роль по умолчанию) и пока потрачено меньше warm_deep_share()
-        дневного лимита: остаток — посетителям и вопрос-ответу."""
+        дневного лимита: остаток — посетителям и вопрос-ответу. Данные компании грузятся один раз на все её
+        роли: на сервере с одним ядром загрузка (~0,8 с) дороже досчёта новых сюжетов."""
+        started = time.monotonic()
+        by_company: dict[str, list[str]] = {}
         for company_id, role in pairs:
-            spent, limit = self._budget()
-            deep = (company_id, role) in deep_pairs and limit > 0 and spent < limit * warm_deep_share()
+            by_company.setdefault(company_id, []).append(role)
+        for company_id, roles in by_company.items():
             try:
-                self._ensure(company_id, role, upgrade=deep)
-            except Exception as e:  # одна компания без профиля не останавливает прогрев остальных
-                log.warning("прогрев ленты %s/%s: %r", company_id, role, e)
+                ctx = self._context(company_id)
+            except Exception as e:  # одна компания без данных не останавливает прогрев остальных
+                log.warning("прогрев ленты %s: %r", company_id, e)
+                continue
+            if ctx is None:
+                continue
+            for role in roles:
+                spent, limit = self._budget()
+                deep = (company_id, role) in deep_pairs and limit > 0 and spent < limit * warm_deep_share()
+                try:
+                    self._ensure(company_id, role, upgrade=deep, ctx=ctx, force=True)
+                except Exception as e:
+                    log.warning("прогрев ленты %s/%s: %r", company_id, role, e)
+                    continue
+                with self._lock:
+                    self._warm_pairs.add((company_id, role))
+        log.info("прогрев лент: %d пар за %.1f с", len(pairs), time.monotonic() - started)
 
     # --- протокол CardStore ---
 

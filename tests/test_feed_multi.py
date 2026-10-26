@@ -592,3 +592,20 @@ def test_warmer_off_on_fixture(monkeypatch):
 
     monkeypatch.setenv("LLM_MODE", "fixture")
     assert start_feed_warmer() is None
+
+
+def test_warmed_feed_not_rescanned_by_request_and_data_loaded_once_per_company():
+    store, _ = make_store(k=0)
+    loads: list[str] = []
+    orig = store._context
+
+    def counting(company_id):
+        loads.append(company_id)
+        return orig(company_id)
+
+    store._context = counting  # type: ignore[method-assign]
+    store.warm([(BORROWER, "cfo"), (BORROWER, "treasurer"), (BORROWER, "chief_accountant")], set())
+    assert loads == [BORROWER]  # одна загрузка данных на три роли
+    store._feeds[(BORROWER, "cfo")].refreshed_at = 0.0  # лента «устарела»
+    assert store.list_cards(BORROWER, "cfo")
+    assert loads == [BORROWER]  # запрос отдаёт готовое, досчитает следующий прогрев
