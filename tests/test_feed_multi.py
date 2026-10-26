@@ -310,7 +310,7 @@ def test_background_skips_when_budget_ran_out_while_queued(monkeypatch):
     store._start_worker = lambda: None  # поток не стартует, пока тест не исчерпает бюджет
     store.list_cards(BORROWER, "cfo")
     feed = store._feeds[(BORROWER, "cfo")]
-    ((_, story_id),) = list(store._jobs.queue)
+    ((*_, story_id),) = list(store._jobs.queue)
     monkeypatch.setattr(store, "_budget", lambda: (500.0, 500.0))
     gate.set()
     del store._start_worker
@@ -609,3 +609,34 @@ def test_warmed_feed_not_rescanned_by_request_and_data_loaded_once_per_company()
     store._feeds[(BORROWER, "cfo")].refreshed_at = 0.0  # лента «устарела»
     assert store.list_cards(BORROWER, "cfo")
     assert loads == [BORROWER]  # запрос отдаёт готовое, досчитает следующий прогрев
+
+
+def test_feed_request_jumps_warm_queue_and_runs_once():
+    """Разборы прогрева идут в фоне по очереди; открытая лента поднимает свой разбор вперёд, без повтора."""
+    import threading
+
+    gate = threading.Event()
+    calls: list[tuple[str, str]] = []
+    holder: dict = {}
+
+    def runner(story_id, company_id, role, *, sector, story_version, handlers):
+        if not calls:
+            gate.wait(5)  # первый разбор держим, пока очередь не наберётся
+        calls.append((company_id, role))
+        fast = holder["store"]._cards[f"card_{story_id}_{company_id}_{role}"]
+        now = datetime.now(UTC)
+        trace = RunTrace(run_id=f"run_{story_id}_{role}", story_id=story_id, company_id=company_id,
+                         started_at=now, finished_at=now)
+        deep = fast.model_copy(update={
+            "trace_id": trace.run_id, "relevance": fast.relevance.model_copy(update={"deep_analysis": True}),
+        })
+        return deep, trace
+
+    store = PipelineCardStore(source=MultiSource(), runner=runner, deep_per_request=1, background=True)
+    holder["store"] = store
+    pairs = [(BORROWER, "cfo"), (DEPOSITOR, "treasurer"), (BORROWER, "treasurer")]
+    store.warm(pairs, set(pairs))  # три разбора прогрева, первый держится на gate
+    store.list_cards(BORROWER, "treasurer")  # открыли ленту — её разбор вперёд депозитора
+    gate.set()
+    assert store.wait_idle(10)
+    assert calls == [(BORROWER, "cfo"), (BORROWER, "treasurer"), (DEPOSITOR, "treasurer")]

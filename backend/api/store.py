@@ -1,5 +1,6 @@
 """Хранилище карточек за протоколом: фикстура rate_14 или конвейер (по env CARD_STORE)."""
 
+import itertools
 import logging
 import os
 import queue
@@ -229,6 +230,8 @@ class _Feed:
     deep: set[str] = field(default_factory=set)  # сюжеты с глубокой карточкой
     attempted: set[str] = field(default_factory=set)  # по ним глубокий разбор уже запускали или он не нужен
     pending: set[str] = field(default_factory=set)  # в очереди фонового разбора или разбираются сейчас
+    running: set[str] = field(default_factory=set)  # разбираются сейчас: копия задания в очереди — мимо
+    urgent: set[str] = field(default_factory=set)  # подняты запросом ленты: копия с приоритетом 0 в очереди
     pinned: set[str] = field(default_factory=set)  # прислал пользователь (/analyze): из ленты не убираем
     seen: dict[str, int] = field(default_factory=dict)  # story_id -> версия: все оценённые сюжеты источника
     retry_at: dict[str, float] = field(default_factory=dict)  # story_id -> monotonic: когда повторить разбор
@@ -285,7 +288,9 @@ class PipelineCardStore:
         self.runs = 0  # сколько раз запускался конвейер (для тестов и мониторинга)
         self._background = feed_background() if background is None else background
         # один фоновый поток на хранилище: разборы идут по одному, бюджет и лимит модели не перегружаются
-        self._jobs: queue.Queue[tuple[_Feed, str]] = queue.Queue()
+        # приоритет: 0 — лента, которую открыли (/feed), 1 — фоновый прогрев; внутри — по порядку постановки
+        self._jobs: queue.PriorityQueue[tuple[int, int, _Feed, str]] = queue.PriorityQueue()
+        self._job_seq = itertools.count()
         self._worker: threading.Thread | None = None
 
     # --- данные ---
@@ -466,7 +471,7 @@ class PipelineCardStore:
         budget = get_client().budget
         return budget.spent_rub(), budget.daily_limit_rub
 
-    def _upgrade(self, feed: _Feed) -> None:
+    def _upgrade(self, feed: _Feed, priority: int = 0) -> None:
         """Глубокий разбор лучших ещё не разобранных сюжетов: не более K за обращение, по остатку бюджета."""
         if self._deep_per_request <= 0 or not feed.sector:
             return
@@ -487,10 +492,15 @@ class PipelineCardStore:
         # в очереди у ленты не больше K: фронт перечитывает ленту, пока есть быстрые карточки, и каждый
         # запрос не должен добавлять новые разборы, пока прежние не сделаны
         free = self._deep_per_request - len(feed.pending)
+        if priority == 0:
+            # ленту открыли, а её разборы ждут в очереди прогрева — копия вперёд; разбор пройдёт один раз
+            for sid in feed.pending - feed.running - feed.urgent:
+                feed.urgent.add(sid)
+                self._jobs.put((0, next(self._job_seq), feed, sid))
         for pair in pairs[: max(0, free)]:
             feed.attempted.add(pair.story_id)
             feed.pending.add(pair.story_id)
-            self._jobs.put((feed, pair.story_id))
+            self._jobs.put((priority, next(self._job_seq), feed, pair.story_id))
         if free > 0 and pairs:
             self._start_worker()
 
@@ -501,7 +511,14 @@ class PipelineCardStore:
 
     def _work(self) -> None:
         while True:
-            feed, story_id = self._jobs.get()
+            _, _, feed, story_id = self._jobs.get()
+            with self._lock:
+                skip = story_id not in feed.pending or story_id in feed.running  # копия уже разобранного
+                if not skip:
+                    feed.running.add(story_id)
+            if skip:
+                self._jobs.task_done()
+                continue
             try:
                 self._run_deep_background(feed, story_id)
             except Exception as e:  # поток не должен умирать: следующий разбор очереди важнее
@@ -509,6 +526,8 @@ class PipelineCardStore:
             finally:
                 with self._lock:
                     feed.pending.discard(story_id)
+                    feed.running.discard(story_id)
+                    feed.urgent.discard(story_id)
                 self._jobs.task_done()
 
     def _run_deep_background(self, feed: _Feed, story_id: str) -> None:
@@ -664,7 +683,7 @@ class PipelineCardStore:
 
     def _ensure(
         self, company_id: str, role: str, *, upgrade: bool = True, ctx: _Ctx | None = None,
-        force: bool = False,
+        force: bool = False, priority: int = 0,
     ) -> None:
         """Лента пары: строится при первом обращении и раз в FEED_REFRESH_S досчитывает новые сюжеты.
         Прогретые пары досчитывает только прогрев (force): запрос посетителя отдаёт готовую ленту."""
@@ -685,7 +704,7 @@ class PipelineCardStore:
                     feed = self._feeds[key] = _Feed(company_id, role, ctx.profile.sector or "")
                 self._apply_scan(feed, ctx, scored)
             if feed is not None and upgrade:
-                self._upgrade(feed)
+                self._upgrade(feed, priority)
 
     def _ensure_demo(self) -> None:
         """Ленты демо-пар для /card и /trace. Глубокий разбор отсюда — только на фикстуре (бесплатно):
@@ -719,7 +738,7 @@ class PipelineCardStore:
                 spent, limit = self._budget()
                 deep = (company_id, role) in deep_pairs and limit > 0 and spent < limit * warm_deep_share()
                 try:
-                    self._ensure(company_id, role, upgrade=deep, ctx=ctx, force=True)
+                    self._ensure(company_id, role, upgrade=deep, ctx=ctx, force=True, priority=1)
                 except Exception as e:
                     log.warning("прогрев ленты %s/%s: %r", company_id, role, e)
                     continue

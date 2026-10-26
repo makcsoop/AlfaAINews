@@ -1,9 +1,10 @@
 # Сценарий демо, 5 минут (ведёт Р2)
 
-Перед показом: стенд по README («Демо-база с нуля»: CSV кейса, снимок знаний с реестром ЦМИ и консенсусом),
-`docker compose up -d`, прогрев `uv run python scripts/warm_demo_cache.py --stories 20 --max-rub 15` — глубокие разборы
-топа обоих клиентов уже в Redis, на демо ₽ не тратим и не ждём по 40 с. Проверка без браузера:
-`uv run python scripts/check_feed_top.py --company U_DEMO_BORROWER --role cfo --hours 48` — решение ЦБ 23.10 на 1-м месте.
+Перед показом: `./start.sh` (README, «Запуск в одну строку») — данные кейса, снимок знаний с реестром ЦМИ и
+консенсусом, свежие новости; больше готовых разборов к показу — `WARM_STORIES=20 WARM_MAX_RUB=15 ./start.sh`
+(повторный запуск базу не пересоздаёт, только догревает). Глубокие разборы топа уже в Redis — на демо ₽ не тратим и
+не ждём по 40 с. Проверка без браузера: `docker compose exec backend python scripts/check_feed_top.py --company
+U_DEMO_BORROWER --role cfo --hours 48`.
 Запасной путь без сети: `cd frontend && npm run dev:mock` (фикстура «ставка 14%», догрузка разбора за ~15 с).
 
 | Время | Шаг | Что показать и сказать |

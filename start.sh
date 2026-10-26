@@ -130,7 +130,7 @@ n="$(profiles || echo 0)"
 if [ "${n:-0}" -lt 1000 ]; then
   [ -f data/case/df_Uid_data_hack.csv ] || say "нет data/case: профили из синтетики (200 компаний)"
   [ -f data/snapshot/bank_positions.json.gz ] || say "нет data/snapshot: без реестра ЦМИ и архива"
-  say "первый запуск: заливаем демо-базу (≈5–7 минут)"
+  say "первый запуск: заливаем демо-базу (≈ 13 минут: профили, свежий сбор, разметка сюжетов моделью)"
   $C stop ingest >/dev/null
   if fixture; then
     $C run --rm backend python -m backend.db.demo
@@ -155,7 +155,7 @@ curl -sf -m 3 http://localhost:$WEB_PORT/api/health >/dev/null || fail "API не
 if ! fixture; then
   say "прогрев: глубокие разборы живыми моделями (до $WARM_STORIES карточек, не больше $WARM_MAX_RUB ₽)"
   $C exec -T backend python scripts/warm_demo_cache.py --base http://localhost:8000 \
-    --client U_DEMO_BORROWER:cfo --stories "$WARM_STORIES" --max-rub "$WARM_MAX_RUB" --patience 240 || \
+    --client U_DEMO_BORROWER:cfo --stories "$WARM_STORIES" --max-rub "$WARM_MAX_RUB" --patience 300 || \
     say "прогрев прервался — разборы продолжат догружаться в фоне"
 fi
 
