@@ -2,8 +2,11 @@
 
     story_id = ingest_paste(conn, url="https://…", text=None, title=None, company_id=session.company_id)
 
-1. Ссылка — скачиваем (только http/https и только публичные адреса: никаких запросов во внутреннюю сеть
-   стенда), текст — trafilatura; вставленный текст берём как есть.
+1. Ссылка — сначала ищем материал среди уже собранных (RSS и каналы: часть сайтов, например РБК, закрыта для
+   зарубежного сервера, а их материалы в базе уже есть); не нашли — скачиваем (только http/https и только
+   публичные адреса: никаких запросов во внутреннюю сеть стенда), текст — trafilatura, у поста Telegram —
+   из встраиваемой версии `?embed=1` (обычная страница поста текст подгружает скриптом). Вставленный текст
+   берём как есть.
 2. Материал источника `user_paste`, уровень 3 (непроверенный), в `raw_items` с меткой владельца
    (`owner:<company_id>`, см. `backend.ingest.private`). Отсев словарём не применяется: пользователь прислал
    материал сам. Вставка личная: другим компаниям она не видна.
@@ -16,6 +19,7 @@
 
 import hashlib
 import ipaddress
+import re
 import socket
 import time
 from collections.abc import Callable
@@ -38,6 +42,7 @@ from backend.extract.run import save_facts
 from backend.ingest.normalize import clean_text, clean_title, content_hash, item_id, simhash
 from backend.ingest.private import PASTE_SOURCE_ID, has_paste, owner_tag
 from backend.ingest.store import insert_items
+from backend.ingest.tme_web import parse_page
 from backend.schemas import RawItem, Story
 from backend.stories import cluster
 
@@ -47,6 +52,10 @@ MAX_TEXT = 50_000
 MAX_BYTES = 3_000_000
 FETCH_DEADLINE_S = 20.0  # на всю загрузку с редиректами, а не на каждую операцию
 TITLE_MAX = 200
+FETCH_TRIES = 2  # сеть до сайта рвётся — второй раз, потом понятная ошибка
+TG_HOSTS = {"t.me", "www.t.me", "telegram.me", "www.telegram.me"}
+_TG_POST = re.compile(r"^/(?:s/)?([A-Za-z0-9_]{4,64})/(\d+)/?$")
+UNREACHABLE = "сайт не ответил серверу (бывает закрыт для зарубежных адресов) — вставьте текст статьи"
 
 
 class PasteError(ValueError):
@@ -97,8 +106,36 @@ def _get_pinned(client: httpx.Client, url: str, ip: str, deadline: float) -> tup
         return 200, None, bytes(body[:MAX_BYTES])
 
 
+def telegram_post(url: str) -> tuple[str, int] | None:
+    """(канал, номер поста) для ссылки вида t.me/<канал>/<номер>, иначе None."""
+    u = urlparse(url)
+    m = _TG_POST.match(u.path) if (u.hostname or "").lower() in TG_HOSTS else None
+    return (m.group(1), int(m.group(2))) if m else None
+
+
 def fetch_page(url: str, transport: httpx.BaseTransport | None = None) -> tuple[str | None, str | None]:
-    """(заголовок, текст) страницы. Редиректы проверяются заново: публичная ссылка не уведёт внутрь."""
+    """(заголовок, текст) страницы; пост Telegram — текст поста. Сетевой сбой — ещё раз, потом PasteError."""
+    post = telegram_post(url)
+    target = f"https://t.me/{post[0]}/{post[1]}?embed=1&mode=tme" if post else url
+    for attempt in range(FETCH_TRIES):
+        try:
+            final, html = _download(target, transport)
+            break
+        except (httpx.TimeoutException, httpx.TransportError):
+            if attempt == FETCH_TRIES - 1:
+                raise PasteError(UNREACHABLE) from None
+    if post:
+        # t.me отдаёт UTF-8; байты без charset lxml прочитал бы как latin-1
+        posts = parse_page(html.decode("utf-8", "replace"), post[0])
+        found = [p for p in posts if p.id == post[1] and p.message]
+        return None, (found[0].message if found else None)
+    text = trafilatura.extract(html, url=final, favor_precision=True, include_comments=False)
+    meta = trafilatura.extract_metadata(html)
+    return (meta.title if meta else None), text
+
+
+def _download(url: str, transport: httpx.BaseTransport | None = None) -> tuple[str, bytes]:
+    """(адрес после редиректов, тело). Редиректы проверяются заново: публичная ссылка не уведёт внутрь."""
     s = get_settings()
     deadline = time.monotonic() + FETCH_DEADLINE_S
     with httpx.Client(
@@ -117,9 +154,26 @@ def fetch_page(url: str, transport: httpx.BaseTransport | None = None) -> tuple[
             raise PasteError("слишком много перенаправлений")
     if status != 200:
         raise PasteError(f"страница не открылась: HTTP {status}")
-    text = trafilatura.extract(html, url=url, favor_precision=True, include_comments=False)
-    meta = trafilatura.extract_metadata(html)
-    return (meta.title if meta else None), text
+    return url, html
+
+
+def collected(conn: Connection, url: str) -> tuple[str | None, str | None] | None:
+    """(заголовок, текст) материала, который сборщик уже взял по этой ссылке (RSS или канал), иначе None.
+    Вставки других компаний не смотрим: они личные."""
+    u = urlparse(url)
+    base = u._replace(query="", fragment="").geturl().rstrip("/")
+    post = telegram_post(url)
+    variants = {url, base, base + "/"} | ({f"https://t.me/{post[0]}/{post[1]}"} if post else set())
+    row = conn.execute(
+        select(m.raw_items.c.title, m.raw_items.c.lead, m.raw_items.c.text)
+        .where(m.raw_items.c.url.in_(variants), m.raw_items.c.source_id != SOURCE_ID)
+        .order_by(m.raw_items.c.fetched_at.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    text = row.text or row.lead
+    return (row.title, text) if text else None
 
 
 def make_item(*, url: str | None, text: str, title: str | None, now: datetime, owner: str) -> RawItem:
@@ -224,7 +278,7 @@ def ingest_paste(
     if url:
         url = check_url(url)
         if not text:
-            page_title, text = fetch(url)
+            page_title, text = collected(conn, url) or fetch(url)
             title = title or page_title
     if not text:
         raise PasteError("нет ни текста, ни читаемой страницы")

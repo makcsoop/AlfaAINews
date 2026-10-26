@@ -573,3 +573,26 @@ def test_client_json_llm_call_cap_is_thread_safe():
         list(pool.map(lambda _: llm.complete_json(system="s", user="u", json_schema={}, purpose="extract"),
                       range(50)))
     assert llm.usage.calls == 10
+
+
+def test_paste_url_of_collected_article_uses_stored_text(engine):
+    """РБК закрыт для зарубежного сервера, но его статья уже собрана из RSS — берём текст из базы, не качая."""
+    from backend.ingest.paste import ingest_paste
+
+    now = datetime.now(UTC)
+    url = "https://www.rbc.ru/technology_and_media/26/10/2026/abc"
+    text = "Минцифры предложило обязать операторов хранить данные дольше. " * 5
+    rss = RawItem(
+        id="rbc_paste_1", source_id="rbc", native_id="r1", tier=1, url=url, title="Минцифры и операторы",
+        text=text, published_at=now, fetched_at=now, content_hash="rbcp1",
+    )
+
+    def offline(u):
+        raise AssertionError(f"скачивать не нужно: {u}")
+
+    with engine.begin() as conn:
+        insert_items(conn, [rss])
+        sid = ingest_paste(conn, url=url + "?from=from_main", text=None, title=None, company_id="U_A",
+                           fetch=offline, now=now)
+        story = conn.execute(select(m.stories.c.data).where(m.stories.c.id == sid)).scalar_one()
+    assert "Минцифры" in story["title"]

@@ -163,3 +163,49 @@ def test_rumor_markers(text):
     from backend.stories import cluster
 
     assert cluster.RUMOR.search(text) and rules.RUMOR.search(text)
+
+
+TG_EMBED = """<html><body>
+<div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="centralbank_russia/3900">
+ <div class="tgme_widget_message_text js-message_text">Банк России сохранил ключевую ставку<br/>на уровне 14% годовых.</div>
+ <a class="tgme_widget_message_date" href="#"><time datetime="2026-10-23T13:30:00+03:00">13:30</time></a>
+</div></body></html>"""
+
+
+def test_telegram_post_text_from_embed(dns):
+    """Обычная страница поста t.me текст подгружает скриптом — берём встраиваемую версию ?embed=1."""
+    import httpx
+
+    from backend.ingest.paste import fetch_page, telegram_post
+
+    assert telegram_post("https://t.me/centralbank_russia/3900") == ("centralbank_russia", 3900)
+    assert telegram_post("https://t.me/s/centralbank_russia/3900") == ("centralbank_russia", 3900)
+    assert telegram_post("https://www.rbc.ru/finances/1/2") is None
+    dns["t.me"] = ["149.154.167.99"]
+    seen = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        return httpx.Response(200, html=TG_EMBED)
+
+    title, text = fetch_page("https://t.me/centralbank_russia/3900", transport=httpx.MockTransport(handler))
+    assert seen[0].url.params.get("embed") == "1" and seen[0].url.path == "/centralbank_russia/3900"
+    assert text == "Банк России сохранил ключевую ставку\nна уровне 14% годовых." and title is None
+
+
+def test_unreachable_site_gives_clear_error_after_retry(dns):
+    """Сайт закрыт для зарубежного сервера (РБК): повтор, потом понятная ошибка, а не «попробуйте позже»."""
+    import httpx
+
+    from backend.ingest.paste import UNREACHABLE, fetch_page
+
+    dns["www.rbc.ru"] = ["178.248.233.6"]
+    calls = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(req)
+        raise httpx.ConnectTimeout("_ssl.c:993: The handshake operation timed out")
+
+    with pytest.raises(PasteError) as e:
+        fetch_page("https://www.rbc.ru/technology_and_media/26/10/2026/x", transport=httpx.MockTransport(handler))
+    assert str(e.value) == UNREACHABLE and len(calls) == 2
