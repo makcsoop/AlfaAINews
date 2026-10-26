@@ -17,6 +17,7 @@ import asyncio
 import gzip
 import json
 import logging
+import os
 import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -133,8 +134,10 @@ def _facts(use_llm: bool) -> dict:
         from backend.llm.port import ClientJsonLLM
 
         llm = ClientJsonLLM(max_calls=300)  # шаг extract: ≈0,02 ₽ за вызов
+    # вызовы модели параллельно: по одному заливка шла 40 минут (≈ 8 с на вызов)
+    workers = int(os.environ.get("DEMO_EXTRACT_WORKERS", "6"))
     with get_engine().begin() as conn:
-        stats = run(conn, hours=72, llm=llm, force=use_llm)
+        stats = run(conn, hours=72, llm=llm, force=use_llm, workers=workers)
     if llm:
         stats["llm_rub"] = round(llm.usage.cost, 2)
     return stats

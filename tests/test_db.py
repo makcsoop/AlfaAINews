@@ -509,3 +509,67 @@ def test_demo_does_not_load_fixture_story(engine, case_dir, monkeypatch, tmp_pat
     demo._case(with_fixture=True)
     with engine.connect() as conn:
         assert _fixture_rows(conn)["stories"] == 1
+
+
+def test_extract_run_parallel_model_calls_match_sequential(engine):
+    """Заливка демо-базы зовёт модель в несколько потоков: факты те же, что по одному, в базу пишет основной
+    поток, потолок вызовов соблюдается."""
+    import threading
+    from datetime import timedelta
+
+    from backend.extract.llm_port import FixtureLLM
+    from backend.extract.run import run as extract_run
+    from backend.stories.cluster import rebuild
+
+    now = datetime.now(UTC)
+    threads: set[str] = set()
+
+    class Recording(FixtureLLM):
+        def complete_json(self, **kw):
+            threads.add(threading.current_thread().name)
+            return super().complete_json(**kw)
+
+    def item(n, src, title, h):
+        return RawItem(
+            id=f"par_{n}", source_id=src, native_id=f"p{n}", tier=1, title=title,
+            lead=f"{title}. ЦБ и Минфин обсуждают меры.", published_at=now - timedelta(hours=h),
+            fetched_at=now, content_hash=f"p{n}",
+        )
+
+    titles = [
+        "Минфин объявил субсидии аграриям на весенний сев",
+        "Правительство продлило льготную ипотеку для семей",
+        "Минпромторг запустил фонд поддержки станкостроения",
+        "Минэнерго утвердило компенсации нефтяникам за демпфер",
+    ]
+    answer = {
+        "event_type": "state_support", "status": "fact", "summary": "Минфин объявил меры",
+        "summary_quote": "ЦБ и Минфин обсуждают меры", "channels": [], "numbers": [],
+    }
+    with engine.begin() as conn:
+        insert_items(conn, [item(f"{k}{s}", src, t, 5 - s) for k, t in enumerate(titles)
+                            for s, src in enumerate(("interfax", "tass"))])
+        rebuild(conn, hours=72, now=now)
+        seq = extract_run(conn, llm=FixtureLLM(answer), force=True)
+        par = extract_run(conn, llm=Recording(answer), force=True, workers=4)
+    assert par["llm"] == seq["llm"] >= 4 and par.get("state_support") == seq.get("state_support")
+    assert any(t != "MainThread" for t in threads)
+
+
+def test_client_json_llm_call_cap_is_thread_safe():
+    """Потолок вызовов модели не превышается, когда экстрактор зовёт её из нескольких потоков."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from backend.llm.port import ClientJsonLLM
+
+    class Client:
+        config = None
+
+        def call(self, **kw):
+            raise ValueError("сеть")  # до сети не доходим: считаем только попытки
+
+    llm = ClientJsonLLM(max_calls=10, client=Client())  # type: ignore[arg-type]
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(lambda _: llm.complete_json(system="s", user="u", json_schema={}, purpose="extract"),
+                      range(50)))
+    assert llm.usage.calls == 10

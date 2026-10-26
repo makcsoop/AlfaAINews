@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -123,6 +124,7 @@ class ClientJsonLLM:
         self.trace_id = trace_id or f"r1_{uuid.uuid4().hex[:12]}"
         self.dev = dev
         self.usage = Usage()
+        self._lock = threading.Lock()  # экстрактор может звать модель из нескольких потоков (extract.run)
 
     def _route(self, purpose: str, model: str | None) -> tuple[str, str | None]:
         step = STEP_BY_PURPOSE.get(purpose, "extract")
@@ -145,9 +147,11 @@ class ClientJsonLLM:
         purpose: str,
         max_tokens: int | None = None,
     ) -> dict | None:
-        if self.usage.calls >= self.max_calls:
-            log.warning("потолок вызовов %d исчерпан — дальше только правила", self.max_calls)
-            return None
+        with self._lock:
+            if self.usage.calls >= self.max_calls:
+                log.warning("потолок вызовов %d исчерпан — дальше только правила", self.max_calls)
+                return None
+            self.usage.calls += 1
         step, override = self._route(purpose, model)
         messages = [
             {
@@ -158,7 +162,6 @@ class ClientJsonLLM:
             },
             {"role": "user", "content": user},
         ]
-        self.usage.calls += 1
         try:
             res = self.client.call(
                 step=step,
@@ -172,13 +175,20 @@ class ClientJsonLLM:
                 fixture_key=purpose,
             )
         except BudgetExceeded:
-            self.max_calls = 0  # лимит исчерпан — не долбим API
-            self.usage.failures += 1
+            with self._lock:
+                self.max_calls = 0  # лимит исчерпан — не долбим API
+                self.usage.failures += 1
             return None
         except (LLMUnavailable, ValueError) as e:
-            self.usage.failures += 1
+            with self._lock:
+                self.usage.failures += 1
             log.warning("%s: %s", step, e)
             return None
+        with self._lock:
+            self._record(res, step, purpose)
+        return res.value.model_dump()
+
+    def _record(self, res: Any, step: str, purpose: str) -> None:
         self.usage.tokens_in += res.tokens_in
         self.usage.tokens_out += res.tokens_out
         self.usage.cost += res.cost_rub
@@ -191,4 +201,3 @@ class ClientJsonLLM:
                 "fallback": res.fallback_used,
             }
         )
-        return res.value.model_dump()

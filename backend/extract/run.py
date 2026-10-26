@@ -7,6 +7,7 @@ LLM-клиент подставляется, когда он готов (Раз�
 import argparse
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Connection, select, update
@@ -135,7 +136,10 @@ def run(
     limit: int | None = None,
     min_corroboration: int = 0,
     commit_every: int | None = None,
+    workers: int = 1,
 ) -> dict:
+    """workers > 1 — вызовы модели для сюжетов из списка на разметку идут параллельно (заливка демо-базы:
+    по одному ≈ 8 с на вызов, 300 сюжетов — 40 минут); запись в базу — по-прежнему по одному сюжету."""
     since = datetime.now(UTC) - timedelta(hours=hours)
     stories = [s for s in stories_to_extract(conn, since, force) if s.corroboration >= min_corroboration]
     # модель типирует подтверждённые сюжеты (их видит лента), остальные — правила;
@@ -148,6 +152,9 @@ def run(
     # сначала сюжеты для модели (по важности): потолок вызовов за проход достаётся главным
     stories = [s for s in for_llm if s.id in llm_ids] + [s for s in stories if s.id not in llm_ids]
     stats = {"stories": len(stories), "llm": 0, "unverified": 0, "kept_llm": 0}
+    pre: dict[str, EventFacts] = {}
+    if llm and workers > 1:
+        pre = _prefetch(conn, [s for s in stories if s.id in llm_ids], llm, workers)
     for story in stories:
         try:  # сбой одного сюжета откатывает только его (точка сохранения), а не весь проход
             with conn.begin_nested():
@@ -157,7 +164,9 @@ def run(
                 items = [RawItem.model_validate(r) for r in rows]
                 if not items:
                     continue
-                facts = extract(story, items, llm if story.id in llm_ids else None)
+                facts = pre.pop(story.id, None) or extract(
+                    story, items, llm if story.id in llm_ids else None
+                )
                 old_raw = conn.execute(
                     select(m.event_facts.c.data).where(m.event_facts.c.story_id == story.id)
                 ).scalar()
@@ -179,6 +188,28 @@ def run(
         stats["unverified"] += bool(facts.unverified_fields)
         stats[facts.event_type] = stats.get(facts.event_type, 0) + 1
     return stats
+
+
+def _prefetch(conn: Connection, stories: list[Story], llm: JsonLLM, workers: int) -> dict[str, EventFacts]:
+    """Факты с моделью для сюжетов заранее, в workers потоков. Материалы читаются здесь же, в базу ничего
+    не пишется; сбой сюжета — его посчитает основной цикл."""
+    jobs = []
+    for story in stories:
+        rows = conn.execute(select(m.raw_items.c.data).where(m.raw_items.c.id.in_(story.item_ids))).scalars()
+        items = [RawItem.model_validate(r) for r in rows]
+        if items:
+            jobs.append((story, items))
+
+    def one(job: tuple[Story, list[RawItem]]) -> tuple[str, EventFacts | None]:
+        story, items = job
+        try:
+            return story.id, extract(story, items, llm)
+        except Exception as e:
+            log.warning("факты сюжета %s с моделью: %r — повторим в основном проходе", story.id, e)
+            return story.id, None
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return {sid: f for sid, f in pool.map(one, jobs) if f is not None}
 
 
 def main() -> None:
