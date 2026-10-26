@@ -59,7 +59,7 @@ export function RunsView({ api, onTrace, titles }: { api: Api; onTrace: (id: str
               <th>Когда</th>
               <th>Сюжет</th>
               <th>Итог</th>
-              <th className="num">Значимость</th>
+              <th className="num" title="Сила влияния на компанию, из 100 — как в ленте">Сила</th>
               <th className="num">₽</th>
               <th />
             </tr>
@@ -77,7 +77,7 @@ export function RunsView({ api, onTrace, titles }: { api: Api; onTrace: (id: str
                     <span className={`run run-${r.status}`}>{STATUS[r.status]}</span>
                     {r.reason && <div className="muted small">{r.reason}</div>}
                   </td>
-                  <td className="num">{r.score == null ? "—" : Math.round(r.score * 100)}</td>
+                  <td className="num">{(r.impact ?? r.score) == null ? "—" : Math.round((r.impact ?? r.score)! * 100)}</td>
                   <td className="num">{rubNum(r.cost_rub)}</td>
                   <td>
                     {r.trace_id && (

@@ -573,3 +573,22 @@ def test_db_source_declares_live_window():
     from backend.agents.tools.db_source import DbDataSource
 
     assert DbDataSource.live_feed_window is True
+
+
+def test_warm_builds_feeds_and_runs_deep_only_for_default_pairs(monkeypatch):
+    """Прогрев: ленты всех пар готовы до первого захода, глубокий разбор — только у пары по умолчанию."""
+    store, calls = make_store(k=1)
+    store.warm([(BORROWER, "cfo"), (BORROWER, "treasurer")], {(BORROWER, "cfo")})
+    assert {(BORROWER, "cfo"), (BORROWER, "treasurer")} <= set(store._feeds)
+    assert store.runs == len(calls) == 1 and {r.role for r in store.deep_runs(BORROWER)} == {"cfo"}
+    # бюджет выше доли прогрева — новые разборы не ставятся, ленты всё равно обновляются
+    monkeypatch.setenv("FEED_WARM_DEEP_SHARE", "0")
+    store.warm([(BORROWER, "cfo")], {(BORROWER, "cfo")})
+    assert store.runs == 1
+
+
+def test_warmer_off_on_fixture(monkeypatch):
+    from backend.api.store import start_feed_warmer
+
+    monkeypatch.setenv("LLM_MODE", "fixture")
+    assert start_feed_warmer() is None

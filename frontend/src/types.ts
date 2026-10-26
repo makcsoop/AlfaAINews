@@ -252,6 +252,7 @@ export interface DeepRun {
   status: "published" | "on_review" | "dropped" | "failed";
   reason?: string | null;
   score?: number | null;
+  impact?: number | null;
   trace_id?: string | null;
   cost_rub: number;
   at: string;

@@ -149,7 +149,7 @@ class ScoringConfig(_Cfg):
     prior_unscoped: float
     prior_unscoped_types: list[str]
     saturation: float
-    impact: ImpactCfg = ImpactCfg(full_at=1.0)
+    impact: ImpactCfg = ImpactCfg(full_at=0.7)
     min_contribution: float
     polarity: PolarityCfg
     deep: DeepCfg

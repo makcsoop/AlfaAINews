@@ -1,5 +1,8 @@
 """API: лента, карточка, журнал, вопрос-ответ (заглушки), сессия и защита company_id."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Connection, or_, select, text
@@ -7,6 +10,7 @@ from sqlalchemy import Connection, or_, select, text
 from backend.api.errors import install_error_handling
 from backend.api.labeling import router as labeling_router
 from backend.api.routes import AuditDep, SessionDep, router
+from backend.api.store import start_feed_warmer
 from backend.db import models as m
 from backend.db.engine import get_engine
 from backend.ingest.private import PASTE_SOURCE_ID, has_paste, owner_tag, story_visible
@@ -15,7 +19,14 @@ from backend.profile.graph import get_graph
 from backend.schemas import CounterpartyGraph, RawItem, Story
 from backend.security.guard import enforce_company
 
-app = FastAPI(title="AlfaAINews")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    start_feed_warmer()  # ленты демо-компаний и глубокие разборы — в фоне, без посетителей
+    yield
+
+
+app = FastAPI(title="AlfaAINews", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],

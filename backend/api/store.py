@@ -5,7 +5,7 @@ import os
 import queue
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol, get_args
@@ -106,6 +106,8 @@ DEFAULT_FEED_REFRESH_S = 300.0  # как часто лента досчитыв�
 DEEP_LOG_MAX = 5000  # журнал глубоких разборов в памяти — последние записи
 TRACES_MAX = 5000  # трассы в памяти: сверх — вытесняются самые старые, кроме трасс карточек в лентах
 DEFAULT_FEED_RETRY_S = 600.0  # через сколько повторять разбор, который упал или деградировал
+DEFAULT_WARM_DEEP_SHARE = 0.5  # прогрев ставит разборы, пока потрачено меньше этой доли дневного лимита
+WARM_ROLES: tuple[UserRole, ...] = ("cfo", "treasurer", "chief_accountant")  # роли переключателя во фронте
 
 
 def feed_refresh_s() -> float:
@@ -123,6 +125,18 @@ def feed_background() -> bool:
     if os.environ.get("LLM_MODE", "").strip().lower() == "fixture":
         return False
     return os.environ.get("FEED_BACKGROUND", "true").strip().lower() not in ("0", "false", "no")
+
+
+def feed_warm() -> bool:
+    """Прогрев лент в API (FEED_WARM, по умолчанию да): ленты демо-компаний считаются при старте и раз в
+    FEED_REFRESH_S, глубокие разборы идут без посетителей. На фикстуре (тесты) — нет."""
+    if os.environ.get("LLM_MODE", "").strip().lower() == "fixture":
+        return False
+    return os.environ.get("FEED_WARM", "true").strip().lower() not in ("0", "false", "no")
+
+
+def warm_deep_share() -> float:
+    return _env_float("FEED_WARM_DEEP_SHARE", DEFAULT_WARM_DEEP_SHARE)
 
 
 def _feed_cfg() -> FeedCfg | None:
@@ -179,7 +193,8 @@ class DeepRun(BaseModel):
     role: str
     status: Literal["published", "on_review", "dropped", "failed"]
     reason: str | None = None
-    score: float | None = None  # значимость после разбора
+    score: float | None = None  # значимость после разбора (порядок ленты, со свежестью)
+    impact: float | None = None  # сила влияния на компанию — та же шкала, что в ленте и карточке
     trace_id: str | None = None
     cost_rub: float = 0.0
     at: datetime
@@ -530,11 +545,11 @@ class PipelineCardStore:
 
     def _log_run(
         self, feed: _Feed, story_id: str, status: str, *, reason: str | None = None,
-        trace: RunTrace | None = None, score: float | None = None,
+        trace: RunTrace | None = None, score: float | None = None, impact: float | None = None,
     ) -> None:
         run = DeepRun(
             story_id=story_id, company_id=feed.company_id, role=feed.role, status=status,  # type: ignore[arg-type]
-            reason=reason, score=score, trace_id=trace.run_id if trace else None,
+            reason=reason, score=score, impact=impact, trace_id=trace.run_id if trace else None,
             cost_rub=round(trace.cost_rub, 6) if trace else 0.0, at=datetime.now(UTC),
         )
         self.deep_log.append(run)
@@ -604,11 +619,14 @@ class PipelineCardStore:
             self._drop(feed, story_id)
             self._log_run(
                 feed, story_id, "dropped", reason="значимость после разбора ниже порога ленты",
-                trace=trace, score=card.relevance.score,
+                trace=trace, score=card.relevance.score, impact=card.relevance.impact,
             )
             return
         self._put_deep(feed, story_id, card)
-        self._log_run(feed, story_id, card.review_status, trace=trace, score=card.relevance.score)
+        self._log_run(
+            feed, story_id, card.review_status, trace=trace, score=card.relevance.score,
+            impact=card.relevance.impact,
+        )
         # в общий кеш — только настоящие результаты, не деградацию
         if self._redis is not None:
             self._redis.put_card(
@@ -672,6 +690,18 @@ class PipelineCardStore:
                 self._ensure(company_id, role, upgrade=fixture)
             self._demo_done = True
 
+    def warm(self, pairs: Sequence[tuple[str, str]], deep_pairs: Collection[tuple[str, str]]) -> None:
+        """Прогрев: лента каждой пары считается заранее, первый заход не ждёт подсчёта. Глубокий разбор —
+        только для deep_pairs (компания × роль по умолчанию) и пока потрачено меньше warm_deep_share()
+        дневного лимита: остаток — посетителям и вопрос-ответу."""
+        for company_id, role in pairs:
+            spent, limit = self._budget()
+            deep = (company_id, role) in deep_pairs and limit > 0 and spent < limit * warm_deep_share()
+            try:
+                self._ensure(company_id, role, upgrade=deep)
+            except Exception as e:  # одна компания без профиля не останавливает прогрев остальных
+                log.warning("прогрев ленты %s/%s: %r", company_id, role, e)
+
     # --- протокол CardStore ---
 
     def list_cards(self, company_id: str, role: UserRole | None) -> list[InsightCard]:
@@ -728,6 +758,34 @@ def reset_store() -> None:
     """Сбрасывает кеш хранилищ (тесты, смена фикстур)."""
     with _stores_lock:
         _stores.clear()
+
+
+def start_feed_warmer() -> threading.Thread | None:
+    """Поток прогрева лент демо-компаний: при старте API и раз в FEED_REFRESH_S. Без него лента считается при
+    первом заходе (~4 с на пару «компания × роль» на сервере 1 vCPU), а разборы идут, только пока кто-то
+    открывает сайт."""
+    if not feed_warm() or store_mode() != "pipeline":
+        return None
+    from backend.api.showcase import showcase
+    from backend.security.session import demo_companies
+
+    allowed = set(demo_companies())
+    shown = [c for c in showcase() if c.company_id in allowed]
+    pairs = [(c.company_id, r) for c in shown for r in (c.default_role, *WARM_ROLES)]
+    pairs = list(dict.fromkeys(pairs))  # роль по умолчанию — первой, без повторов
+    deep_pairs = {(c.company_id, c.default_role) for c in shown}
+
+    def loop() -> None:
+        while True:
+            store = get_store()
+            if isinstance(store, PipelineCardStore):
+                store.warm(pairs, deep_pairs)
+            time.sleep(feed_refresh_s())
+
+    thread = threading.Thread(target=loop, name="feed-warmer", daemon=True)
+    thread.start()
+    log.info("прогрев лент: %d пар, разборы в фоне для %d", len(pairs), len(deep_pairs))
+    return thread
 
 
 def get_store() -> CardStore:

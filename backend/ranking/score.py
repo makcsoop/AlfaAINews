@@ -343,7 +343,8 @@ def score_pair(
     q = quality(story, facts, sources or {}, cfg)
     f = freshness(story, now, cfg)
     score = q * f * (1 - math.exp(-raw / cfg.saturation))
-    impact = q * min(1.0, raw / cfg.impact.full_at)
+    # мягкий потолок: «100 из 100» не бывает, сильный сдвиг ключевого фактора ≈ 75–80
+    impact = q * (1 - math.exp(-raw / cfg.impact.full_at))
     return RelevanceScore(
         story_id=story.id,
         company_id=profile.company_id,

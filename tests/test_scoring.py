@@ -1,5 +1,6 @@
 """Таксономия Р2, профиль v1, скоринг v0, быстрая карточка и отбор на глубокий разбор."""
 
+import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -205,7 +206,7 @@ def test_drivers_priority_analysis_facts_prior():
 
 
 def test_impact_is_strength_without_freshness():
-    """Сила влияния для показа: свежесть не срезает её (это порядок ленты), шкала линейная и с потолком 1."""
+    """Сила влияния для показа: свежесть не срезает её (это порядок ленты), потолок мягкий — не «100 из 100»."""
     b = load_bundle("rate_14")
     story, facts = b["story"][0], b["event_facts"][0]
     profile = next(p for p in b["company_profile"] if p.company_id == "U_DEMO_BORROWER")
@@ -215,9 +216,17 @@ def test_impact_is_strength_without_freshness():
     assert old.impact == fresh.impact
     raw = sum(c.value for c in fresh.contributions)
     full_at = load_scoring().impact.full_at
-    assert fresh.impact == pytest.approx(fresh.quality * min(1.0, raw / full_at), abs=1e-3)
+    assert fresh.impact == pytest.approx(fresh.quality * (1 - math.exp(-raw / full_at)), abs=1e-3)
     # решение ЦБ для заёмщика с кредитами выглядит сильным, а не «21 из 100»
     assert fresh.impact is not None and fresh.impact >= 0.67 and fresh.impact > fresh.score
+    assert fresh.impact < 0.9  # сильное, но не упор в потолок
+
+
+def test_impact_soft_cap_keeps_difference_between_strong_events():
+    """Сюжеты с raw 1 и raw 2 при линейной шкале оба были «100»; мягкий потолок их различает."""
+    cfg = load_scoring()
+    s1, s2 = (1 - math.exp(-r / cfg.impact.full_at) for r in (1.0, 2.0))
+    assert s1 < s2 < 1.0 and s2 - s1 > 0.1
 
 
 def test_impact_scale_weak_for_small_contributions():
